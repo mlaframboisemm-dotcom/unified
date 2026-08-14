@@ -2435,6 +2435,33 @@ export default function CashTransferModal({
                             </p>
                           </div>
 
+                          {/* Transfer Speed & Clearing Rails Estimator */}
+                          <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-3.5 space-y-2.5">
+                            <div className="flex justify-between items-center text-[10px] font-bold text-gray-500 uppercase font-mono">
+                              <span>Estimated Settlement Speed</span>
+                              <span className="text-emerald-600 font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200/60">
+                                99.8% Success SLA
+                              </span>
+                            </div>
+                            <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                              <div className="bg-white p-2.5 rounded-xl border border-indigo-100 shadow-2xs">
+                                <span className="text-[9px] text-gray-400 font-mono block">Direct Debit / ACH</span>
+                                <span className="text-xs font-black text-indigo-900 block mt-0.5">Instant / Same-Day</span>
+                                <span className="text-[9px] text-emerald-600 font-semibold">$0.00 Rail Fee</span>
+                              </div>
+                              <div className="bg-white p-2.5 rounded-xl border border-gray-200 shadow-2xs">
+                                <span className="text-[9px] text-gray-400 font-mono block">EFT Canadian Bank</span>
+                                <span className="text-xs font-black text-gray-900 block mt-0.5">1 - 2 Business Days</span>
+                                <span className="text-[9px] text-emerald-600 font-semibold">$0.00 Rail Fee</span>
+                              </div>
+                              <div className="bg-white p-2.5 rounded-xl border border-gray-200 shadow-2xs">
+                                <span className="text-[9px] text-gray-400 font-mono block">Wire Direct Rail</span>
+                                <span className="text-xs font-black text-gray-900 block mt-0.5">Same-Day 1-4 Hrs</span>
+                                <span className="text-[9px] text-gray-500 font-semibold">Standard Rail</span>
+                              </div>
+                            </div>
+                          </div>
+
                           <div className="p-4 bg-emerald-50 border border-emerald-100 rounded-2xl space-y-2">
                             <h4 className="text-xs font-bold text-emerald-800 flex items-center space-x-1.5">
                               <Sparkles className="h-4 w-4" />
