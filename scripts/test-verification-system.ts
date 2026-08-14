@@ -140,7 +140,7 @@ async function runSuite() {
   
   // Test pending state block explorer lookup
   const mockTxHash = '0x1234567890123456789012345678901234567890123456789012345678901234';
-  const pendingOp = await enforcer.executeBlockchainTransfer('ethereum', mockTxHash, '0.5', '0x742d35cc6634c0532925a3b844bc454e4438f44e', 'test-user');
+  const pendingOp = await enforcer.executeBlockchainTransfer('ethereum', mockTxHash, '0.5', '0x58B178F7EEe92fe888c0A1684D5FE6b78C0Ff99f', 'test-user');
   console.log(`Proof Status: ${pendingOp.externalProof?.status}`);
   console.log(`Source Explorer: ${pendingOp.externalProof?.externalSource ?? 'None'}`);
   console.log('✅ Success');

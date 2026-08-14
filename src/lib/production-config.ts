@@ -6,7 +6,7 @@ export interface ProductionSecretValidationResult {
 
 export interface ProductionSecretValidationOptions {
   requireProviderSecrets?: boolean;
-  operation?: 'wallet' | 'exchange' | 'email' | 'sms' | 'settlement' | 'withdrawal' | 'atm' | 'banking';
+  operation?: 'wallet' | 'exchange' | 'email' | 'sms' | 'settlement' | 'withdrawal' | 'atm';
 }
 
 function hasValue(value: string | undefined): boolean {
@@ -42,26 +42,6 @@ function validateProviderSecrets(env: NodeJS.ProcessEnv, operation: ProductionSe
     const hasKraken = isStrongSecret(env.KRAKEN_API_KEY, 8) && isStrongSecret(env.KRAKEN_API_SECRET, 8);
     if (!hasCoinbase && !hasKraken) {
       return ['A settlement provider must be configured for production settlement operations.'];
-    }
-    return [];
-  }
-
-  if (operation === 'banking') {
-    const hasWise = isStrongSecret(env.WISE_API_TOKEN, 8) || isStrongSecret(env.WISE_ALL_ACCESS_KEY, 8) || isStrongSecret(env.WISE_PERSONAL_TOKEN, 8) || isStrongSecret(env.WISE_ACCESS_TOKEN, 8);
-    const hasStripe = isStrongSecret(env.STRIPE_SECRET_KEY, 8);
-    const hasPlaid = isStrongSecret(env.PLAID_CLIENT_ID, 6) && isStrongSecret(env.PLAID_SECRET, 8);
-    const hasKraken = isStrongSecret(env.KRAKEN_API_KEY, 8) && isStrongSecret(env.KRAKEN_API_SECRET, 8);
-    if (!hasWise) {
-      return ['WISE_API_TOKEN (or compatible Wise token alias) is required for production banking operations.'];
-    }
-    if (!hasStripe) {
-      return ['STRIPE_SECRET_KEY is required for production banking operations.'];
-    }
-    if (!hasPlaid) {
-      return ['PLAID_CLIENT_ID and PLAID_SECRET are required for production banking operations.'];
-    }
-    if (!hasKraken) {
-      return ['KRAKEN_API_KEY and KRAKEN_API_SECRET are required for production banking operations.'];
     }
     return [];
   }

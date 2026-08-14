@@ -45,63 +45,6 @@ export function generateMonthlyPortfolioPdf(params: MonthlyReportParams): jsPDF 
   const bgLight = [248, 250, 252]; // #f8fafc
   const textGray = [100, 116, 139]; // #64748b
 
-  // Resolve robust unit prices so stable assets never collapse to $0.00 in reports.
-  const fallbackPrices: Record<string, number> = {
-    USD: 1,
-    USDC: 1,
-    USDT: 1,
-    USDT0: 1,
-    USDF: 1,
-    DAI: 1,
-    TUSD: 1,
-    BTC: 66000,
-    ETH: 3350,
-    XAUT: 2350,
-    LEO: 5.85,
-    LINK: 15.2,
-    POL: 0.52,
-    HYPE: 4.5,
-    LIF3: 0.012,
-    MXNT: 0.055,
-    PEPE: 0.0000125,
-    SHIB: 0.0000185
-  };
-
-  const aliasSymbol = (symbol: string): string => {
-    const upper = String(symbol || '').toUpperCase();
-    if (upper === 'USDT0') return 'USDT';
-    return upper;
-  };
-
-  const coinPriceBySymbol = new Map<string, number>();
-  for (const coin of coins || []) {
-    const sym = aliasSymbol(coin?.symbol || '');
-    const p = Number(coin?.price || 0);
-    if (sym && Number.isFinite(p) && p > 0) {
-      coinPriceBySymbol.set(sym, p);
-    }
-  }
-
-  const resolvedHoldings = (holdings || []).filter((h) => Number(h?.amount || 0) > 0);
-  const holdingValuations = resolvedHoldings.map((h) => {
-    const symbol = aliasSymbol(h.symbol);
-    const coin = coins.find((c) => aliasSymbol(c?.symbol || '') === symbol);
-    const coinPrice = coin ? Number(coin.price || 0) : 0;
-    const fallbackPrice = Number(fallbackPrices[symbol] || 0);
-    const price = coinPrice > 0 ? coinPrice : (coinPriceBySymbol.get(symbol) || fallbackPrice || 0);
-    const value = Number(h.amount || 0) * price;
-    return {
-      name: coin?.name || symbol,
-      symbol,
-      amount: Number(h.amount || 0),
-      price,
-      value
-    };
-  });
-
-  const holdingsTotalValue = holdingValuations.reduce((sum, row) => sum + row.value, 0);
-  const reportNetWorth = Math.max(Number(netWorth || 0), Number(liveCashBalance || 0) + holdingsTotalValue);
-
   // 1. Top Decorative Brand Banner
   doc.setFillColor(primaryColor[0], primaryColor[1], primaryColor[2]);
   doc.rect(0, 0, pageWidth, 28, 'F');
@@ -182,7 +125,7 @@ export function generateMonthlyPortfolioPdf(params: MonthlyReportParams): jsPDF 
   doc.setTextColor(79, 70, 229); // indigo-600
   doc.text('TOTAL NET WORTH', margin + 4, currentY + 6);
 
-  const displayNetWorth = citizenship === 'CA' ? convertUsdToCad(reportNetWorth, DEFAULT_USD_CAD_RATE) : reportNetWorth;
+  const displayNetWorth = citizenship === 'CA' ? convertUsdToCad(netWorth, DEFAULT_USD_CAD_RATE) : netWorth;
   doc.setFontSize(12);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
@@ -217,7 +160,7 @@ export function generateMonthlyPortfolioPdf(params: MonthlyReportParams): jsPDF 
 
   // Crypto Asset Backing Card
   const card3X = card2X + cardWidth + 4;
-  const cryptoTotal = Math.max(0, holdingsTotalValue);
+  const cryptoTotal = Math.max(0, netWorth - liveCashBalance);
   doc.setFillColor(241, 245, 249); // slate-100
   doc.roundedRect(card3X, currentY, cardWidth, cardHeight, 2, 2, 'F');
   doc.setDrawColor(203, 213, 225);
@@ -236,7 +179,7 @@ export function generateMonthlyPortfolioPdf(params: MonthlyReportParams): jsPDF 
   doc.setFontSize(6.5);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(textGray[0], textGray[1], textGray[2]);
-  doc.text(`${resolvedHoldings.length} Active Cryptocurrencies`, card3X + 4, currentY + 19);
+  doc.text(`${holdings.length} Active Cryptocurrencies`, card3X + 4, currentY + 19);
 
   currentY += cardHeight + 8;
 
@@ -249,20 +192,24 @@ export function generateMonthlyPortfolioPdf(params: MonthlyReportParams): jsPDF 
   currentY += 3;
 
   // Build Table Data
-  const assetRows = holdingValuations.map((row) => {
-    const allocation = reportNetWorth > 0 ? ((row.value / reportNetWorth) * 100).toFixed(1) : '0.0';
+  const assetRows = holdings.map((h) => {
+    const coin = coins.find((c) => c && c.symbol === h.symbol);
+    const price = coin?.price || 0;
+    const value = h.amount * price;
+    const allocation = netWorth > 0 ? ((value / netWorth) * 100).toFixed(1) : '0.0';
+
     return [
-      row.name,
-      row.symbol,
-      row.amount.toLocaleString(undefined, { maximumFractionDigits: 6 }),
-      `$${row.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 8 })}`,
-      `$${row.value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+      coin?.name || h.symbol,
+      h.symbol,
+      h.amount.toLocaleString(undefined, { maximumFractionDigits: 6 }),
+      `$${price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+      `$${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
       `${allocation}%`
     ];
   });
 
   // Add Fiat Cash row
-  const cashAllocation = reportNetWorth > 0 ? ((liveCashBalance / reportNetWorth) * 100).toFixed(1) : '0.0';
+  const cashAllocation = netWorth > 0 ? ((liveCashBalance / netWorth) * 100).toFixed(1) : '0.0';
   assetRows.push([
     'USD Cash & Bank Balance',
     'USD',

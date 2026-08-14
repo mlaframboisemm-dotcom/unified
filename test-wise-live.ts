@@ -2,7 +2,6 @@ import fetch from 'node-fetch';
 import { config } from 'dotenv';
 import { join } from 'path';
 import { existsSync, readFileSync } from 'fs';
-import { spawn } from 'child_process';
 
 // Load credentials from .env.credentials like the server does
 const credentialsPath = join(process.cwd(), 'config', '.env.credentials');
@@ -10,39 +9,8 @@ if (existsSync(credentialsPath)) {
   config({ path: credentialsPath, override: false });
 }
 
-const BASE_URL = process.env.BASE_URL || 'http://127.0.0.1:3000';
+const BASE_URL = 'http://localhost:3000';
 const ledgerDbPath = join(process.cwd(), 'src', 'db', 'database.json');
-
-function spawnServer() {
-  const serverProcess = spawn('npx', ['tsx', 'server.ts'], {
-    cwd: process.cwd(),
-    env: { ...process.env, NODE_ENV: 'test' },
-    shell: true,
-    stdio: ['ignore', 'inherit', 'inherit']
-  });
-
-  serverProcess.on('error', (err) => {
-    console.error('[LIVE TEST] Failed to start server:', err);
-  });
-
-  return serverProcess;
-}
-
-async function waitForServer(timeoutMs = 30000) {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    try {
-      const res = await fetch(`${BASE_URL}/api/health`);
-      if (res.ok) {
-        return true;
-      }
-    } catch {
-      // keep polling
-    }
-    await new Promise((resolve) => setTimeout(resolve, 500));
-  }
-  return false;
-}
 
 function getLedgerTransactionId(): string | null {
   if (!existsSync(ledgerDbPath)) {
@@ -60,14 +28,6 @@ function getLedgerTransactionId(): string | null {
 
 async function testWiseIntegration() {
   console.log('🔍 Testing Wise API Integration (LIVE)...\n');
-
-  const serverProcess = spawnServer();
-  const serverReady = await waitForServer();
-  if (!serverReady) {
-    console.error('❌ Server did not become healthy in time.');
-    serverProcess.kill();
-    process.exit(1);
-  }
 
   try {
     // Test 1: Health check

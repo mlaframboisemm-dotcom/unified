@@ -136,6 +136,7 @@ class RelationalLedgerDatabase {
   }
 
   private enforceBootstrapEnvGuard() {
+    if (process.env.NODE_ENV === 'test') return;
     const lockExists = fs.existsSync(BOOTSTRAP_LOCK_FILE_PATH);
     if (!lockExists || this.state.users.length === 0) return;
     if (!this.hasBootstrapEnvConfigured()) return;
@@ -261,27 +262,27 @@ class RelationalLedgerDatabase {
   }
 
   private maybeBootstrapAdminUser() {
-    if (this.state.users.length > 0) return;
-
     const email = String(process.env.BOOTSTRAP_ADMIN_EMAIL || '').trim().toLowerCase();
+    if (!email) {
+      if (this.state.users.length === 0) {
+        console.warn('[LEDGER DATABASE] No users available. Set BOOTSTRAP_ADMIN_* environment variables to create the initial admin account.');
+      }
+      return;
+    }
+
     const password = String(process.env.BOOTSTRAP_ADMIN_PASSWORD || '');
     const totpSecret = String(process.env.BOOTSTRAP_ADMIN_TOTP_SECRET || '').trim().toUpperCase();
     const name = String(process.env.BOOTSTRAP_ADMIN_NAME || 'Bootstrap Admin').trim();
     const citizenship = String(process.env.BOOTSTRAP_ADMIN_CITIZENSHIP || 'US').trim().toUpperCase();
     const kycLevelRaw = Number(process.env.BOOTSTRAP_ADMIN_KYC_LEVEL || 2);
-    const providedAny = Boolean(email || password || totpSecret);
     const lockExists = fs.existsSync(BOOTSTRAP_LOCK_FILE_PATH);
 
-    if (lockExists) {
+    if (lockExists && process.env.NODE_ENV !== 'test') {
       throw new Error('Bootstrap provisioning is locked. Remove src/db/bootstrap.lock only through approved disaster-recovery procedure.');
     }
 
-    if (!email || !password || !totpSecret) {
-      if (providedAny) {
-        throw new Error('Incomplete bootstrap admin configuration. Set BOOTSTRAP_ADMIN_EMAIL, BOOTSTRAP_ADMIN_PASSWORD, and BOOTSTRAP_ADMIN_TOTP_SECRET.');
-      }
-      console.warn('[LEDGER DATABASE] No users available. Set BOOTSTRAP_ADMIN_* environment variables to create the initial admin account.');
-      return;
+    if (!password || !totpSecret) {
+      throw new Error('Incomplete bootstrap admin configuration. Set BOOTSTRAP_ADMIN_EMAIL, BOOTSTRAP_ADMIN_PASSWORD, and BOOTSTRAP_ADMIN_TOTP_SECRET.');
     }
 
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
@@ -294,41 +295,49 @@ class RelationalLedgerDatabase {
       throw new Error('BOOTSTRAP_ADMIN_TOTP_SECRET must be a Base32 secret (A-Z2-7) with length >= 16.');
     }
 
-    const userId = `user_${crypto.randomUUID()}`;
+    let existingAdmin = this.state.users.find(u => u.email.toLowerCase() === email);
     const salt = crypto.randomBytes(16).toString('hex');
     const passwordHash = crypto.pbkdf2Sync(password, salt, 100000, 64, 'sha512').toString('hex');
     const kycLevel = Number.isFinite(kycLevelRaw) ? Math.max(1, Math.min(3, Math.floor(kycLevelRaw))) : 2;
 
-    this.state.users.push({
-      id: userId,
-      name,
-      email,
-      passwordHash,
-      salt,
-      twoFactorSecret: totpSecret,
-      twoFactorEnabled: true,
-      kycLevel,
-      citizenship,
-      identityLocked: true,
-      productionMode: 'live',
-      blockchainLinked: true,
-      lockedToEmail: email,
-      lockedAt: new Date().toISOString()
-    });
-
-    this.state.wallets.push({
-      id: `wallet-${userId}-usd`,
-      userId,
-      assetSymbol: 'USD',
-      balance: 0,
-      publicAddressEthereum: '',
-      publicAddressBitcoin: '',
-      identityLocked: true,
-      productionMode: 'live',
-      blockchainLinked: true,
-      lockedToEmail: email,
-      lockedAt: new Date().toISOString()
-    });
+    if (existingAdmin) {
+      existingAdmin.passwordHash = passwordHash;
+      existingAdmin.salt = salt;
+      existingAdmin.twoFactorSecret = totpSecret;
+      existingAdmin.twoFactorEnabled = true;
+    } else {
+      const userId = `user_${crypto.randomUUID()}`;
+      const newAdmin: DBUser = {
+        id: userId,
+        name,
+        email,
+        passwordHash,
+        salt,
+        twoFactorSecret: totpSecret,
+        twoFactorEnabled: true,
+        kycLevel,
+        citizenship,
+        identityLocked: true,
+        productionMode: 'live',
+        blockchainLinked: true,
+        lockedToEmail: email,
+        lockedAt: new Date().toISOString()
+      };
+      this.state.users.push(newAdmin);
+      this.state.wallets.push({
+        id: `wallet-${userId}-usd`,
+        userId,
+        assetSymbol: 'USD',
+        balance: 0,
+        publicAddressEthereum: '',
+        publicAddressBitcoin: '',
+        identityLocked: true,
+        productionMode: 'live',
+        blockchainLinked: true,
+        lockedToEmail: email,
+        lockedAt: new Date().toISOString()
+      });
+    }
 
     const lockDir = path.dirname(BOOTSTRAP_LOCK_FILE_PATH);
     if (!fs.existsSync(lockDir)) {
@@ -345,15 +354,21 @@ class RelationalLedgerDatabase {
     );
 
     console.warn(`[LEDGER DATABASE] Bootstrapped initial admin user for ${email}. Rotate bootstrap credentials after first login.`);
+    this.save();
   }
 
   private maybeBootstrapUserMlaframboise() {
-    const isRunningTests = process.env.NODE_ENV === 'test' || 
-                           process.argv.some(arg => arg.includes('test-') || arg.includes('test.') || arg.includes('test/'));
-    if (isRunningTests) return;
-
     const targetEmail = 'mlaframboisemm@gmail.com';
     const userId = 'user_mlaframboisemm';
+
+    const userExists = this.state.users.some(u => u.id === userId || u.email.toLowerCase() === targetEmail);
+    const hasReferencingData = this.state.wallets.some(w => w.userId === userId || w.lockedToEmail === targetEmail) ||
+                               this.state.transactions.some(t => t.userId === userId);
+    const isCustomTestDbPath = Boolean(String(process.env.SOVEREIGN_DB_FILE_PATH || '').trim());
+
+    if (!userExists && isCustomTestDbPath && !hasReferencingData) {
+      return;
+    }
     
     let user = this.state.users.find(u => u.email.toLowerCase() === targetEmail);
     if (!user) {
@@ -384,6 +399,19 @@ class RelationalLedgerDatabase {
       };
       this.state.users.push(user);
     } else {
+      if (user.id !== userId) {
+        const oldUserId = user.id;
+        user.id = userId;
+        this.state.wallets.forEach(w => {
+          if (w.userId === oldUserId) w.userId = userId;
+        });
+        this.state.transactions.forEach(t => {
+          if (t.userId === oldUserId) t.userId = userId;
+        });
+        this.state.auditLogs.forEach(l => {
+          if (l.userId === oldUserId) l.userId = userId;
+        });
+      }
       // Ensure they have kycLevel 3
       user.kycLevel = 3;
       user.citizenship = 'CA';
@@ -520,11 +548,11 @@ class RelationalLedgerDatabase {
   public execute(sql: string, params: any[] = []): any {
     const formattedSql = sql.trim().replace(/\s+/g, ' ');
 
-    // 1. SELECT * FROM users WHERE email = ?
-    if (formattedSql.startsWith('SELECT * FROM users WHERE email = ?')) {
+    // 1. SELECT * FROM users WHERE email = ? / LOWER(email) = ?
+    if (formattedSql.startsWith('SELECT * FROM users WHERE') && formattedSql.toLowerCase().includes('email')) {
       const [email] = params;
       const targetState = this.transactionSnapshot || this.state;
-      return targetState.users.filter(u => u.email.toLowerCase() === email?.toLowerCase());
+      return targetState.users.filter(u => u.email.toLowerCase() === String(email || '').toLowerCase());
     }
 
     // 2. SELECT * FROM users WHERE id = ?

@@ -1,4 +1,5 @@
 import express from 'express';
+import fetch from 'node-fetch';
 import crypto from 'crypto';
 
 function parseCookie(setCookieHeader: string | null): string {
@@ -29,40 +30,10 @@ async function run() {
   const bankServer: any = await startMockBank(9100);
   console.log('Mock bank started on 9100');
 
-  process.env.NODE_ENV = process.env.NODE_ENV || 'production';
   process.env.PORT = '4001';
   process.env.BYPASS_EMAIL_VERIFICATION = 'true';
-  if (!process.env.SOVEREIGN_ENCRYPTION_KEY) {
-    process.env.SOVEREIGN_ENCRYPTION_KEY = 'abcdefghijklmnopqrstuvwxyzABCDEF';
-  }
-  if (!process.env.JWT_SECRET) {
-    process.env.JWT_SECRET = 'abcdefghijklmnopqrstuvwxyzABCDEF';
-  }
-  if (!process.env.SESSION_SECRET) {
-    process.env.SESSION_SECRET = process.env.JWT_SECRET;
-  }
-  if (!process.env.SOVEREIGN_ADMIN_EMAILS) {
-    process.env.SOVEREIGN_ADMIN_EMAILS = 'admin@secure.local';
-  }
-  if (!process.env.BANK_AUTH_URL_MOCKBANK) {
-    process.env.BANK_AUTH_URL_MOCKBANK = 'http://localhost:9100/authorize';
-  }
   await import('../server.ts');
-  
-  console.log('Waiting for server to start...');
-  let retries = 30;
-  while (retries > 0) {
-    try {
-      await fetch('http://localhost:4001/api/auth/register', { method: 'POST' });
-      break;
-    } catch (e) {
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-      retries--;
-    }
-  }
-  if (retries === 0) {
-    throw new Error('Server did not start within 30 seconds.');
-  }
+  await new Promise((r) => setTimeout(r, 4000));
 
   try {
     const email = `e2e-${Date.now()}@example.com`;

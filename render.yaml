@@ -1,34 +1,21 @@
-# Render Blueprint Specification
-# See https://render.com/docs/blueprints for details
 services:
   - type: web
-    name: paydirect
-    env: docker
-    plan: free
-    domains:
-      - www.pay.sovereigns.ca
-      - pay.sovereigns.ca
+    name: sovereigns-pay-direct
+    env: node
+    plan: starter
+    id: srv-d99sus57vvec7386p2p0
+    buildCommand: npm run build
+    startCommand: node dist/server.cjs
     envVars:
       - key: NODE_ENV
         value: production
-      - key: PORT
-        value: 3000
-      - key: APP_URL
-        value: "https://www.pay.sovereigns.ca"
-      - key: STRICT_PRODUCTION_STARTUP_VALIDATION
-        value: "false"
-      - key: WISE_WEBHOOK_CALLBACK_URL
-        value: "https://www.pay.sovereigns.ca/api/withdrawal/wise/webhooks"
-      - key: WISE_WEBHOOK_PUBLIC_KEY_PATH
-        value: "config/wise-webhook-public.pem"
-      - key: WISE_CLIENT_ID
-        sync: false
-      - key: WISE_CLIENT_SECRET
-        sync: false
-      - key: WISE_CLIENT_KEY
-        sync: false
-      - key: SOV_PIN
-        sync: false
-        placeholder: "Your 6-digit Sovereign Security PIN"
-      - key: SOV_TERMINAL_URL
-        value: "https://ais-dev-vsguby4cvne7edjk3z4bzv-522633331757.us-east1.run.app"
+      - key: WISE_PROFILE_ID
+        value: "101924589"
+      - key: LEDGER_DB_PATH
+        value: "/data/ledger.sqlite"
+      - key: RENDER_SERVICE_ID
+        value: "srv-d99sus57vvec7386p2p0"
+    disk:
+      name: ledger-db-volume
+      mountPath: /data
+      sizeGB: 1

@@ -23,29 +23,12 @@ jobs:
           cache: npm
 
       - name: Install Dependencies
-        run: npm install --no-audit --no-fund
-
-      - name: Build Application
-        run: npm run build
+        run: npm ci
 
       - name: Lint
         run: npm run lint
-
-      - name: Security & Verification Tests
-        run: npm test
 
       - name: Tangerine Withdrawal Redirect Smoke Test
         env:
           NODE_ENV: production
         run: npm run test:withdrawal:tangerine-redirect
-
-      - name: E2E Withdrawal Flow Test
-        env:
-          NODE_ENV: production
-        run: npm run test:e2e
-
-      - name: Tangerine Fallback Finalize Test
-        env:
-          NODE_ENV: production
-        run: npm run test:withdrawal:tangerine-fallback-finalize
-

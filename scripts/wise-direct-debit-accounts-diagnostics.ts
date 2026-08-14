@@ -3,18 +3,9 @@ import fs from 'fs';
 import path from 'path';
 import { getWiseApiToken } from '../src/lib/wise-env.js';
 
-const envPaths = [
-  path.join(process.cwd(), '.env'),
-  path.join(process.cwd(), '.env.local'),
-  path.join(process.cwd(), '.env.production'),
-  path.join(process.cwd(), '.env.production.local'),
-  path.join(process.cwd(), 'config', '.env.credentials')
-];
-
-for (const envPath of envPaths) {
-  if (fs.existsSync(envPath)) {
-    dotenv.config({ path: envPath, override: false });
-  }
+const credentialsPath = path.join(process.cwd(), 'config', '.env.credentials');
+if (fs.existsSync(credentialsPath)) {
+  dotenv.config({ path: credentialsPath, override: true });
 }
 
 const wiseBaseUrl = String(process.env.WISE_BASE_URL || 'https://api.wise.com').trim().replace(/\/$/, '');
@@ -66,14 +57,6 @@ async function main() {
 
   const accountsRes = await wiseFetch(`/v1/profiles/${profileId}/direct-debit-accounts`);
   console.log(`status=${accountsRes.status}`);
-  if (!accountsRes.ok) {
-    const status = Number(accountsRes.status || 0);
-    if (status === 401 || status === 403) {
-      console.log('Direct-debit accounts diagnostic preflight: PASS (token scope/permission limited for this endpoint)');
-      console.log('Tip: use a Wise token with direct-debit account read scope to enumerate account details.');
-      return;
-    }
-  }
   console.log(JSON.stringify(accountsRes.json, null, 2));
 }
 

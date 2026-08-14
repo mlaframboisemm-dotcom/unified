@@ -1,11 +1,8 @@
-FROM node:22-slim AS builder
+FROM node:22 AS builder
 WORKDIR /app
 
 COPY package*.json ./
-# Use npm install as a robust fallback in CI environments where `npm ci` can
-# fail unexpectedly during container builds (ensures install works even when
-# the environment or lockfile interaction is problematic).
-RUN npm install --legacy-peer-deps --no-audit --no-fund
+RUN npm install
 
 COPY . .
 RUN npm run build
@@ -20,16 +17,11 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 COPY package*.json ./
-# For runtime image, install only production deps. Use npm install fallback
-# rather than `npm ci` to avoid intermittent CI/build issues.
-RUN npm install --omit=dev --legacy-peer-deps --no-audit --no-fund
+RUN npm install --omit=dev
 
+# Copy built application artifacts and required runtime files
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/public ./public
-COPY --from=builder /app/server ./server
-COPY --from=builder /app/src ./src
-COPY --from=builder /app/tsconfig.json ./tsconfig.json
-COPY --from=builder /app/package.json ./package.json
 
 # Copy sovereigns banking hub (including Python backend), config, and fallbacks
 COPY --from=builder /app/sovereigns-banking-hub ./sovereigns-banking-hub
@@ -37,9 +29,9 @@ COPY --from=builder /app/config ./config
 COPY --from=builder /app/etransfers.json ./etransfers.json
 
 # Create Python virtual environment and install dependencies inside it
-# This avoids PEP 668 system-package-manager restrictions and utilizes precompiled wheels
-COPY scripts/docker-venv-setup.sh /tmp/docker-venv-setup.sh
-RUN chmod +x /tmp/docker-venv-setup.sh && /tmp/docker-venv-setup.sh
+RUN python3 -m venv /app/sovereigns-banking-hub/backend/venv && \
+    /app/sovereigns-banking-hub/backend/venv/bin/pip install --upgrade pip && \
+    /app/sovereigns-banking-hub/backend/venv/bin/pip install -r /app/sovereigns-banking-hub/backend/requirements.txt
 
 EXPOSE 3000
 CMD ["node", "dist/server.cjs"]

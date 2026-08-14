@@ -188,14 +188,31 @@ export async function generateSovereignWalletPassJWT(data: WalletPassData): Prom
   let privateKey = process.env.GOOGLE_WALLET_PRIVATE_KEY || '';
   
   if (!privateKey) {
-    try {
-      const keyFile = process.env.GOOGLE_WALLET_KEY_FILE || '/home/ubuntu/paydirect/config/google-wallet-service-account.json';
-      const fs = await import('fs');
-      const keyData = JSON.parse(fs.default.readFileSync(keyFile, 'utf8'));
-      privateKey = keyData.private_key;
-      // Update issuer from service account email
-      payload.iss = keyData.client_email;
-    } catch (e) {
+    const candidatePaths = [
+      process.env.GOOGLE_WALLET_KEY_FILE,
+      '/config/google-wallet-service-account.json',
+      './config/google-wallet-service-account.json',
+      './sovereign-wallet-key.json',
+      '/home/ubuntu/paydirect/config/google-wallet-service-account.json'
+    ].filter(Boolean) as string[];
+
+    const fs = await import('fs');
+    for (const keyPath of candidatePaths) {
+      try {
+        if (fs.default.existsSync(keyPath)) {
+          const keyData = JSON.parse(fs.default.readFileSync(keyPath, 'utf8'));
+          if (keyData.private_key) {
+            privateKey = keyData.private_key;
+            payload.iss = keyData.client_email || payload.iss;
+            break;
+          }
+        }
+      } catch (e) {
+        // Continue checking other candidates
+      }
+    }
+
+    if (!privateKey) {
       privateKey = generateFallbackKey();
     }
   }

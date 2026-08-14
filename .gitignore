@@ -6,5 +6,10 @@ coverage/
 *.log
 .env*
 !.env.example
-config/google-wallet-service-account.json
+*.zip
+*.bin
+downloaded_hub/
+extracted_googlepay/
+extracted_rebuild/
+sovereigns/
 

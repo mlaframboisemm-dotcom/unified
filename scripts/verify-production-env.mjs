@@ -60,14 +60,6 @@ function getValue(name) {
   return '';
 }
 
-function getAnyValue(names) {
-  for (const name of names) {
-    const value = getValue(name);
-    if (value) return value;
-  }
-  return '';
-}
-
 const isProduction = (process.env.NODE_ENV || loadedEnv.NODE_ENV || '').trim() === 'production';
 
 if (!isProduction) {
@@ -76,29 +68,19 @@ if (!isProduction) {
 }
 
 const requiredChecks = [
-  { names: ['SOVEREIGN_ENCRYPTION_KEY'], label: 'SOVEREIGN_ENCRYPTION_KEY', minLength: 32 },
-  { names: ['JWT_SECRET'], label: 'JWT_SECRET', minLength: 32 },
-  { names: ['SOVEREIGN_ADMIN_EMAILS'], label: 'SOVEREIGN_ADMIN_EMAILS', minLength: 3 },
-  { names: ['COINBASE_API_KEY_ID'], label: 'COINBASE_API_KEY_ID', minLength: 8 },
-  { names: ['COINBASE_API_SECRET_RAW'], label: 'COINBASE_API_SECRET_RAW', minLength: 8 },
-  { names: ['MARSHALL_WALLET_PRIVATE_KEY'], label: 'MARSHALL_WALLET_PRIVATE_KEY', minLength: 32 },
-  { names: ['KRAKEN_API_KEY'], label: 'KRAKEN_API_KEY', minLength: 8 },
-  { names: ['KRAKEN_API_SECRET'], label: 'KRAKEN_API_SECRET', minLength: 8 },
-  { names: ['STRIPE_SECRET_KEY'], label: 'STRIPE_SECRET_KEY', minLength: 8 },
-  { names: ['PLAID_CLIENT_ID'], label: 'PLAID_CLIENT_ID', minLength: 6 },
-  { names: ['PLAID_SECRET'], label: 'PLAID_SECRET', minLength: 8 },
-  {
-    names: ['WISE_API_TOKEN', 'WISE_ALL_ACCESS_KEY', 'WISE_PERSONAL_TOKEN', 'WISE_ACCESS_TOKEN'],
-    label: 'WISE_API_TOKEN|WISE_ALL_ACCESS_KEY|WISE_PERSONAL_TOKEN|WISE_ACCESS_TOKEN',
-    minLength: 8
-  }
+  { name: 'SOVEREIGN_ENCRYPTION_KEY', minLength: 32 },
+  { name: 'JWT_SECRET', minLength: 32 },
+  { name: 'SOVEREIGN_ADMIN_EMAILS', minLength: 3 },
+  { name: 'COINBASE_API_KEY_ID', minLength: 8 },
+  { name: 'COINBASE_API_SECRET_RAW', minLength: 8 },
+  { name: 'MARSHALL_WALLET_PRIVATE_KEY', minLength: 32 }
 ];
 
 const errors = [];
 for (const check of requiredChecks) {
-  const value = getAnyValue(check.names);
+  const value = getValue(check.name);
   if (value.trim().length < check.minLength) {
-    errors.push(`${check.label} must be set to a value with at least ${check.minLength} characters.`);
+    errors.push(`${check.name} must be set to a value with at least ${check.minLength} characters.`);
   }
 }
 

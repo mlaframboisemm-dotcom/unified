@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { CreditCard, Eye, EyeOff, Lock, Unlock, ShoppingBag, CheckCircle, RefreshCw, Sparkles, Award } from 'lucide-react';
+import { CreditCard, Eye, EyeOff, Lock, Unlock, ShoppingBag, CheckCircle, RefreshCw, Sparkles, Award, ShieldCheck } from 'lucide-react';
 import { Coin, Holding } from '../types';
+import { getAssetLegitimacyInfo } from '../lib/assetLegitimacy';
 
 interface CoinbaseCardProps {
   holdings: Holding[];
@@ -51,9 +52,13 @@ export default function CoinbaseCard({ holdings, coins, onDebitCardSpend }: Coin
     }
     setVaultLoading(true);
     try {
+      const token = sessionStorage.getItem('cb_auth_jwt_token') || localStorage.getItem('cb_auth_jwt_token');
       const res = await fetch('/api/card/register', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
         body: JSON.stringify({ cardToken: cardTokenInput, nodeID: selectedNode })
       });
       if (!res.ok) {
@@ -292,11 +297,22 @@ export default function CoinbaseCard({ holdings, coins, onDebitCardSpend }: Coin
               onChange={(e) => setFundingSource(e.target.value)}
               className="w-full bg-gray-50 border border-gray-200 text-gray-800 text-xs font-semibold px-2.5 py-2 rounded-lg cursor-pointer focus:outline-none"
             >
-              <option value="USD">USD Cash Balance</option>
-              <option value="BTC">Bitcoin (BTC)</option>
-              <option value="ETH">Ethereum (ETH)</option>
-              <option value="SOL">Solana (SOL)</option>
+              <option value="USD">USD Cash Balance (FDIC Insured Cash)</option>
+              {['BTC', 'ETH', 'SOL', 'USDC', 'USDT'].map((sym) => {
+                const leg = getAssetLegitimacyInfo(sym);
+                return (
+                  <option key={sym} value={sym}>
+                    {sym} — {leg.formattedAddress} [{leg.legitimacyBadge}]
+                  </option>
+                );
+              })}
             </select>
+            {fundingSource !== 'USD' && (
+              <div className="mt-2 p-2 bg-slate-900 text-slate-100 rounded-lg flex items-center justify-between text-[10px] font-mono">
+                <span className="text-blue-300 font-bold truncate">Address: {getAssetLegitimacyInfo(fundingSource).contractAddress}</span>
+                <span className="text-emerald-400 font-bold shrink-0 ml-1">{getAssetLegitimacyInfo(fundingSource).legitimacyBadge}</span>
+              </div>
+            )}
             <span className="text-[11px] text-gray-400 font-mono mt-1.5 block">
               Backed Balance: {getFundingBalance()}
             </span>

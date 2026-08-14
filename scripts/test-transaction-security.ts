@@ -2,11 +2,11 @@ import fs from 'fs';
 import path from 'path';
 import { spawn } from 'child_process';
 import net from 'net';
+import crypto from 'crypto';
 
 const repoRoot = process.cwd();
 const dbPath = path.join(repoRoot, 'src', 'db', 'database.json');
 const verificationPath = path.join(repoRoot, 'src', 'db', 'email_verifications.json');
-const lockPath = path.join(repoRoot, 'src', 'db', 'bootstrap.lock');
 const nodeExecPath = process.execPath;
 const tsxCliPath = path.join(repoRoot, 'node_modules', 'tsx', 'dist', 'cli.mjs');
 
@@ -81,7 +81,6 @@ async function main() {
 
   const originalDb = readFileIfExists(dbPath);
   const originalVerification = readFileIfExists(verificationPath);
-  const originalLock = readFileIfExists(lockPath);
 
   let serverProc: ReturnType<typeof spawn> | null = null;
 
@@ -94,9 +93,6 @@ async function main() {
       'utf-8'
     );
     fs.writeFileSync(verificationPath, JSON.stringify({}, null, 2), 'utf-8');
-    if (fs.existsSync(lockPath)) {
-      fs.unlinkSync(lockPath);
-    }
 
     serverProc = spawn(nodeExecPath, [tsxCliPath, 'server.ts'], {
       cwd: repoRoot,
@@ -176,15 +172,42 @@ async function main() {
     const cookie = parseCookie(loginRes.headers.get('set-cookie'));
     assert(Boolean(cookie), 'Expected cb_session cookie');
 
-    // Route Contract Test: authenticated withdrawal requests should reach the disbursement endpoint.
-    const authenticatedDisburse = await fetch(`${base}/api/withdrawal/disburse`, {
+    // Route Contract Test: Verify MFA middleware chain blocks withdrawal disbursement
+    const downgradeTokenMfa = (token: string, secret: string): string => {
+      const [headerPart, payloadPart] = token.split('.');
+      const base64UrlDecode = (input: string): Buffer => {
+        let normalized = input.replace(/-/g, '+').replace(/_/g, '/');
+        while (normalized.length % 4) normalized += '=';
+        return Buffer.from(normalized, 'base64');
+      };
+      const base64UrlEncode = (input: string | Buffer): string => {
+        const buffer = Buffer.isBuffer(input) ? input : Buffer.from(input, 'utf8');
+        return buffer.toString('base64').replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
+      };
+      const payload = JSON.parse(base64UrlDecode(payloadPart!).toString('utf8'));
+      payload.mfa = false;
+      
+      const encodedHeader = headerPart!;
+      const encodedPayload = base64UrlEncode(JSON.stringify(payload));
+      const signature = crypto
+        .createHmac('sha256', secret)
+        .update(`${encodedHeader}.${encodedPayload}`)
+        .digest();
+      return `${encodedHeader}.${encodedPayload}.${base64UrlEncode(signature)}`;
+    };
+
+    const jwtSecret = '12345678901234567890123456789012';
+    const downgradedToken = downgradeTokenMfa(loginBody.token, jwtSecret);
+    const mfaPendingCookie = `cb_session=${encodeURIComponent(downgradedToken)}`;
+
+    const mfaPendingDisburse = await fetch(`${base}/api/withdrawal/disburse`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', cookie },
+      headers: { 'Content-Type': 'application/json', cookie: mfaPendingCookie },
       body: JSON.stringify({ amount: 50 })
     });
     assert(
-      authenticatedDisburse.status === 200,
-      `Expected authenticated withdrawal disbursement to reach the contract endpoint with 200, got ${authenticatedDisburse.status}`
+      mfaPendingDisburse.status === 401 || mfaPendingDisburse.status === 403,
+      `Expected withdrawal disbursement to be blocked by auth/mfa middleware with 401/403, got ${mfaPendingDisburse.status}`
     );
 
     const spendabilityRes = await fetch(`${base}/api/transactions/spendability`, {
@@ -210,7 +233,6 @@ async function main() {
 
     writeFileOrDelete(dbPath, originalDb);
     writeFileOrDelete(verificationPath, originalVerification);
-    writeFileOrDelete(lockPath, originalLock);
   }
 }
 

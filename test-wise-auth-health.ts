@@ -2,39 +2,13 @@ import fetch from 'node-fetch';
 import dotenv from 'dotenv';
 import path from 'path';
 import fs from 'fs';
-import { generateSessionId, signSessionToken } from './src/lib/auth-security.js';
 
-const envPaths = [
-  path.join(process.cwd(), '.env'),
-  path.join(process.cwd(), '.env.local'),
-  path.join(process.cwd(), '.env.production'),
-  path.join(process.cwd(), '.env.production.local'),
-  path.join(process.cwd(), 'config', '.env.credentials')
-];
-
-for (const envPath of envPaths) {
-  if (fs.existsSync(envPath)) {
-    dotenv.config({ path: envPath, override: false });
-  }
+const credentialsPath = path.join(process.cwd(), 'config', '.env.credentials');
+if (fs.existsSync(credentialsPath)) {
+  dotenv.config({ path: credentialsPath, override: false });
 }
 
 const baseUrl = String(process.env.BASE_URL || 'http://localhost:3000').trim();
-
-function buildHealthBearerToken(): string | null {
-  const authSecret = String(process.env.JWT_SECRET || process.env.SESSION_SECRET || '').trim();
-  if (!authSecret) return null;
-
-  return signSessionToken(
-    {
-      sub: 'wise-ops-health-check',
-      email: 'wise-ops-health-check@test.local',
-      sid: generateSessionId(),
-      mfa: true,
-      name: 'Wise Ops Health Check'
-    },
-    authSecret
-  );
-}
 
 async function main() {
   console.log('═══════════════════════════════════════════════════════════');
@@ -42,12 +16,11 @@ async function main() {
   console.log('═══════════════════════════════════════════════════════════');
   console.log(`Base URL: ${baseUrl}`);
 
-  const bearerToken = buildHealthBearerToken();
   const response = await fetch(`${baseUrl}/api/withdrawal/wise-auth/health`, {
     method: 'GET',
     headers: {
       'Content-Type': 'application/json',
-      ...(bearerToken ? { Authorization: `Bearer ${bearerToken}` } : {}),
+      // Non-production suite runs use explicit test bypass with X-User-ID.
       'X-User-ID': 'wise-ops-health-check'
     }
   });

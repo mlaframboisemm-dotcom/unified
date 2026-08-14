@@ -24,27 +24,6 @@ function hasEmailProviderConfigured(env: NodeJS.ProcessEnv): boolean {
   );
 }
 
-function hasWiseConfigured(env: NodeJS.ProcessEnv): boolean {
-  return Boolean(
-    env.WISE_API_TOKEN ||
-    env.WISE_ALL_ACCESS_KEY ||
-    env.WISE_PERSONAL_TOKEN ||
-    env.WISE_ACCESS_TOKEN
-  );
-}
-
-function hasPlaidConfigured(env: NodeJS.ProcessEnv): boolean {
-  return Boolean(env.PLAID_CLIENT_ID && env.PLAID_SECRET);
-}
-
-function hasStripeConfigured(env: NodeJS.ProcessEnv): boolean {
-  return Boolean(env.STRIPE_SECRET_KEY);
-}
-
-function hasKrakenConfigured(env: NodeJS.ProcessEnv): boolean {
-  return Boolean(env.KRAKEN_API_KEY && env.KRAKEN_API_SECRET);
-}
-
 export async function buildRuntimeReadinessReport(env: NodeJS.ProcessEnv): Promise<RuntimeReadinessReport> {
   const missingConfig: string[] = [];
 
@@ -59,18 +38,6 @@ export async function buildRuntimeReadinessReport(env: NodeJS.ProcessEnv): Promi
   }
   if (!hasExchangeProviderConfigured(env)) {
     missingConfig.push('Coinbase or Kraken exchange API credentials');
-  }
-  if (!hasWiseConfigured(env)) {
-    missingConfig.push('WISE_API_TOKEN (or compatible alias)');
-  }
-  if (!hasPlaidConfigured(env)) {
-    missingConfig.push('PLAID_CLIENT_ID and PLAID_SECRET');
-  }
-  if (!hasStripeConfigured(env)) {
-    missingConfig.push('STRIPE_SECRET_KEY');
-  }
-  if (!hasKrakenConfigured(env)) {
-    missingConfig.push('KRAKEN_API_KEY and KRAKEN_API_SECRET');
   }
   if (!hasEmailProviderConfigured(env)) {
     missingConfig.push('MAILERSEND_API_KEY or SMTP credentials');
@@ -98,22 +65,6 @@ export async function buildRuntimeReadinessReport(env: NodeJS.ProcessEnv): Promi
     {
       name: 'Exchange credentials',
       status: hasExchangeProviderConfigured(env) ? 'configured' : 'missing'
-    },
-    {
-      name: 'Wise credentials',
-      status: hasWiseConfigured(env) ? 'configured' : 'missing'
-    },
-    {
-      name: 'Plaid credentials',
-      status: hasPlaidConfigured(env) ? 'configured' : 'missing'
-    },
-    {
-      name: 'Stripe credentials',
-      status: hasStripeConfigured(env) ? 'configured' : 'missing'
-    },
-    {
-      name: 'Kraken credentials',
-      status: hasKrakenConfigured(env) ? 'configured' : 'missing'
     },
     {
       name: 'Email credentials',

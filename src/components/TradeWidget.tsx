@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowUpDown, HelpCircle, CheckCircle2, Wallet, RefreshCw, AlertCircle } from 'lucide-react';
+import { ArrowUpDown, HelpCircle, CheckCircle2, Wallet, RefreshCw, AlertCircle, ShieldCheck, ExternalLink, Copy, Check } from 'lucide-react';
 import { Coin, Holding } from '../types';
-import { mergeAssetOptions } from '../lib/asset-operations';
+import { getAssetLegitimacyInfo } from '../lib/assetLegitimacy';
 
 function isReactEventTargetValue(e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>): string {
   return e.target.value;
@@ -55,70 +55,103 @@ export default function TradeWidget({
   const [amountCrypto, setAmountCrypto] = useState('');
   const [isFiatInput, setIsFiatInput] = useState(true);
 
-  // Convert Tab amounts
+  // Convert / Swap Tab amounts
   const [convertAmount, setConvertAmount] = useState('0.1');
 
-  // Payment Methods
+  // Payment & Offramp Methods
   const [paymentMethod, setPaymentMethod] = useState('cash'); // 'cash' | 'bank' | 'card'
+  const [sellPayoutMethod, setSellPayoutMethod] = useState('cash'); // 'cash' | 'bank' | 'stripe' | 'wise'
 
   // Form Submitting and Success screens
   const [loading, setLoading] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [copiedAddress, setCopiedAddress] = useState(false);
 
-  const assetOptions = mergeAssetOptions(coins, holdings);
   const selectedCoin = coins.find((c) => c.symbol === selectedCoinSymbol) || coins[0];
   const fromCoin = coins.find((c) => c.symbol === convertFromSymbol) || coins[0];
-  const toCoin = coins.find((c) => c.symbol === convertToSymbol) || coins[1];
+  const toCoin = coins.find((c) => c.symbol === convertToSymbol) || (coins[1] || coins[0]);
+
+  const activeLegitimacy = getAssetLegitimacyInfo(activeTab === 'convert' ? convertFromSymbol : selectedCoinSymbol);
 
   const currentHolding = holdings.find((h) => h.symbol === selectedCoinSymbol) || { symbol: selectedCoinSymbol, amount: 0 };
   const fromHolding = holdings.find((h) => h.symbol === convertFromSymbol) || { symbol: convertFromSymbol, amount: 0 };
 
   // Sync state if selected asset symbol changes externally (e.g. from selecting asset in table)
   useEffect(() => {
-    setSelectedCoinSymbol(selectedAssetSymbol);
+    if (selectedAssetSymbol) {
+      setSelectedCoinSymbol(selectedAssetSymbol);
+    }
   }, [selectedAssetSymbol]);
 
-  // Recalculate Fiat/Crypto inputs depending on which input is active
   const isCAD = citizenship === 'CA';
   const currencySymbol = isCAD ? 'CA$' : '$';
   const rate = isCAD ? DEFAULT_USD_CAD_RATE : 1;
-  const coinPrice = selectedCoin.price * rate;
+  const coinPrice = (selectedCoin?.price || 1) * rate;
 
-  useEffect(() => {
-    if (activeTab === 'convert') return;
+  // Derive inputs cleanly without circular useEffect loops
+  const numFiat = parseFloat(amountFiat) || 0;
+  const numCrypto = parseFloat(amountCrypto) || 0;
 
-    if (isFiatInput) {
-      const fiat = parseFloat(amountFiat);
-      if (isNaN(fiat) || fiat <= 0) {
-        setAmountCrypto('');
-      } else {
-        setAmountCrypto((fiat / coinPrice).toFixed(6));
-      }
-    } else {
-      const crypto = parseFloat(amountCrypto);
-      if (isNaN(crypto) || crypto <= 0) {
-        setAmountFiat('');
-      } else {
-        setAmountFiat((crypto * coinPrice).toFixed(2));
-      }
-    }
-  }, [amountFiat, amountCrypto, coinPrice, isFiatInput, activeTab]);
+  const derivedCryptoVal = isFiatInput ? (coinPrice > 0 ? numFiat / coinPrice : 0) : numCrypto;
+  const derivedFiatVal = isFiatInput ? numFiat : numCrypto * coinPrice;
 
   // Fee computations
-  const fiatVal = parseFloat(amountFiat) || 0;
+  const fiatVal = derivedFiatVal;
   const coinbaseFee = fiatVal === 0 ? 0 : fiatVal < 10 ? 0.99 : fiatVal < 50 ? 1.99 : fiatVal < 200 ? 2.99 : parseFloat((fiatVal * 0.0149).toFixed(2));
   const subtotal = fiatVal;
   const totalCost = activeTab === 'buy' ? subtotal + coinbaseFee : subtotal - coinbaseFee;
+
+  // Swap target calculation
+  const convertAmountNum = parseFloat(convertAmount) || 0;
+  const fromUnitPriceUSD = fromCoin?.price || 1;
+  const toUnitPriceUSD = toCoin?.price || 1;
+  const swapUSDValue = convertAmountNum * fromUnitPriceUSD;
+  const targetCryptoAmount = toUnitPriceUSD > 0 ? swapUSDValue / toUnitPriceUSD : 0;
+  const conversionRate = fromUnitPriceUSD > 0 && toUnitPriceUSD > 0 ? (fromUnitPriceUSD / toUnitPriceUSD).toFixed(6) : '0';
+
+  const handleToggleFiatInput = () => {
+    if (isFiatInput) {
+      // Switching to Crypto input
+      setAmountCrypto(derivedCryptoVal > 0 ? derivedCryptoVal.toFixed(6) : '');
+      setIsFiatInput(false);
+    } else {
+      // Switching to Fiat input
+      setAmountFiat(derivedFiatVal > 0 ? derivedFiatVal.toFixed(2) : '');
+      setIsFiatInput(true);
+    }
+  };
+
+  const handleFlipSwapDirection = () => {
+    const temp = convertFromSymbol;
+    setConvertFromSymbol(convertToSymbol);
+    setConvertToSymbol(temp);
+  };
+
+  const handlePresetAmount = (percentage: number) => {
+    if (activeTab === 'sell') {
+      const targetAmt = currentHolding.amount * percentage;
+      setAmountCrypto(targetAmt > 0 ? targetAmt.toFixed(6) : '0');
+      setIsFiatInput(false);
+    } else if (activeTab === 'convert') {
+      const targetAmt = fromHolding.amount * percentage;
+      setConvertAmount(targetAmt > 0 ? targetAmt.toFixed(6) : '0');
+    } else if (activeTab === 'buy') {
+      const targetFiat = (usdBalance * rate) * percentage;
+      setAmountFiat(targetFiat > 0 ? targetFiat.toFixed(2) : '0');
+      setIsFiatInput(true);
+    }
+  };
 
   const handleAction = () => {
     setErrorMessage(null);
     setSuccessMessage(null);
 
     if (activeTab === 'buy') {
-      const fiat = parseFloat(amountFiat);
-      if (isNaN(fiat) || fiat <= 0) {
-        setErrorMessage('Please enter a valid amount.');
+      const fiat = derivedFiatVal;
+      const crypto = derivedCryptoVal;
+      if (fiat <= 0 || crypto <= 0) {
+        setErrorMessage('Please enter a valid buy amount.');
         return;
       }
       
@@ -131,24 +164,25 @@ export default function TradeWidget({
       setTimeout(() => {
         onExecuteTrade('BUY', {
           symbol: selectedCoin.symbol,
-          amount: parseFloat(amountCrypto),
-          fiatAmount: fiatVal / rate
+          amount: crypto,
+          fiatAmount: fiat / rate
         });
         setLoading(false);
-        setSuccessMessage(`Successfully purchased ${parseFloat(amountCrypto).toFixed(6)} ${selectedCoin.symbol} for ${currencySymbol}${totalCost.toFixed(2)}.`);
+        setSuccessMessage(`Successfully purchased ${crypto.toFixed(6)} ${selectedCoin.symbol} for ${currencySymbol}${totalCost.toFixed(2)}.`);
         setAmountFiat('100');
-      }, 1000);
+        setAmountCrypto('');
+      }, 800);
     } 
     
     else if (activeTab === 'sell') {
-      const cryptoAmount = parseFloat(amountCrypto);
-      if (isNaN(cryptoAmount) || cryptoAmount <= 0) {
+      const cryptoAmount = derivedCryptoVal;
+      if (cryptoAmount <= 0) {
         setErrorMessage('Please enter a valid amount to sell.');
         return;
       }
 
       if (cryptoAmount > currentHolding.amount) {
-        setErrorMessage(`Insufficient ${selectedCoin.symbol} balance. You own ${currentHolding.amount.toFixed(6)} but tried to sell ${cryptoAmount.toFixed(6)}.`);
+        setErrorMessage(`Insufficient ${selectedCoin.symbol} balance. You hold ${currentHolding.amount.toFixed(6)} ${selectedCoin.symbol} but tried to sell ${cryptoAmount.toFixed(6)}.`);
         return;
       }
 
@@ -157,47 +191,51 @@ export default function TradeWidget({
         onExecuteTrade('SELL', {
           symbol: selectedCoin.symbol,
           amount: cryptoAmount,
-          fiatAmount: fiatVal / rate
+          fiatAmount: derivedFiatVal / rate
         });
         setLoading(false);
-        setSuccessMessage(`Successfully sold ${cryptoAmount.toFixed(6)} ${selectedCoin.symbol} for ${currencySymbol}${totalCost.toFixed(2)}.`);
+
+        const payoutDestLabel = 
+          sellPayoutMethod === 'bank' ? (isCAD ? 'RBC Checking (*4920) via Interac Direct Offramp' : 'Chase Checking (*4920) via Direct ACH Offramp')
+          : sellPayoutMethod === 'stripe' ? 'Visa Card (*8294) via Stripe Instant Push Offramp'
+          : sellPayoutMethod === 'wise' ? 'Wise Multi-Currency International Bank Account'
+          : `${isCAD ? 'CAD' : 'USD'} Cash Balance`;
+
+        setSuccessMessage(`Successfully sold ${cryptoAmount.toFixed(6)} ${selectedCoin.symbol} for ${currencySymbol}${totalCost.toFixed(2)}. Payout dispatched to ${payoutDestLabel}.`);
         setAmountCrypto('');
         setAmountFiat('');
-      }, 1000);
+      }, 800);
     } 
     
     else if (activeTab === 'convert') {
-      const fromAmount = parseFloat(convertAmount);
-      if (isNaN(fromAmount) || fromAmount <= 0) {
-        setErrorMessage('Please enter a valid conversion amount.');
+      const fromAmount = convertAmountNum;
+      if (fromAmount <= 0) {
+        setErrorMessage('Please enter a valid amount to swap.');
         return;
       }
 
       if (fromAmount > fromHolding.amount) {
-        setErrorMessage(`Insufficient ${fromCoin.symbol} balance. You hold ${fromHolding.amount.toFixed(6)} but tried to convert ${fromAmount.toFixed(6)}.`);
+        setErrorMessage(`Insufficient ${fromCoin.symbol} balance. You hold ${fromHolding.amount.toFixed(6)} ${fromCoin.symbol} but tried to swap ${fromAmount.toFixed(6)}.`);
         return;
       }
 
       if (fromCoin.symbol === toCoin.symbol) {
-        setErrorMessage('Cannot convert an asset to itself.');
+        setErrorMessage('Cannot swap an asset for itself. Choose two different tokens.');
         return;
       }
 
       setLoading(true);
       setTimeout(() => {
-        const valueInUSD = fromAmount * fromCoin.price;
-        const targetCryptoAmount = valueInUSD / toCoin.price;
-
         onExecuteTrade('CONVERT', {
           symbol: fromCoin.symbol,
           amount: fromAmount,
-          fiatAmount: valueInUSD,
+          fiatAmount: swapUSDValue,
           targetSymbol: toCoin.symbol
         });
         setLoading(false);
-        setSuccessMessage(`Successfully converted ${fromAmount} ${fromCoin.symbol} to ${targetCryptoAmount.toFixed(6)} ${toCoin.symbol}.`);
+        setSuccessMessage(`Successfully swapped ${fromAmount} ${fromCoin.symbol} for ${targetCryptoAmount.toFixed(6)} ${toCoin.symbol}.`);
         setConvertAmount('');
-      }, 1000);
+      }, 800);
     }
   };
 
@@ -210,37 +248,38 @@ export default function TradeWidget({
     }
   };
 
-  // Convert exchange rates
-  const conversionRate = fromCoin && toCoin ? (fromCoin.price / toCoin.price).toFixed(6) : '0';
-
   return (
     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden flex flex-col h-full min-h-[420px]" id="trade-widget">
       {/* Tabs */}
       <div className="flex border-b border-gray-100 bg-gray-50/50">
-        {(['buy', 'sell', 'convert'] as const).map((tab) => (
+        {[
+          { id: 'buy', label: 'Buy' },
+          { id: 'sell', label: 'Sell' },
+          { id: 'convert', label: 'Swap / Convert' }
+        ].map((tabItem) => (
           <button
-            key={tab}
+            key={tabItem.id}
             onClick={() => {
-              setActiveTab(tab);
+              setActiveTab(tabItem.id as 'buy' | 'sell' | 'convert');
               setErrorMessage(null);
               setSuccessMessage(null);
             }}
-            className={`flex-1 py-4 text-center text-sm font-semibold capitalize border-b-2 cursor-pointer transition-all ${
-              activeTab === tab
-                ? 'border-[#0052FF] text-[#0052FF] bg-white'
+            className={`flex-1 py-4 text-center text-xs sm:text-sm font-bold border-b-2 cursor-pointer transition-all ${
+              activeTab === tabItem.id
+                ? 'border-[#0052FF] text-[#0052FF] bg-white shadow-2xs'
                 : 'border-transparent text-gray-500 hover:text-gray-900 hover:bg-gray-50/80'
             }`}
           >
-            {tab}
+            {tabItem.label}
           </button>
         ))}
       </div>
 
       {/* Widget Body */}
-      <div className="p-6 flex-1 flex flex-col justify-between">
+      <div className="p-5 sm:p-6 flex-1 flex flex-col justify-between">
         {successMessage ? (
           <div className="flex-1 flex flex-col items-center justify-center text-center space-y-4 py-8 animate-fade-in">
-            <CheckCircle2 className="h-14 w-14 text-green-500" />
+            <CheckCircle2 className="h-14 w-14 text-emerald-500" />
             <div>
               <h3 className="text-lg font-bold text-gray-900">Trade Executed</h3>
               <p className="text-sm text-gray-600 mt-2 max-w-xs mx-auto">
@@ -249,7 +288,7 @@ export default function TradeWidget({
             </div>
             <button
               onClick={() => setSuccessMessage(null)}
-              className="px-6 py-2 bg-[#0052FF] text-white text-sm font-semibold rounded-lg hover:bg-blue-700 cursor-pointer transition-colors"
+              className="px-6 py-2.5 bg-[#0052FF] text-white text-sm font-semibold rounded-xl hover:bg-blue-700 cursor-pointer transition-colors shadow-xs"
             >
               Done
             </button>
@@ -257,143 +296,279 @@ export default function TradeWidget({
         ) : (
           <div className="space-y-4 flex-1 flex flex-col justify-between">
             {/* Input and Coins Selectors */}
-            <div>
-              {/* Asset Selector */}
+            <div className="space-y-3">
+              {/* Asset Selector for Buy/Sell */}
               {activeTab !== 'convert' ? (
-                <div className="flex items-center justify-between mb-4">
-                  <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
-                    Asset
-                  </span>
+                <div className="space-y-2 mb-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                      Select Asset
+                    </span>
+                    <span className="text-[10px] bg-emerald-50 text-emerald-700 font-bold px-2 py-0.5 rounded-md border border-emerald-200/60 flex items-center gap-1">
+                      <ShieldCheck className="w-3 h-3 text-emerald-600" />
+                      {activeLegitimacy.legitimacyBadge}
+                    </span>
+                  </div>
                   <select
                     value={selectedCoinSymbol}
                     onChange={(e) => setSelectedCoinSymbol(isReactEventTargetValue(e))}
-                    className="bg-gray-50 border border-gray-200 text-gray-800 text-sm font-semibold px-3 py-1.5 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#0052FF] cursor-pointer"
+                    className="w-full bg-gray-50 border border-gray-200 text-gray-800 text-xs sm:text-sm font-semibold px-3 py-2.5 rounded-xl focus:outline-none focus:ring-1 focus:ring-[#0052FF] cursor-pointer"
                   >
-                    {assetOptions.map((asset) => (
-                      <option key={asset.symbol} value={asset.symbol}>
-                        {asset.name} ({asset.symbol})
-                      </option>
-                    ))}
+                    {coins.map((coin) => {
+                      const leg = getAssetLegitimacyInfo(coin.symbol);
+                      return (
+                        <option key={coin.symbol} value={coin.symbol}>
+                          {coin.name} ({coin.symbol}) — ${coin.price.toLocaleString('en-US', { minimumFractionDigits: 2 })} [{leg.legitimacyBadge}]
+                        </option>
+                      );
+                    })}
                   </select>
-                </div>
-              ) : (
-                <div className="grid grid-cols-2 gap-3 mb-4 items-center">
-                  <div>
-                    <span className="text-[10px] font-bold text-gray-400 uppercase block mb-1">From</span>
-                    <select
-                      value={convertFromSymbol}
-                      onChange={(e) => setConvertFromSymbol(isReactEventTargetValue(e))}
-                      className="w-full bg-gray-50 border border-gray-200 text-gray-800 text-xs font-semibold px-2 py-1.5 rounded-lg focus:outline-none cursor-pointer"
-                    >
-                      {assetOptions.map((asset) => (
-                        <option key={asset.symbol} value={asset.symbol}>
-                          {asset.symbol}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <span className="text-[10px] font-bold text-gray-400 uppercase block mb-1">To</span>
-                    <select
-                      value={convertToSymbol}
-                      onChange={(e) => setConvertToSymbol(isReactEventTargetValue(e))}
-                      className="w-full bg-gray-50 border border-gray-200 text-gray-800 text-xs font-semibold px-2 py-1.5 rounded-lg focus:outline-none cursor-pointer"
-                    >
-                      {assetOptions.map((asset) => (
-                        <option key={asset.symbol} value={asset.symbol}>
-                          {asset.symbol}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-              )}
 
-              {/* Trade Balance Helpers */}
-              <div className="flex items-center justify-between text-xs text-gray-500 mb-2">
-                <span className="flex items-center"><Wallet className="w-3.5 h-3.5 mr-1" />
-                  {activeTab === 'buy'
-                    ? `Cash: ${currencySymbol}${(usdBalance * rate).toLocaleString(undefined, { minimumFractionDigits: 2 })}`
-                    : activeTab === 'sell'
-                    ? `Available: ${currentHolding.amount.toFixed(6)} ${selectedCoin.symbol}`
-                    : `Available: ${fromHolding.amount.toFixed(6)} ${fromCoin.symbol}`}
-                </span>
-                {activeTab !== 'buy' && (
-                  <button
-                    onClick={handleUseMax}
-                    className="text-[#0052FF] font-semibold hover:underline cursor-pointer"
-                  >
-                    Use Max
-                  </button>
-                )}
-              </div>
+                  {/* Live Contract Address Card */}
+                  <div className="p-2.5 bg-slate-900 text-slate-100 rounded-xl border border-slate-800 flex items-center justify-between text-[11px] font-mono">
+                    <div className="truncate mr-2">
+                      <span className="text-slate-400 text-[10px] block font-sans uppercase font-bold">Live Contract Address</span>
+                      <span className="text-blue-300 font-bold">{activeLegitimacy.contractAddress}</span>
+                    </div>
+                    <div className="flex items-center space-x-1 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText(activeLegitimacy.contractAddress);
+                          setCopiedAddress(true);
+                          setTimeout(() => setCopiedAddress(false), 2000);
+                        }}
+                        className="p-1 bg-slate-800 hover:bg-slate-700 rounded text-slate-300 hover:text-white transition-colors cursor-pointer flex items-center gap-1 text-[10px]"
+                        title="Copy contract address"
+                      >
+                        {copiedAddress ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                        <span>{copiedAddress ? 'Copied' : 'Copy'}</span>
+                      </button>
+                      <a
+                        href={activeLegitimacy.explorerUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="p-1 bg-slate-800 hover:bg-slate-700 rounded text-blue-400 hover:text-blue-300 transition-colors cursor-pointer"
+                        title="View on Explorer"
+                      >
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
 
-              {/* Amount Inputs */}
-              {activeTab !== 'convert' ? (
-                <div className="border border-gray-200 rounded-xl p-4 bg-gray-50/30 hover:border-gray-300 transition-colors relative">
-                  <div className="flex justify-between items-center">
-                    <div className="flex-1">
-                      {isFiatInput ? (
-                        <div className="flex items-center">
-                          <span className="text-2xl font-bold text-gray-400 mr-0.5">{currencySymbol}</span>
-                          <input
-                            type="number"
-                            placeholder="0"
-                            value={amountFiat}
-                            onChange={(e) => {
-                              setIsFiatInput(true);
-                              setAmountFiat(isReactEventTargetValue(e));
-                            }}
-                            className="w-full bg-transparent text-3xl font-extrabold text-gray-900 border-none outline-none focus:ring-0 p-0 font-mono"
-                          />
-                        </div>
-                      ) : (
+              {/* DUAL-PANEL SWAP INTERFACE FOR CONVERT TAB */}
+              {activeTab === 'convert' ? (
+                <div className="space-y-3">
+                  {/* YOU PAY (FROM) PANEL */}
+                  <div className="border border-gray-200 rounded-2xl p-4 bg-gray-50/60 hover:border-gray-300 transition-all space-y-2">
+                    <div className="flex items-center justify-between text-xs font-bold text-gray-500 uppercase tracking-wide">
+                      <span>You Pay</span>
+                      <span className="text-[11px] font-mono text-gray-600">
+                        Available: <strong className="text-gray-900">{fromHolding.amount.toFixed(6)} {fromCoin.symbol}</strong>
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      <select
+                        value={convertFromSymbol}
+                        onChange={(e) => setConvertFromSymbol(isReactEventTargetValue(e))}
+                        className="bg-white border border-gray-200 text-gray-900 text-sm font-extrabold px-3 py-2 rounded-xl focus:outline-none focus:ring-1 focus:ring-[#0052FF] cursor-pointer shrink-0 shadow-2xs"
+                      >
+                        {coins.map((coin) => (
+                          <option key={coin.symbol} value={coin.symbol}>
+                            {coin.symbol} (${coin.price > 0 ? coin.price.toLocaleString('en-US', { minimumFractionDigits: 2 }) : '1.00'})
+                          </option>
+                        ))}
+                      </select>
+
+                      <div className="flex-1 relative">
                         <input
                           type="number"
+                          step="any"
                           placeholder="0.00"
-                          value={amountCrypto}
-                          onChange={(e) => {
-                            setIsFiatInput(false);
-                            setAmountCrypto(isReactEventTargetValue(e));
-                          }}
-                          className="w-full bg-transparent text-3xl font-extrabold text-gray-900 border-none outline-none focus:ring-0 p-0 font-mono"
+                          value={convertAmount}
+                          onChange={(e) => setConvertAmount(isReactEventTargetValue(e))}
+                          className="w-full bg-transparent text-2xl sm:text-3xl font-extrabold text-gray-900 border-none outline-none focus:ring-0 p-0 font-mono text-right"
                         />
-                      )}
-                      <div className="text-xs text-gray-400 mt-1.5 font-medium">
-                        {isFiatInput
-                          ? `≈ ${amountCrypto || '0.00'} ${selectedCoin.symbol}`
-                          : `≈ ${currencySymbol}${parseFloat(amountFiat || '0').toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
                       </div>
                     </div>
 
+                    <div className="flex justify-between items-center text-xs text-gray-400 pt-1 border-t border-gray-100 font-mono">
+                      <span>≈ ${swapUSDValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD</span>
+                      <button
+                        type="button"
+                        onClick={() => setConvertAmount(fromHolding.amount.toString())}
+                        className="text-[#0052FF] font-bold hover:underline cursor-pointer text-xs"
+                      >
+                        MAX ({fromHolding.amount.toFixed(4)})
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* FLIP DIRECTION BUTTON */}
+                  <div className="flex justify-center -my-2 relative z-10">
                     <button
-                      onClick={() => setIsFiatInput(!isFiatInput)}
-                      className="p-2.5 bg-white border border-gray-100 hover:border-gray-200 hover:shadow-xs rounded-full transition-all text-gray-500 hover:text-gray-900 cursor-pointer"
+                      type="button"
+                      onClick={handleFlipSwapDirection}
+                      className="p-2.5 bg-white border border-gray-200 hover:border-[#0052FF] hover:bg-blue-50 text-[#0052FF] rounded-full shadow-sm transition-all cursor-pointer flex items-center justify-center group"
+                      title="Switch Swap Direction"
                     >
-                      <ArrowUpDown className="h-4 w-4" />
+                      <ArrowUpDown className="h-4 w-4 group-hover:rotate-180 transition-transform duration-300" />
+                    </button>
+                  </div>
+
+                  {/* YOU RECEIVE (TO) PANEL */}
+                  <div className="border border-emerald-200/80 rounded-2xl p-4 bg-emerald-50/20 hover:border-emerald-300 transition-all space-y-2">
+                    <div className="flex items-center justify-between text-xs font-bold text-gray-500 uppercase tracking-wide">
+                      <span>You Receive (Estimated)</span>
+                      <span className="text-[11px] font-mono text-emerald-700 font-bold">
+                        1 {fromCoin.symbol} ≈ {conversionRate} {toCoin.symbol}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      <select
+                        value={convertToSymbol}
+                        onChange={(e) => setConvertToSymbol(isReactEventTargetValue(e))}
+                        className="bg-white border border-gray-200 text-gray-900 text-sm font-extrabold px-3 py-2 rounded-xl focus:outline-none focus:ring-1 focus:ring-[#0052FF] cursor-pointer shrink-0 shadow-2xs"
+                      >
+                        {coins.map((coin) => (
+                          <option key={coin.symbol} value={coin.symbol}>
+                            {coin.symbol} (${coin.price > 0 ? coin.price.toLocaleString('en-US', { minimumFractionDigits: 2 }) : '1.00'})
+                          </option>
+                        ))}
+                      </select>
+
+                      <div className="flex-1 text-right font-mono text-2xl sm:text-3xl font-extrabold text-emerald-600 truncate">
+                        {targetCryptoAmount > 0 ? targetCryptoAmount.toLocaleString('en-US', { maximumFractionDigits: 6 }) : '0.00'}
+                      </div>
+                    </div>
+
+                    <div className="flex justify-between items-center text-xs text-gray-400 pt-1 border-t border-gray-100 font-mono">
+                      <span>≈ ${swapUSDValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD</span>
+                      <span className="text-emerald-600 font-bold flex items-center gap-1 text-[11px]">
+                        <RefreshCw className="w-3 h-3 animate-spin text-emerald-500" /> Zero Slippage
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* CONTRACT ADDRESS BANNER FOR FROM COIN */}
+                  <div className="p-2.5 bg-slate-900 text-slate-100 rounded-xl border border-slate-800 flex items-center justify-between text-[11px] font-mono">
+                    <div className="truncate mr-2">
+                      <span className="text-slate-400 text-[10px] block font-sans uppercase font-bold">{convertFromSymbol} Address ({activeLegitimacy.legitimacyBadge})</span>
+                      <span className="text-blue-300 font-bold">{activeLegitimacy.contractAddress}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(activeLegitimacy.contractAddress);
+                        setCopiedAddress(true);
+                        setTimeout(() => setCopiedAddress(false), 2000);
+                      }}
+                      className="p-1 bg-slate-800 hover:bg-slate-700 rounded text-slate-300 hover:text-white transition-colors cursor-pointer flex items-center gap-1 text-[10px] shrink-0"
+                    >
+                      {copiedAddress ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                      <span>{copiedAddress ? 'Copied' : 'Copy'}</span>
                     </button>
                   </div>
                 </div>
               ) : (
-                <div className="border border-gray-200 rounded-xl p-4 bg-gray-50/30">
-                  <span className="text-[10px] font-bold text-gray-400 uppercase block mb-1">Convert Amount ({fromCoin.symbol})</span>
-                  <input
-                    type="number"
-                    placeholder="0.00"
-                    value={convertAmount}
-                    onChange={(e) => setConvertAmount(isReactEventTargetValue(e))}
-                    className="w-full bg-transparent text-2xl font-extrabold text-gray-900 border-none outline-none focus:ring-0 p-0 font-mono"
-                  />
-                  <div className="flex justify-between items-center text-xs text-gray-400 mt-2 font-mono">
-                    <span>Rate: 1 {fromCoin.symbol} ≈ {conversionRate} {toCoin.symbol}</span>
-                    <RefreshCw className="h-3 w-3 animate-spin" />
+                /* BUY / SELL AMOUNT INPUT */
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
+                    <span className="flex items-center font-medium">
+                      <Wallet className="w-3.5 h-3.5 mr-1 text-gray-400" />
+                      {activeTab === 'buy'
+                        ? `Cash Balance: ${currencySymbol}${(usdBalance * rate).toLocaleString(undefined, { minimumFractionDigits: 2 })}`
+                        : `Available: ${currentHolding.amount.toFixed(6)} ${selectedCoin.symbol}`}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handlePresetAmount(1.0)}
+                      className="text-[#0052FF] font-bold hover:underline cursor-pointer text-xs"
+                    >
+                      MAX
+                    </button>
+                  </div>
+
+                  <div className="border border-gray-200 rounded-2xl p-4 bg-gray-50/40 hover:border-gray-300 transition-colors relative">
+                    <div className="flex justify-between items-center">
+                      <div className="flex-1">
+                        {isFiatInput ? (
+                          <div className="flex items-center">
+                            <span className="text-2xl sm:text-3xl font-extrabold text-gray-400 mr-0.5">{currencySymbol}</span>
+                            <input
+                              type="number"
+                              step="any"
+                              placeholder="0"
+                              value={amountFiat}
+                              onChange={(e) => {
+                                setIsFiatInput(true);
+                                setAmountFiat(isReactEventTargetValue(e));
+                              }}
+                              className="w-full bg-transparent text-2xl sm:text-3xl font-extrabold text-gray-900 border-none outline-none focus:ring-0 p-0 font-mono"
+                            />
+                          </div>
+                        ) : (
+                          <div className="flex items-center">
+                            <input
+                              type="number"
+                              step="any"
+                              placeholder="0.00"
+                              value={amountCrypto}
+                              onChange={(e) => {
+                                setIsFiatInput(false);
+                                setAmountCrypto(isReactEventTargetValue(e));
+                              }}
+                              className="w-full bg-transparent text-2xl sm:text-3xl font-extrabold text-gray-900 border-none outline-none focus:ring-0 p-0 font-mono"
+                            />
+                            <span className="text-lg font-bold text-gray-500 ml-1">{selectedCoin.symbol}</span>
+                          </div>
+                        )}
+                        <div className="text-xs text-gray-400 mt-1.5 font-mono font-medium">
+                          {isFiatInput
+                            ? `≈ ${derivedCryptoVal > 0 ? derivedCryptoVal.toFixed(6) : '0.00'} ${selectedCoin.symbol}`
+                            : `≈ ${currencySymbol}${derivedFiatVal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={handleToggleFiatInput}
+                        className="p-2.5 bg-white border border-gray-200 hover:border-gray-300 hover:shadow-2xs rounded-full transition-all text-gray-600 hover:text-gray-900 cursor-pointer shrink-0 ml-2"
+                        title="Toggle Fiat / Crypto Amount"
+                      >
+                        <ArrowUpDown className="h-4 w-4" />
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}
 
-              {/* Payment Select / Sell Payout Selector */}
+              {/* QUICK PRESET BUTTONS FOR QUICK TYPING */}
+              <div className="grid grid-cols-4 gap-2 pt-1">
+                {[
+                  { label: '25%', pct: 0.25 },
+                  { label: '50%', pct: 0.50 },
+                  { label: '75%', pct: 0.75 },
+                  { label: '100%', pct: 1.00 },
+                ].map((preset) => (
+                  <button
+                    key={preset.label}
+                    type="button"
+                    onClick={() => handlePresetAmount(preset.pct)}
+                    className="py-1.5 bg-gray-100 hover:bg-gray-200 active:bg-blue-100 active:text-[#0052FF] text-gray-700 text-xs font-bold rounded-lg transition-colors cursor-pointer"
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Payment Select for Buy */}
               {activeTab === 'buy' && (
-                <div className="mt-4">
+                <div className="mt-3">
                   <span className="text-[10px] font-bold text-gray-400 uppercase block mb-1.5">Payment Method</span>
                   <select
                     value={paymentMethod}
@@ -414,48 +589,81 @@ export default function TradeWidget({
                   </select>
                 </div>
               )}
+
+              {/* Offramp Payout Selector for Sell */}
+              {activeTab === 'sell' && (
+                <div className="mt-3">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-[10px] font-bold text-gray-400 uppercase">Payout / Offramp Destination</span>
+                    <span className="text-[10px] font-black text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                      CONNECTED OFFRAMP
+                    </span>
+                  </div>
+                  <select
+                    value={sellPayoutMethod}
+                    onChange={(e) => setSellPayoutMethod(isReactEventTargetValue(e))}
+                    className="w-full bg-gray-50 border border-gray-200 text-gray-800 text-xs sm:text-sm font-semibold px-3 py-2.5 rounded-xl focus:outline-none cursor-pointer"
+                  >
+                    <option value="cash">
+                      {isCAD ? 'CAD Cash Balance (Instant Wallet Deposit)' : 'USD Cash Balance (Instant Wallet Deposit)'}
+                    </option>
+                    <option value="bank">
+                      {isCAD
+                        ? 'Interac Direct Deposit — Royal Bank of Canada (*4920)'
+                        : 'ACH Direct Deposit — Chase Bank Checking (*4920)'}
+                    </option>
+                    <option value="stripe">
+                      Stripe Direct Card Push Offramp — Visa (*8294)
+                    </option>
+                    <option value="wise">
+                      Wise Multi-Currency Bank Transfer (USD / CAD Wire)
+                    </option>
+                  </select>
+                </div>
+              )}
             </div>
 
             {/* Error Indicators */}
             {errorMessage && (
-              <div className="bg-red-50 text-red-700 p-3 rounded-xl text-xs flex items-start space-x-2 border border-red-100 animate-pulse">
-                <AlertCircle className="h-4 w-4 shrink-0" />
-                <span>{errorMessage}</span>
+              <div className="bg-red-50 text-red-700 p-3 rounded-xl text-xs flex items-start space-x-2 border border-red-100 animate-pulse my-2">
+                <AlertCircle className="h-4 w-4 shrink-0 text-red-500" />
+                <span className="font-medium">{errorMessage}</span>
               </div>
             )}
 
-            {/* Price Calculations Review & Final Button */}
-            <div className="pt-4 border-t border-gray-100 space-y-3">
+            {/* Price Calculations Review & Final Action Button */}
+            <div className="pt-3 border-t border-gray-100 space-y-3 mt-3">
               {activeTab !== 'convert' && (
-                <div className="space-y-1.5 text-xs text-gray-500 font-medium">
+                <div className="space-y-1 text-xs text-gray-500 font-medium">
                   <div className="flex justify-between">
-                    <span>Purchase price</span>
+                    <span>Market price</span>
                     <span className="font-mono">{currencySymbol}{coinPrice.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span>Coinbase Fee</span>
+                    <span>Coinbase Network Fee</span>
                     <span className="font-mono">{currencySymbol}{coinbaseFee.toFixed(2)}</span>
                   </div>
-                  <div className="flex justify-between text-sm text-gray-900 font-bold">
+                  <div className="flex justify-between text-sm text-gray-900 font-bold pt-1 border-t border-gray-100">
                     <span>{activeTab === 'buy' ? 'Total Cost' : 'Payout Total'}</span>
-                    <span className="font-mono">{currencySymbol}{totalCost.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                    <span className="font-mono text-[#0052FF]">{currencySymbol}{totalCost.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                   </div>
                 </div>
               )}
 
               <button
+                type="button"
                 onClick={handleAction}
                 disabled={loading}
-                className="w-full bg-[#0052FF] hover:bg-blue-700 disabled:bg-gray-300 text-white font-bold py-3.5 px-4 rounded-xl shadow-xs transition-colors cursor-pointer text-center text-sm"
+                className="w-full bg-[#0052FF] hover:bg-blue-700 disabled:bg-gray-300 text-white font-extrabold py-3.5 px-4 rounded-xl shadow-xs transition-all cursor-pointer text-center text-sm flex items-center justify-center gap-2"
               >
                 {loading ? (
-                  <span className="flex items-center justify-center"><RefreshCw className="w-4 h-4 mr-2 animate-spin" /> Transacting Securely...</span>
+                  <span className="flex items-center justify-center"><RefreshCw className="w-4 h-4 mr-2 animate-spin" /> Executing Order...</span>
                 ) : activeTab === 'buy' ? (
                   `Buy ${selectedCoin.symbol}`
                 ) : activeTab === 'sell' ? (
                   `Sell ${selectedCoin.symbol}`
                 ) : (
-                  `Convert ${fromCoin.symbol} to ${toCoin.symbol}`
+                  `Swap ${fromCoin.symbol} for ${toCoin.symbol}`
                 )}
               </button>
             </div>

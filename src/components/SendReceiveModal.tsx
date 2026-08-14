@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { X, ArrowUpRight, ArrowDownLeft, CheckCircle2, Copy, RefreshCw, Smartphone, QrCode, Mail, Wallet, Plus } from 'lucide-react';
+import { X, ArrowUpRight, ArrowDownLeft, CheckCircle2, Copy, RefreshCw, Smartphone, QrCode, Mail, Wallet, Plus, ShieldCheck, ExternalLink, Check } from 'lucide-react';
 import { Coin, Holding } from '../types';
-import { getAssetTransferLabel, getAssetWalletAddress, isAssetAddressable, mergeAssetOptions, validateAssetAddress } from '../lib/asset-operations';
+import { getAssetLegitimacyInfo } from '../lib/assetLegitimacy';
 
 interface SendReceiveModalProps {
   coins: Coin[];
@@ -59,7 +59,6 @@ export default function SendReceiveModal({
     );
   }
 
-  const assetOptions = mergeAssetOptions(coins, holdings);
   const currentCoin = coins.find((c) => c.symbol === (action === 'send' ? sendSymbol : receiveSymbol)) || coins[0];
   const currentHolding = holdings.find((h) => h.symbol === sendSymbol) || { symbol: sendSymbol, amount: 0 };
 
@@ -68,7 +67,16 @@ export default function SendReceiveModal({
   const convertedCryptoAmount = isFiat ? sendAmountNum / currentCoin.price : sendAmountNum;
   const convertedFiatAmount = isFiat ? sendAmountNum : sendAmountNum * currentCoin.price;
 
-  const getWalletAddress = (symbol: string) => getAssetWalletAddress(symbol);
+  // Render a wallet address based on the selected receive coin
+  const getWalletAddress = (symbol: string) => {
+    switch (symbol) {
+      case 'BTC': return 'bc1q9rny26szrgl26u64mdg0cuhvpt2p77jwh792ka';
+      case 'ETH': return '0x71C7656EC7ab88b098defB751B7401B5f6d1476B';
+      case 'SOL': return 'FvJDg947zY8f4L6kSghB8b9uUv9T8ZzK1C2xL7N3aU';
+      case 'XRP': return 'rEb8TK3gYQCfyAam7C16m6W8ZfS23nVTwk';
+      default: return '0x39a1D8B4eC6294D290F571bF8C28b173Fdb920a6';
+    }
+  };
 
   const handleSendSubmit = () => {
     setErrorMsg(null);
@@ -81,11 +89,6 @@ export default function SendReceiveModal({
 
     if (!recipient) {
       setErrorMsg('Please specify a recipient email or address.');
-      return;
-    }
-
-    if (isAssetAddressable(sendSymbol) && !validateAssetAddress(sendSymbol, recipient)) {
-      setErrorMsg(`Please enter a valid ${getAssetTransferLabel(sendSymbol)} for ${sendSymbol}.`);
       return;
     }
 
@@ -195,29 +198,53 @@ export default function SendReceiveModal({
             /* SEND CRYPTO PANEL */
             <div className="space-y-4">
               {/* Asset selection */}
-              <div>
-                <label className="text-[10px] font-bold text-gray-400 uppercase block mb-1">Pay with</label>
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-[10px] font-bold text-gray-400 uppercase block">Pay with</label>
+                  {(() => {
+                    const leg = getAssetLegitimacyInfo(sendSymbol);
+                    return (
+                      <span className="text-[10px] bg-emerald-50 text-emerald-700 font-bold px-2 py-0.5 rounded border border-emerald-200/60 flex items-center gap-1">
+                        <ShieldCheck className="w-3 h-3 text-emerald-600" />
+                        {leg.legitimacyBadge}
+                      </span>
+                    );
+                  })()}
+                </div>
                 <select
                   value={sendSymbol}
                   onChange={(e) => setSendSymbol(e.target.value)}
                   className="w-full bg-gray-50 border border-gray-200 text-gray-800 text-xs sm:text-sm font-semibold px-3 py-2 rounded-xl focus:outline-none cursor-pointer"
                 >
-                  {assetOptions.map((asset) => (
-                    <option key={asset.symbol} value={asset.symbol}>
-                      {asset.name} ({asset.amount.toFixed(4)} held)
-                    </option>
-                  ))}
+                  {coins.map((coin) => {
+                    const held = holdings.find((h) => h.symbol === coin.symbol) || { amount: 0 };
+                    const leg = getAssetLegitimacyInfo(coin.symbol);
+                    return (
+                      <option key={coin.symbol} value={coin.symbol}>
+                        {coin.name} ({coin.symbol}) — {held.amount.toFixed(4)} held • {leg.formattedAddress}
+                      </option>
+                    );
+                  })}
                 </select>
+                {(() => {
+                  const leg = getAssetLegitimacyInfo(sendSymbol);
+                  return (
+                    <div className="p-2 bg-slate-900 text-slate-100 rounded-lg flex items-center justify-between text-[10px] font-mono">
+                      <span className="truncate text-blue-300 font-bold mr-1">Addr: {leg.contractAddress}</span>
+                      <span className="text-slate-400 text-[9px] shrink-0 font-sans font-bold">{leg.verifierName}</span>
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* Recipient info */}
               <div>
-                <label className="text-[10px] font-bold text-gray-400 uppercase block mb-1">To ({isAssetAddressable(sendSymbol) ? getAssetTransferLabel(sendSymbol) : 'Email or Address'})</label>
+                <label className="text-[10px] font-bold text-gray-400 uppercase block mb-1">To (Email or Address)</label>
                 <div className="relative">
                   <Mail className="absolute left-3 top-3 h-4.5 w-4.5 text-gray-400" />
                   <input
                     type="text"
-                    placeholder={isAssetAddressable(sendSymbol) ? `Enter ${getAssetTransferLabel(sendSymbol).toLowerCase()} for ${sendSymbol}` : 'Enter email or address'}
+                    placeholder="Enter email or 0x address"
                     value={recipient}
                     onChange={(e) => setRecipient(e.target.value)}
                     className="w-full bg-gray-50 border border-gray-200 text-gray-800 text-xs sm:text-sm pl-10 pr-3 py-2.5 rounded-xl focus:outline-none focus:ring-1 focus:ring-[#0052FF]"
@@ -272,19 +299,42 @@ export default function SendReceiveModal({
           ) : (
             /* RECEIVE CRYPTO PANEL */
             <div className="space-y-4 flex flex-col items-center text-center">
-              <div>
-                <label className="text-[10px] font-bold text-gray-400 uppercase block mb-1">Select Asset to Receive</label>
+              <div className="w-full space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-[10px] font-bold text-gray-400 uppercase block">Select Asset to Receive</label>
+                  {(() => {
+                    const leg = getAssetLegitimacyInfo(receiveSymbol);
+                    return (
+                      <span className="text-[10px] bg-emerald-50 text-emerald-700 font-bold px-2 py-0.5 rounded border border-emerald-200/60 flex items-center gap-1">
+                        <ShieldCheck className="w-3 h-3 text-emerald-600" />
+                        {leg.legitimacyBadge}
+                      </span>
+                    );
+                  })()}
+                </div>
                 <select
                   value={receiveSymbol}
                   onChange={(e) => setReceiveSymbol(e.target.value)}
-                  className="bg-gray-50 border border-gray-200 text-gray-800 text-xs sm:text-sm font-semibold px-4 py-2 rounded-xl focus:outline-none cursor-pointer"
+                  className="w-full bg-gray-50 border border-gray-200 text-gray-800 text-xs sm:text-sm font-semibold px-4 py-2 rounded-xl focus:outline-none cursor-pointer"
                 >
-                  {assetOptions.map((asset) => (
-                    <option key={asset.symbol} value={asset.symbol}>
-                      {asset.name} ({asset.symbol})
-                    </option>
-                  ))}
+                  {coins.map((coin) => {
+                    const leg = getAssetLegitimacyInfo(coin.symbol);
+                    return (
+                      <option key={coin.symbol} value={coin.symbol}>
+                        {coin.name} ({coin.symbol}) • {leg.formattedAddress}
+                      </option>
+                    );
+                  })}
                 </select>
+                {(() => {
+                  const leg = getAssetLegitimacyInfo(receiveSymbol);
+                  return (
+                    <div className="p-2 bg-slate-900 text-slate-100 rounded-lg flex items-center justify-between text-[10px] font-mono text-left">
+                      <span className="truncate text-blue-300 font-bold mr-1">Token Contract: {leg.contractAddress}</span>
+                      <span className="text-slate-400 text-[9px] shrink-0 font-sans font-bold">{leg.verifierName}</span>
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* QR Code display */}

@@ -1,5 +1,20 @@
-import sqlite3 from 'sqlite3';
 import path from 'path';
+import sqlite3Mock from '../src/lib/sqlite3-mock';
+
+function loadSqlite(): any {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const nativeSqlite = require('sqlite3');
+    if (nativeSqlite?.Database) {
+      return nativeSqlite;
+    }
+  } catch (_e) {
+    // Native sqlite3 unavailable
+  }
+  return sqlite3Mock;
+}
+
+const sqlite3 = loadSqlite();
 
 const dbPath = path.resolve('sovereigns_interbank_vault.db');
 console.log('Opening database:', dbPath);

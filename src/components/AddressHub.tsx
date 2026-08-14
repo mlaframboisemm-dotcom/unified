@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { Coin, Holding } from '../types';
 import RecoveryKeyBackupWizard, { BackupWallet } from './RecoveryKeyBackupWizard';
+import BlockchainWalletComponent from './BlockchainWalletComponent';
 
 interface AddressHubProps {
   coins: Coin[];
@@ -311,6 +312,14 @@ export default function AddressHub({
             </p>
           </div>
         </div>
+
+        {/* Live On-Chain Blockchain Wallet Hub */}
+        <BlockchainWalletComponent
+          customAddress="0x742d35cc6634c0532925a3b844bc454e4438f44e"
+          onTransactionSuccess={(txHash) => {
+            showToast(`Transaction broadcast live to Ethereum mainnet: ${txHash.slice(0, 10)}...`, 'success');
+          }}
+        />
 
         {/* Search & Address List */}
         <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-xs space-y-4">

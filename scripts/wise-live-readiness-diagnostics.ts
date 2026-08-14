@@ -22,27 +22,12 @@ type QuotePayload = {
   payInMethod?: string;
 };
 
-const envPaths = [
-  path.join(process.cwd(), '.env'),
-  path.join(process.cwd(), '.env.local'),
-  path.join(process.cwd(), '.env.production'),
-  path.join(process.cwd(), '.env.production.local'),
-  path.join(process.cwd(), 'config', '.env.credentials')
-];
-
-for (const envPath of envPaths) {
-  if (fs.existsSync(envPath)) {
-    dotenv.config({ path: envPath, override: false });
-  }
+const credentialsPath = path.join(process.cwd(), 'config', '.env.credentials');
+if (fs.existsSync(credentialsPath)) {
+  dotenv.config({ path: credentialsPath, override: true });
 }
 
-const token = String(
-  process.env.WISE_API_TOKEN ||
-  process.env.WISE_ALL_ACCESS_KEY ||
-  process.env.WISE_PERSONAL_TOKEN ||
-  process.env.WISE_ACCESS_TOKEN ||
-  ''
-).trim();
+const token = String(process.env.WISE_API_TOKEN || '').trim();
 const baseUrl = String(process.env.WISE_BASE_URL || 'https://api.wise.com').trim().replace(/\/$/, '');
 
 function asJson(input: string): any {

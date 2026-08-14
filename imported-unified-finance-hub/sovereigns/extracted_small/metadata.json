@@ -1,6 +1,0 @@
-{
-  "name": "Sovereign Wealth Terminal",
-  "description": "A production-grade, self-custodial wallet and sovereign wealth platform with multi-chain blockchain connectivity, user authentication, and transaction tracking.",
-  "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}

@@ -51,7 +51,6 @@ export class StructuredLogger {
     // Optionally write to file for persistent logging
     if (this.logFile) {
       try {
-        fs.mkdirSync(path.dirname(this.logFile), { recursive: true });
         fs.appendFileSync(this.logFile, jsonLog + '\n', 'utf-8');
       } catch (err) {
         console.error('Failed to write to log file:', err);

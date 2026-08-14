@@ -11,8 +11,10 @@ import firebaseConfig from '../../firebase-applet-config.json';
 import { OperationType, FirestoreErrorInfo } from '../types';
 
 const app = initializeApp(firebaseConfig as any);
-const firestoreDatabaseId = (firebaseConfig as any).firestoreDatabaseId || 'ai-studio-31c6162a-cb5f-42da-870c-f6051482e980';
-export const db = getFirestore(app, firestoreDatabaseId); /* CRITICAL: The app will break without this line */
+const firestoreDatabaseId = (firebaseConfig as any).firestoreDatabaseId;
+export const db = firestoreDatabaseId
+  ? getFirestore(app, firestoreDatabaseId)
+  : getFirestore(app); /* CRITICAL: The app will break without this line */
 export const auth = getAuth();
 
 // Initialize Firebase App Check with reCAPTCHA v3 support
@@ -25,14 +27,18 @@ if (typeof window !== 'undefined') {
         provider: new ReCaptchaV3Provider(siteKey),
         isTokenAutoRefreshEnabled: true
       });
-      console.log('Firebase App Check initialized.');
+      if ((import.meta as any).env?.DEV) {
+        console.log('Firebase App Check initialized.');
+      }
     } else {
       if ((import.meta as any).env?.DEV) {
         console.log('Firebase App Check skipped: No valid VITE_RECAPTCHA_SITE_KEY provided.');
       }
     }
   } catch (err) {
-    console.warn('Firebase App Check failed to initialize gracefully:', err);
+    if ((import.meta as any).env?.DEV) {
+      console.warn('Firebase App Check failed to initialize gracefully:', err);
+    }
   }
 }
 
@@ -51,6 +57,8 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
       isAnonymous: auth.currentUser?.isAnonymous || null,
     }
   };
-  console.error('Firestore Error: ', JSON.stringify(errInfo, null, 2));
+  if ((import.meta as any).env?.DEV) {
+    console.error('Firestore Error: ', JSON.stringify(errInfo, null, 2));
+  }
   throw new Error(JSON.stringify(errInfo));
 }

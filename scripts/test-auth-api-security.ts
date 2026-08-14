@@ -127,6 +127,9 @@ async function main() {
     const loginBody = await loginRes.json();
     const cookie = parseCookie(loginRes.headers.get('set-cookie'));
 
+    if (loginRes.status !== 200) {
+      console.log('Login failed body:', loginBody);
+    }
     assert(loginRes.status === 200, `Expected login 200, got ${loginRes.status}`);
     assert(loginBody?.success === true, 'Expected login success body.');
     assert(Boolean(cookie), 'Expected cb_session cookie on login.');

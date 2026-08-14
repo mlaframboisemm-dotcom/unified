@@ -6,18 +6,9 @@ import crypto from 'crypto';
 import { db } from './src/db/ledger.js';
 import { generateSessionId, signSessionToken } from './src/lib/auth-security.js';
 
-const envPaths = [
-  path.join(process.cwd(), '.env'),
-  path.join(process.cwd(), '.env.local'),
-  path.join(process.cwd(), '.env.production'),
-  path.join(process.cwd(), '.env.production.local'),
-  path.join(process.cwd(), 'config', '.env.credentials')
-];
-
-for (const envPath of envPaths) {
-  if (fs.existsSync(envPath)) {
-    dotenv.config({ path: envPath, override: false });
-  }
+const credentialsPath = path.join(process.cwd(), 'config', '.env.credentials');
+if (fs.existsSync(credentialsPath)) {
+  dotenv.config({ path: credentialsPath, override: false });
 }
 
 const BASE_URL = process.env.BASE_URL || 'http://localhost:3000';
@@ -95,16 +86,10 @@ async function testWiseOutboundE2E() {
     console.log('  ✓ Status: pending\n');
 
     console.log('🔐 Step 3: Generating authentication session...');
-    const sessionId = generateSessionId();
+    generateSessionId();
     const authSecret =
       process.env.JWT_SECRET || process.env.SESSION_SECRET || 'local-dev-secret-please-change';
-    const sessionToken = signSessionToken({
-      sub: testUserId,
-      email: testEmail,
-      sid: sessionId,
-      mfa: true,
-      name: `Outbound Test User ${uniqueSuffix}`
-    }, authSecret);
+    const sessionToken = signSessionToken({ sub: testUserId } as any, authSecret);
     console.log('  ✓ Session created');
     console.log('  ✓ Token type: Bearer\n');
 
@@ -142,15 +127,6 @@ async function testWiseOutboundE2E() {
     const outboundData = (await outboundRes.json()) as OutboundResponse;
     console.log(`  Response Status: ${outboundRes.status}`);
     console.log('  Response:', JSON.stringify(outboundData, null, 2));
-
-    if (outboundRes.status === 422 && String(outboundData.error || '').toUpperCase() === 'OUTBOUND_FUNDING_UNAVAILABLE') {
-      console.log('  ✅ Outbound E2E auth and route handling verified (preflight mode).');
-      console.log('  ℹ️ Wise provider returned no enabled pay-in rail for current live profile.');
-      console.log('\n═══════════════════════════════════════════════════════════');
-      console.log('✅ OUTBOUND E2E PREFLIGHT COMPLETED');
-      console.log('═══════════════════════════════════════════════════════════');
-      return;
-    }
 
     if (outboundRes.status !== 202 || !outboundData.wiseTransferId) {
       throw new Error(`Unexpected outbound response status: ${outboundRes.status}`);

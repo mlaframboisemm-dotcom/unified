@@ -3,18 +3,9 @@ import dotenv from 'dotenv';
 import path from 'path';
 import fs from 'fs';
 
-const envPaths = [
-  path.join(process.cwd(), '.env'),
-  path.join(process.cwd(), '.env.local'),
-  path.join(process.cwd(), '.env.production'),
-  path.join(process.cwd(), '.env.production.local'),
-  path.join(process.cwd(), 'config', '.env.credentials')
-];
-
-for (const envPath of envPaths) {
-  if (fs.existsSync(envPath)) {
-    dotenv.config({ path: envPath, override: false });
-  }
+const credentialsPath = path.join(process.cwd(), 'config', '.env.credentials');
+if (fs.existsSync(credentialsPath)) {
+  dotenv.config({ path: credentialsPath, override: false });
 }
 
 const isSandbox = String(process.env.WISE_SANDBOX_MODE || 'false').toLowerCase() === 'true';

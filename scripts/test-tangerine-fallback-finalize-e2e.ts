@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import fetch from 'node-fetch';
 import { db } from '../src/db/ledger.js';
 
 function parseCookie(setCookieHeader: string | null): string {
@@ -10,18 +11,6 @@ async function run() {
   process.env.NODE_ENV = 'production';
   process.env.PORT = '4021';
   process.env.BYPASS_EMAIL_VERIFICATION = 'true';
-  if (!process.env.SOVEREIGN_ENCRYPTION_KEY) {
-    process.env.SOVEREIGN_ENCRYPTION_KEY = 'abcdefghijklmnopqrstuvwxyzABCDEF';
-  }
-  if (!process.env.JWT_SECRET) {
-    process.env.JWT_SECRET = 'abcdefghijklmnopqrstuvwxyzABCDEF';
-  }
-  if (!process.env.SESSION_SECRET) {
-    process.env.SESSION_SECRET = process.env.JWT_SECRET;
-  }
-  if (!process.env.SOVEREIGN_ADMIN_EMAILS) {
-    process.env.SOVEREIGN_ADMIN_EMAILS = 'admin@secure.local';
-  }
   process.env.STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY || 'sk_test_fallback_proof';
 
   const nativeFetch = globalThis.fetch.bind(globalThis);
@@ -47,21 +36,7 @@ async function run() {
   };
 
   await import('../server.ts');
-  
-  console.log('Waiting for server to start...');
-  let retries = 30;
-  while (retries > 0) {
-    try {
-      await fetch('http://localhost:4021/api/auth/register', { method: 'POST' });
-      break;
-    } catch (e) {
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-      retries--;
-    }
-  }
-  if (retries === 0) {
-    throw new Error('Server did not start within 30 seconds.');
-  }
+  await new Promise((resolve) => setTimeout(resolve, 4500));
 
   const email = `tg-proof-${Date.now()}@example.com`;
   const password = 'CorrectHorseBatteryStaple!42';

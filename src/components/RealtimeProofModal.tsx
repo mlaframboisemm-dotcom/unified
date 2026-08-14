@@ -24,7 +24,6 @@ import {
   ShieldAlert
 } from 'lucide-react';
 import { ethers } from 'ethers';
-import { getPrimaryWalletAddress, getLiveWalletSnapshot } from '../lib/live-wallet-config';
 
 interface RealtimeProofModalProps {
   isOpen: boolean;
@@ -64,8 +63,7 @@ export const RealtimeProofModal: React.FC<RealtimeProofModalProps> = ({
     latencyMs: 14
   });
 
-  const primaryAddress = getPrimaryWalletAddress();
-  const liveSnapshot = getLiveWalletSnapshot();
+  const primaryAddress = '0x58B178F7EEe92fe888c0A1684D5FE6b78C0Ff99f';
   const defaultChallengeText = `I, ${userName || 'Marcel Laframboise'} (${userEmail || 'mlaframboisemm@gmail.com'}), certify sole control of address ${primaryAddress} with total asset valuation of $${netWorth.toLocaleString()} USD on ${new Date().toLocaleDateString()}`;
 
   const [challengeText, setChallengeText] = useState(defaultChallengeText);
@@ -214,8 +212,6 @@ export const RealtimeProofModal: React.FC<RealtimeProofModalProps> = ({
         primaryAddress,
         netWorthUSD: netWorth,
         liquidCashUSD: liveCashBalance,
-        ledgerBalanceUSD: liveSnapshot.ledgerBalance,
-        source: liveSnapshot.source,
         wiseProfileId: '10248812',
         challengeMessage: challengeText,
         keccak256Hash: signatureResult.hash,

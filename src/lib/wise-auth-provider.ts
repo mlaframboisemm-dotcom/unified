@@ -4,7 +4,6 @@ import { getWiseApiToken, getWiseClientId, getWiseClientSecret } from './wise-en
 const logger = createStructuredLogger('wise-auth-provider');
 
 export type WiseAuthMode = 'personal_token' | 'oauth_client_credentials';
-type WiseAuthModePreference = 'auto' | 'personal_token' | 'oauth_client_credentials';
 
 export interface WiseAuthHealthSnapshot {
   mode: WiseAuthMode;
@@ -68,27 +67,10 @@ export class WiseAuthProvider {
     this.oauthTokenUrl = String(process.env.WISE_OAUTH_TOKEN_URL || `${defaultBase}/oauth/token`).trim();
 
     const hasOauthClientCreds = Boolean(this.oauthClientId && this.oauthClientSecret);
-    const modePrefRaw = String(process.env.WISE_AUTH_MODE || 'auto').trim().toLowerCase();
-    const modePref: WiseAuthModePreference = modePrefRaw === 'oauth' || modePrefRaw === 'oauth_client_credentials'
-      ? 'oauth_client_credentials'
-      : modePrefRaw === 'token' || modePrefRaw === 'personal_token'
-        ? 'personal_token'
-        : 'auto';
-
-    if (modePref === 'personal_token') {
-      this.mode = 'personal_token';
-    } else if (modePref === 'oauth_client_credentials') {
-      this.mode = 'oauth_client_credentials';
-    } else {
-      // Auto mode prefers personal token because it is often pre-scoped for transfer APIs.
-      this.mode = this.personalToken ? 'personal_token' : 'oauth_client_credentials';
-    }
+    this.mode = hasOauthClientCreds ? 'oauth_client_credentials' : 'personal_token';
 
     if (this.mode === 'personal_token' && !this.personalToken) {
       throw new Error('Wise auth is not configured. Provide WISE_API_TOKEN or WISE_CLIENT_ID/WISE_CLIENT_SECRET.');
-    }
-    if (this.mode === 'oauth_client_credentials' && !hasOauthClientCreds) {
-      throw new Error('Wise OAuth auth mode requested but WISE_CLIENT_ID/WISE_CLIENT_SECRET are missing.');
     }
 
     this.cachedToken = '';
@@ -97,7 +79,6 @@ export class WiseAuthProvider {
 
     logger.info('Wise auth provider initialized', {
       mode: this.mode,
-      modePreference: modePref,
       tokenShape: tokenShape(this.personalToken)
     });
   }
