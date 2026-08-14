@@ -78,5 +78,13 @@
     "createdAt": "2026-07-28T19:54:16.393Z",
     "expiresAt": 1785354856392,
     "verifiedAt": "2026-07-28T19:54:16.394Z"
+  },
+  "tg-redirect-1786711474529@example.com": {
+    "userId": "user_7eff6909-666f-4511-97a2-6e12cee4638e",
+    "email": "tg-redirect-1786711474529@example.com",
+    "tokenHash": "f00aa67af320eb399dd1e2e3d1610b59b6d51035f53c032abf1bccabd2ee3e97",
+    "createdAt": "2026-08-14T12:44:34.646Z",
+    "expiresAt": 1786797874646,
+    "verifiedAt": "2026-08-14T12:44:34.647Z"
   }
 }
