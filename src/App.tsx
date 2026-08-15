@@ -11,6 +11,7 @@ import Header from './components/Header';
 import SovereignIntelligenceView from './components/SovereignIntelligenceView';
 import { hashPin, encryptData, decryptData } from './lib/crypto';
 import TradeWidget from './components/TradeWidget';
+import SmartRebalanceWidget from './components/SmartRebalanceWidget';
 import AssetDetailModal from './components/AssetDetailModal';
 import EarnRewards from './components/EarnRewards';
 import CoinbaseCard from './components/CoinbaseCard';
@@ -2302,6 +2303,16 @@ export default function App() {
                   </table>
                 </div>
               </div>
+
+              {/* Smart Rebalance Module */}
+              <ErrorBoundary name="SmartRebalanceWidget">
+                <SmartRebalanceWidget
+                  coins={coins}
+                  holdings={holdings}
+                  usdBalance={liveCashBalance}
+                  onExecuteTrade={handleExecuteTrade}
+                />
+              </ErrorBoundary>
 
               {/* Learning Reward Banner preview */}
               <div className="bg-gradient-to-r from-amber-400 via-yellow-500 to-amber-500 rounded-2xl p-5 text-gray-900 flex flex-col sm:flex-row items-center justify-between shadow-xs gap-4 border border-yellow-300">
