@@ -29,7 +29,11 @@ import {
   EyeOff,
   Link,
   CheckCircle2,
-  Download
+  Download,
+  Globe,
+  Fuel,
+  CheckCircle,
+  FileCheck
 } from 'lucide-react';
 
 interface TokenBalance {
@@ -44,6 +48,68 @@ interface TokenBalance {
   icon?: string;
   isDiscovered?: boolean;
 }
+
+export interface NetworkConfig {
+  id: string;
+  name: string;
+  chainId: number;
+  rpcUrl: string;
+  symbol: string;
+  explorerUrl: string;
+  isTestnet?: boolean;
+}
+
+const SUPPORTED_NETWORKS: NetworkConfig[] = [
+  {
+    id: 'ethereum',
+    name: 'Ethereum Mainnet',
+    chainId: 1,
+    rpcUrl: 'https://ethereum-rpc.publicnode.com',
+    symbol: 'ETH',
+    explorerUrl: 'https://etherscan.io'
+  },
+  {
+    id: 'polygon',
+    name: 'Polygon PoS',
+    chainId: 137,
+    rpcUrl: 'https://polygon-bor-rpc.publicnode.com',
+    symbol: 'POL',
+    explorerUrl: 'https://polygonscan.com'
+  },
+  {
+    id: 'arbitrum',
+    name: 'Arbitrum One',
+    chainId: 42161,
+    rpcUrl: 'https://arbitrum-one-rpc.publicnode.com',
+    symbol: 'ETH',
+    explorerUrl: 'https://arbiscan.io'
+  },
+  {
+    id: 'optimism',
+    name: 'Optimism Mainnet',
+    chainId: 10,
+    rpcUrl: 'https://optimism-rpc.publicnode.com',
+    symbol: 'ETH',
+    explorerUrl: 'https://optimistic.etherscan.io'
+  },
+  {
+    id: 'base',
+    name: 'Base Mainnet',
+    chainId: 8453,
+    rpcUrl: 'https://mainnet.base.org',
+    symbol: 'ETH',
+    explorerUrl: 'https://basescan.org'
+  },
+  {
+    id: 'sepolia',
+    name: 'Sepolia Testnet',
+    chainId: 11155111,
+    rpcUrl: 'https://ethereum-sepolia-rpc.publicnode.com',
+    symbol: 'ETH',
+    explorerUrl: 'https://sepolia.etherscan.io',
+    isTestnet: true
+  }
+];
 
 const COMMON_ERC20_TOKENS = [
   { symbol: 'USDC', name: 'USD Coin', address: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', decimals: 6, estimatedPrice: 1.0 },
@@ -135,6 +201,9 @@ export default function BlockchainWalletComponent({
   onTransactionSuccess,
   className = ''
 }: BlockchainWalletComponentProps) {
+  // Active Network State
+  const [selectedNetwork, setSelectedNetwork] = useState<NetworkConfig>(SUPPORTED_NETWORKS[0]);
+
   // Configured Wallet Address
   const defaultAddress =
     customAddress ||
@@ -142,9 +211,7 @@ export default function BlockchainWalletComponent({
     '0x742d35cc6634c0532925a3b844bc454e4438f44e';
 
   const [walletAddress, setWalletAddress] = useState<string>(defaultAddress);
-  const [activeRpc, setActiveRpc] = useState<string>(
-    (import.meta as any).env?.VITE_RPC_ETHEREUM || rpcUrl
-  );
+  const [activeRpc, setActiveRpc] = useState<string>(selectedNetwork.rpcUrl);
 
   // Private Key state (for direct client-side signing option)
   const [clientPrivateKey, setClientPrivateKey] = useState<string>(() => {
@@ -186,7 +253,6 @@ export default function BlockchainWalletComponent({
   // Status & Network State
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [lastRefreshedAt, setLastRefreshedAt] = useState<string>('');
-  const [networkName, setNetworkName] = useState<string>('Ethereum Mainnet');
   const [gasPriceGwei, setGasPriceGwei] = useState<string>('12');
   const [blockNumber, setBlockNumber] = useState<number | null>(null);
   const [rpcError, setRpcError] = useState<string | null>(null);
@@ -201,6 +267,9 @@ export default function BlockchainWalletComponent({
   const [isSending, setIsSending] = useState<boolean>(false);
   const [txSuccessHash, setTxSuccessHash] = useState<string | null>(null);
   const [txError, setTxError] = useState<string | null>(null);
+
+  // Gas Estimation state
+  const [estimatedGasFeeUsd, setEstimatedGasFeeUsd] = useState<string>('0.85');
 
   // Swap / Trade / Sell States
   const [swapFromToken, setSwapFromToken] = useState<string>('ETH');
@@ -220,6 +289,12 @@ export default function BlockchainWalletComponent({
     if (existing && existing.unitPriceUsd > 0) return existing.unitPriceUsd;
     return resolveTokenPrice(symbol);
   }, [ethPriceUsd, tokenBalances]);
+
+  // Network Switch Handler
+  const handleSwitchNetwork = (network: NetworkConfig) => {
+    setSelectedNetwork(network);
+    setActiveRpc(network.rpcUrl);
+  };
 
   // Connect Injected Web3 Wallet (MetaMask, Coinbase Wallet, etc.)
   const handleConnectBrowserWallet = async () => {
@@ -260,7 +335,7 @@ export default function BlockchainWalletComponent({
       // Setup backup wizard
       setBackupWalletData({
         id: `wallet_${Date.now()}`,
-        coinSymbol: 'ETH',
+        coinSymbol: selectedNetwork.symbol,
         address: randomWallet.address,
         label: 'Generated Web3 Self-Custody Account',
         privateKey: randomWallet.privateKey,
@@ -301,7 +376,7 @@ export default function BlockchainWalletComponent({
 
     try {
       // 1. Initialize JsonRpcProvider
-      const provider = new ethers.JsonRpcProvider(activeRpc, 1, { staticNetwork: true });
+      const provider = new ethers.JsonRpcProvider(activeRpc, undefined, { staticNetwork: true });
 
       // Fetch Block Number & Network
       const currentBlock = await provider.getBlockNumber().catch(() => null);
@@ -309,10 +384,15 @@ export default function BlockchainWalletComponent({
 
       const feeData = await provider.getFeeData().catch(() => null);
       if (feeData && feeData.gasPrice) {
-        setGasPriceGwei((Number(feeData.gasPrice) / 1e9).toFixed(1));
+        const gwei = (Number(feeData.gasPrice) / 1e9).toFixed(1);
+        setGasPriceGwei(gwei);
+        // Estimate gas cost for 21000 standard transfer
+        const estEthCost = (21000 * Number(feeData.gasPrice)) / 1e18;
+        const estUsd = (estEthCost * ethPriceUsd).toFixed(2);
+        setEstimatedGasFeeUsd(estUsd);
       }
 
-      // Fetch Native ETH Balance
+      // Fetch Native Token Balance
       const rawEth = await provider.getBalance(walletAddress).catch(() => BigInt(0));
       const formattedEth = parseFloat(ethers.formatEther(rawEth)).toFixed(4);
       setEthBalance(formattedEth);
@@ -374,50 +454,52 @@ export default function BlockchainWalletComponent({
       );
 
       // 3. Query Public Indexers (Ethplorer / Blockscout) for automated token discovery
-      try {
-        const ethplorerRes = await fetch(
-          `https://api.ethplorer.io/getAddressInfo/${walletAddress}?apiKey=freekey`
-        );
-        if (ethplorerRes.ok) {
-          const ethplorerData = await ethplorerRes.json();
-          if (ethplorerData.tokens && Array.isArray(ethplorerData.tokens)) {
-            let newlyDiscovered = 0;
-            ethplorerData.tokens.forEach((t: any) => {
-              const sym = t.tokenInfo?.symbol || 'ERC20';
-              const name = t.tokenInfo?.name || sym;
-              const addr = t.tokenInfo?.address;
-              const dec = parseInt(t.tokenInfo?.decimals || '18', 10);
-              const rawBal = t.rawBalance || '0';
-              const price = t.tokenInfo?.price?.rate || resolveTokenPrice(sym);
+      if (selectedNetwork.chainId === 1) {
+        try {
+          const ethplorerRes = await fetch(
+            `https://api.ethplorer.io/getAddressInfo/${walletAddress}?apiKey=freekey`
+          );
+          if (ethplorerRes.ok) {
+            const ethplorerData = await ethplorerRes.json();
+            if (ethplorerData.tokens && Array.isArray(ethplorerData.tokens)) {
+              let newlyDiscovered = 0;
+              ethplorerData.tokens.forEach((t: any) => {
+                const sym = t.tokenInfo?.symbol || 'ERC20';
+                const name = t.tokenInfo?.name || sym;
+                const addr = t.tokenInfo?.address;
+                const dec = parseInt(t.tokenInfo?.decimals || '18', 10);
+                const rawBal = t.rawBalance || '0';
+                const price = t.tokenInfo?.price?.rate || resolveTokenPrice(sym);
 
-              const exists = scannedBalances.some(
-                (b) => b.contractAddress?.toLowerCase() === addr?.toLowerCase()
-              );
+                const exists = scannedBalances.some(
+                  (b) => b.contractAddress?.toLowerCase() === addr?.toLowerCase()
+                );
 
-              if (!exists && addr && BigInt(rawBal || 0) > BigInt(0)) {
-                const formatted = ethers.formatUnits(rawBal, dec);
-                const fiat = parseFloat(formatted) * price;
-                scannedBalances.push({
-                  symbol: sym,
-                  name,
-                  contractAddress: addr,
-                  balance: rawBal,
-                  balanceFormatted: parseFloat(formatted).toLocaleString('en-US', {
-                    maximumFractionDigits: 4
-                  }),
-                  unitPriceUsd: price,
-                  fiatValueUsd: fiat,
-                  decimals: dec,
-                  isDiscovered: true
-                });
-                newlyDiscovered++;
-              }
-            });
-            if (newlyDiscovered > 0) setDiscoveredCount(newlyDiscovered);
+                if (!exists && addr && BigInt(rawBal || 0) > BigInt(0)) {
+                  const formatted = ethers.formatUnits(rawBal, dec);
+                  const fiat = parseFloat(formatted) * price;
+                  scannedBalances.push({
+                    symbol: sym,
+                    name,
+                    contractAddress: addr,
+                    balance: rawBal,
+                    balanceFormatted: parseFloat(formatted).toLocaleString('en-US', {
+                      maximumFractionDigits: 4
+                    }),
+                    unitPriceUsd: price,
+                    fiatValueUsd: fiat,
+                    decimals: dec,
+                    isDiscovered: true
+                  });
+                  newlyDiscovered++;
+                }
+              });
+              if (newlyDiscovered > 0) setDiscoveredCount(newlyDiscovered);
+            }
           }
+        } catch (err) {
+          console.warn('[BlockchainWalletComponent] Ethplorer indexer warning:', err);
         }
-      } catch (err) {
-        console.warn('[BlockchainWalletComponent] Ethplorer indexer warning:', err);
       }
 
       // Add zero-balance placeholders for common tokens if not already found
@@ -448,13 +530,13 @@ export default function BlockchainWalletComponent({
       setLastRefreshedAt(new Date().toLocaleTimeString());
     } catch (err: any) {
       console.warn('[BlockchainWalletComponent] RPC Error:', err.message);
-      setRpcError('RPC Network Query Error: Using cached on-chain state');
+      setRpcError(`RPC Network Query Error (${selectedNetwork.name}): Using cached on-chain state`);
     } finally {
       setIsRefreshing(false);
     }
-  }, [walletAddress, activeRpc, userImportedTokens]);
+  }, [walletAddress, activeRpc, userImportedTokens, selectedNetwork, ethPriceUsd]);
 
-  // Initial Load
+  // Initial Load & Network change reload
   useEffect(() => {
     fetchBlockchainBalances();
   }, [fetchBlockchainBalances]);
@@ -473,7 +555,7 @@ export default function BlockchainWalletComponent({
 
     setIsImportingToken(true);
     try {
-      const provider = new ethers.JsonRpcProvider(activeRpc, 1, { staticNetwork: true });
+      const provider = new ethers.JsonRpcProvider(activeRpc, undefined, { staticNetwork: true });
       const contract = new ethers.Contract(addr, ERC20_ABI, provider);
 
       const [symbol, name, decimals] = await Promise.all([
@@ -589,7 +671,7 @@ export default function BlockchainWalletComponent({
       }
       // Option B: Client-Side Direct Signing via Private Key in ethers.Wallet
       else if (clientPrivateKey && clientPrivateKey.trim().startsWith('0x')) {
-        const provider = new ethers.JsonRpcProvider(activeRpc, 1, { staticNetwork: true });
+        const provider = new ethers.JsonRpcProvider(activeRpc, undefined, { staticNetwork: true });
         const wallet = new ethers.Wallet(clientPrivateKey.trim(), provider);
 
         if (selectedToken === 'ETH') {
@@ -710,7 +792,7 @@ export default function BlockchainWalletComponent({
 
       // 1. Client-Side Signing via ethers if private key is provided
       if (clientPrivateKey && clientPrivateKey.trim().startsWith('0x')) {
-        const provider = new ethers.JsonRpcProvider(activeRpc, 1, { staticNetwork: true });
+        const provider = new ethers.JsonRpcProvider(activeRpc, undefined, { staticNetwork: true });
         const wallet = new ethers.Wallet(clientPrivateKey.trim(), provider);
 
         if (swapFromToken === 'ETH') {
@@ -833,12 +915,30 @@ export default function BlockchainWalletComponent({
               </span>
             </div>
             <p className="text-xs text-slate-400">
-              {networkName} • Block #{blockNumber ? blockNumber.toLocaleString() : '...'} • Gas: {gasPriceGwei} Gwei
+              {selectedNetwork.name} (Chain #{selectedNetwork.chainId}) • Block #{blockNumber ? blockNumber.toLocaleString() : '...'} • Gas: {gasPriceGwei} Gwei
             </p>
           </div>
         </div>
 
         <div className="flex items-center gap-2 flex-wrap self-start sm:self-auto">
+          {/* Multi-Chain Network Selector */}
+          <div className="relative">
+            <select
+              value={selectedNetwork.id}
+              onChange={(e) => {
+                const found = SUPPORTED_NETWORKS.find((n) => n.id === e.target.value);
+                if (found) handleSwitchNetwork(found);
+              }}
+              className="bg-slate-950 border border-slate-800 text-xs font-semibold text-slate-200 rounded-xl px-3 py-1.5 focus:ring-2 focus:ring-blue-500 focus:outline-hidden cursor-pointer"
+            >
+              {SUPPORTED_NETWORKS.map((net) => (
+                <option key={net.id} value={net.id}>
+                  {net.name} {net.isTestnet ? '(Testnet)' : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+
           {/* Connect Browser Wallet Button */}
           <button
             type="button"
@@ -869,15 +969,15 @@ export default function BlockchainWalletComponent({
             <span>{isRefreshing ? 'Scanning...' : 'Sync Balances'}</span>
           </button>
 
-          {/* Etherscan */}
+          {/* Explorer Link */}
           <a
-            href={`https://etherscan.io/address/${walletAddress}`}
+            href={`${selectedNetwork.explorerUrl}/address/${walletAddress}`}
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium rounded-xl transition border border-slate-700"
           >
             <ExternalLink className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">Etherscan</span>
+            <span className="hidden sm:inline">Explorer</span>
           </a>
         </div>
       </div>
@@ -905,7 +1005,7 @@ export default function BlockchainWalletComponent({
 
           <div className="flex flex-col md:items-end justify-center">
             <span className="text-xs font-medium text-slate-400 uppercase tracking-wider block mb-1">
-              Combined On-Chain Balance
+              Combined On-Chain Balance ({selectedNetwork.name})
             </span>
             <div className="text-2xl font-black text-white tracking-tight">
               ${totalPortfolioUsd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -1085,12 +1185,12 @@ export default function BlockchainWalletComponent({
                 Ξ
               </div>
               <div>
-                <div className="font-bold text-white text-sm">Ethereum</div>
+                <div className="font-bold text-white text-sm">{selectedNetwork.name} ({selectedNetwork.symbol})</div>
                 <div className="text-xs text-slate-400 flex items-center gap-1.5">
-                  <span className="font-semibold text-slate-300">ETH</span>
+                  <span className="font-semibold text-slate-300">{selectedNetwork.symbol}</span>
                   <span>•</span>
                   <span className="text-blue-400 font-mono">
-                    ${ethPriceUsd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} / ETH
+                    ${ethPriceUsd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} / {selectedNetwork.symbol}
                   </span>
                 </div>
               </div>
@@ -1098,7 +1198,7 @@ export default function BlockchainWalletComponent({
 
             <div className="flex items-center justify-between sm:justify-end gap-4">
               <div className="text-right">
-                <div className="font-mono font-bold text-white text-sm">{ethBalance} ETH</div>
+                <div className="font-mono font-bold text-white text-sm">{ethBalance} {selectedNetwork.symbol}</div>
                 <div className="text-xs text-emerald-400 font-semibold">
                   ${ethUsdValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD
                 </div>
@@ -1244,7 +1344,7 @@ export default function BlockchainWalletComponent({
                         <>
                           <span>•</span>
                           <a
-                            href={`https://etherscan.io/token/${token.contractAddress}`}
+                            href={`${selectedNetwork.explorerUrl}/token/${token.contractAddress}`}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="text-blue-400 hover:underline flex items-center gap-0.5"
@@ -1511,6 +1611,17 @@ export default function BlockchainWalletComponent({
             </div>
           </div>
 
+          {/* Gas Fee & Security Estimate Bar */}
+          <div className="p-3 bg-slate-950/70 border border-slate-800 rounded-xl flex items-center justify-between text-xs">
+            <div className="flex items-center gap-1.5 text-slate-400">
+              <Fuel className="h-4 w-4 text-amber-400" />
+              <span>Estimated Network Gas ({gasPriceGwei} Gwei):</span>
+            </div>
+            <span className="font-mono font-bold text-amber-300">
+              ≈ ${estimatedGasFeeUsd} USD
+            </span>
+          </div>
+
           {txError && (
             <div className="p-3 bg-rose-950/50 border border-rose-800/80 rounded-xl text-xs text-rose-300 flex items-center gap-2">
               <AlertCircle className="h-4 w-4 shrink-0" />
@@ -1528,12 +1639,12 @@ export default function BlockchainWalletComponent({
                 Tx Hash: {txSuccessHash}
               </div>
               <a
-                href={`https://etherscan.io/tx/${txSuccessHash}`}
+                href={`${selectedNetwork.explorerUrl}/tx/${txSuccessHash}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-[11px] text-emerald-400 underline flex items-center gap-1"
               >
-                <span>View on Etherscan</span>
+                <span>View on Block Explorer</span>
                 <ExternalLink className="h-3 w-3" />
               </a>
             </div>
@@ -1567,7 +1678,7 @@ export default function BlockchainWalletComponent({
           </div>
           <div>
             <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider block">
-              Send ETH & ERC-20 Tokens to
+              Send {selectedNetwork.symbol} & ERC-20 Tokens ({selectedNetwork.name}) to
             </span>
             <div className="font-mono text-xs text-blue-300 bg-slate-950 p-2.5 rounded-xl border border-slate-800 mt-1 select-all break-all">
               {walletAddress}
