@@ -23,7 +23,7 @@
       "kycPostalCode": "l1h4s7",
       "kycTaxId": "0512",
       "kycPhone": "9057184275",
-      "kycVerifiedAt": "2026-08-16T15:48:41.726Z"
+      "kycVerifiedAt": "2026-08-16T16:43:06.925Z"
     },
     {
       "id": "user_90a7ae34-d169-4a60-8c0b-a0feffd61d5f",
@@ -49,6 +49,47 @@
       "kycTaxId": "",
       "kycPhone": "",
       "kycVerifiedAt": ""
+    },
+    {
+      "id": "user_652ab08a-23d2-41a1-8639-b672b9b972d9",
+      "name": "Tangerine Redirect",
+      "email": "tg-redirect-1786898585918@example.com",
+      "passwordHash": "53b0de5c5e1ba136cd5be5054a114eb20117170b7803d0b6ea06b3a968da72ed1bf709019f993d87370eaf14dec4f2c26b1503380130fbb1269910ad95f78d09",
+      "salt": "6283f13d378292a074fea01d5c99f9e1",
+      "twoFactorSecret": "T2IGWC3BC6IBIXAZA76AJ366",
+      "twoFactorEnabled": false,
+      "kycLevel": 1,
+      "citizenship": "CA",
+      "identityLocked": true,
+      "productionMode": "live",
+      "blockchainLinked": true,
+      "lockedToEmail": "tg-redirect-1786898585918@example.com",
+      "lockedAt": "2026-08-16T16:43:06.025Z",
+      "kycFullName": "",
+      "kycAddress": "",
+      "kycCity": "",
+      "kycState": "",
+      "kycProvince": "",
+      "kycPostalCode": "",
+      "kycTaxId": "",
+      "kycPhone": "",
+      "kycVerifiedAt": ""
+    },
+    {
+      "id": "user_899cd02c-a6ca-4d3c-a314-145f74734d3b",
+      "name": "Fallback Proof",
+      "email": "tg-proof-1786898592450@example.com",
+      "passwordHash": "72be133cc25db58798f4d13810672a4d413afc37fa421f104ee04e0265427d5c5e757156796c1d7fdec2eab4c5663e7b56aa0a3a4bb40c95f0ae690fbdb96a79",
+      "salt": "5166b419d616fbc836b1d67d2cd3c190",
+      "twoFactorSecret": "QXRU36RMWBAUC7EZJ3XNCRE4",
+      "twoFactorEnabled": false,
+      "kycLevel": 1,
+      "citizenship": "CA",
+      "identityLocked": true,
+      "productionMode": "live",
+      "blockchainLinked": true,
+      "lockedToEmail": "tg-proof-1786898592450@example.com",
+      "lockedAt": "2026-08-16T16:43:12.553Z"
     }
   ],
   "wallets": [
@@ -103,6 +144,32 @@
       "blockchainLinked": true,
       "lockedToEmail": "tx-test-1786318992021@test.local",
       "lockedAt": "2026-08-09T23:43:12.124Z"
+    },
+    {
+      "id": "wallet-user_652ab08a-23d2-41a1-8639-b672b9b972d9-usd",
+      "userId": "user_652ab08a-23d2-41a1-8639-b672b9b972d9",
+      "assetSymbol": "USD",
+      "balance": 0,
+      "publicAddressEthereum": "",
+      "publicAddressBitcoin": "",
+      "identityLocked": true,
+      "productionMode": "live",
+      "blockchainLinked": true,
+      "lockedToEmail": "tg-redirect-1786898585918@example.com",
+      "lockedAt": "2026-08-16T16:43:06.030Z"
+    },
+    {
+      "id": "wallet-user_899cd02c-a6ca-4d3c-a314-145f74734d3b-usd",
+      "userId": "user_899cd02c-a6ca-4d3c-a314-145f74734d3b",
+      "assetSymbol": "USD",
+      "balance": 491.84,
+      "publicAddressEthereum": "",
+      "publicAddressBitcoin": "",
+      "identityLocked": true,
+      "productionMode": "live",
+      "blockchainLinked": true,
+      "lockedToEmail": "tg-proof-1786898592450@example.com",
+      "lockedAt": "2026-08-16T16:43:12.558Z"
     }
   ],
   "transactions": [
@@ -5375,6 +5442,402 @@
       "ipAddress": "127.0.0.1",
       "status": "success",
       "details": "Reconciliation audit succeeded. All queried Stripe transactions match internal database records perfectly."
+    },
+    {
+      "id": "audit_6a209c2e-7ba3-474f-905c-7358965f2df6",
+      "userId": "system",
+      "action": "RECONCILIATION_AUDIT_SUCCESS",
+      "timestamp": 1786895811440,
+      "ipAddress": "127.0.0.1",
+      "status": "success",
+      "details": "Reconciliation audit succeeded. All queried Stripe transactions match internal database records perfectly."
+    },
+    {
+      "id": "audit_ff808aab-2217-4fdd-9a33-0d42b992d02b",
+      "userId": "system",
+      "action": "RECONCILIATION_AUDIT_SUCCESS",
+      "timestamp": 1786895836242,
+      "ipAddress": "127.0.0.1",
+      "status": "success",
+      "details": "Reconciliation audit succeeded. All queried Stripe transactions match internal database records perfectly."
+    },
+    {
+      "id": "audit_0b706874-3db1-4f2e-b6b5-7a15769dc190",
+      "userId": "system",
+      "action": "RECONCILIATION_AUDIT_SUCCESS",
+      "timestamp": 1786895841851,
+      "ipAddress": "127.0.0.1",
+      "status": "success",
+      "details": "Reconciliation audit succeeded. All queried Stripe transactions match internal database records perfectly."
+    },
+    {
+      "id": "audit_6cc50bd4-9f97-4064-86d4-a8e675cf489c",
+      "userId": "system",
+      "action": "RECONCILIATION_AUDIT_SUCCESS",
+      "timestamp": 1786895842299,
+      "ipAddress": "127.0.0.1",
+      "status": "success",
+      "details": "Reconciliation audit succeeded. All queried Stripe transactions match internal database records perfectly."
+    },
+    {
+      "id": "audit_fca1d527-c2b0-44a2-bff0-50f89034c740",
+      "userId": "system",
+      "action": "RECONCILIATION_AUDIT_SUCCESS",
+      "timestamp": 1786895842452,
+      "ipAddress": "127.0.0.1",
+      "status": "success",
+      "details": "Reconciliation audit succeeded. All queried Stripe transactions match internal database records perfectly."
+    },
+    {
+      "id": "audit_ad6514a3-9099-463b-a409-bd8f77d9e104",
+      "userId": "system",
+      "action": "RECONCILIATION_AUDIT_SUCCESS",
+      "timestamp": 1786895842876,
+      "ipAddress": "127.0.0.1",
+      "status": "success",
+      "details": "Reconciliation audit succeeded. All queried Stripe transactions match internal database records perfectly."
+    },
+    {
+      "id": "audit_256fd14a-5be5-4db9-a420-56366c4a484c",
+      "userId": "system",
+      "action": "RECONCILIATION_AUDIT_SUCCESS",
+      "timestamp": 1786895843436,
+      "ipAddress": "127.0.0.1",
+      "status": "success",
+      "details": "Reconciliation audit succeeded. All queried Stripe transactions match internal database records perfectly."
+    },
+    {
+      "id": "audit_8208c37d-1c16-46e1-b964-3872b349483b",
+      "userId": "system",
+      "action": "RECONCILIATION_AUDIT_SUCCESS",
+      "timestamp": 1786895867373,
+      "ipAddress": "127.0.0.1",
+      "status": "success",
+      "details": "Reconciliation audit succeeded. All queried Stripe transactions match internal database records perfectly."
+    },
+    {
+      "id": "audit_c8989a09-d8e0-4f10-8276-577272748eae",
+      "userId": "system",
+      "action": "RECONCILIATION_AUDIT_SUCCESS",
+      "timestamp": 1786895892214,
+      "ipAddress": "127.0.0.1",
+      "status": "success",
+      "details": "Reconciliation audit succeeded. All queried Stripe transactions match internal database records perfectly."
+    },
+    {
+      "id": "audit_74646cb8-f8da-4945-8fb1-bb64947f7278",
+      "userId": "system",
+      "action": "RECONCILIATION_AUDIT_SUCCESS",
+      "timestamp": 1786895917338,
+      "ipAddress": "127.0.0.1",
+      "status": "success",
+      "details": "Reconciliation audit succeeded. All queried Stripe transactions match internal database records perfectly."
+    },
+    {
+      "id": "audit_3020cdb9-a332-48c8-b8ff-808c9ec26f2d",
+      "userId": "system",
+      "action": "RECONCILIATION_AUDIT_SUCCESS",
+      "timestamp": 1786895942266,
+      "ipAddress": "127.0.0.1",
+      "status": "success",
+      "details": "Reconciliation audit succeeded. All queried Stripe transactions match internal database records perfectly."
+    },
+    {
+      "id": "audit_779683a2-bb42-45bb-9d47-3bb9feea680c",
+      "userId": "system",
+      "action": "RECONCILIATION_AUDIT_SUCCESS",
+      "timestamp": 1786895965692,
+      "ipAddress": "127.0.0.1",
+      "status": "success",
+      "details": "Reconciliation audit succeeded. All queried Stripe transactions match internal database records perfectly."
+    },
+    {
+      "id": "audit_78f53d58-d74f-4178-bb8c-4d43fd42fef8",
+      "userId": "system",
+      "action": "RECONCILIATION_AUDIT_SUCCESS",
+      "timestamp": 1786895966156,
+      "ipAddress": "127.0.0.1",
+      "status": "success",
+      "details": "Reconciliation audit succeeded. All queried Stripe transactions match internal database records perfectly."
+    },
+    {
+      "id": "audit_90ad6b86-d59b-4721-a8a7-c8280bda09da",
+      "userId": "system",
+      "action": "RECONCILIATION_AUDIT_SUCCESS",
+      "timestamp": 1786895966299,
+      "ipAddress": "127.0.0.1",
+      "status": "success",
+      "details": "Reconciliation audit succeeded. All queried Stripe transactions match internal database records perfectly."
+    },
+    {
+      "id": "audit_29b38197-be0b-480c-98cf-896133fd5835",
+      "userId": "system",
+      "action": "RECONCILIATION_AUDIT_SUCCESS",
+      "timestamp": 1786895966736,
+      "ipAddress": "127.0.0.1",
+      "status": "success",
+      "details": "Reconciliation audit succeeded. All queried Stripe transactions match internal database records perfectly."
+    },
+    {
+      "id": "audit_0643a72d-ea71-4cc8-8dfa-044957d45e25",
+      "userId": "system",
+      "action": "RECONCILIATION_AUDIT_SUCCESS",
+      "timestamp": 1786895990947,
+      "ipAddress": "127.0.0.1",
+      "status": "success",
+      "details": "Reconciliation audit succeeded. All queried Stripe transactions match internal database records perfectly."
+    },
+    {
+      "id": "audit_769cc962-be00-410d-b6fd-885202066a68",
+      "userId": "system",
+      "action": "RECONCILIATION_AUDIT_SUCCESS",
+      "timestamp": 1786896016259,
+      "ipAddress": "127.0.0.1",
+      "status": "success",
+      "details": "Reconciliation audit succeeded. All queried Stripe transactions match internal database records perfectly."
+    },
+    {
+      "id": "audit_f9768512-9bf5-47b1-9b96-e60860cafd82",
+      "userId": "system",
+      "action": "RECONCILIATION_AUDIT_SUCCESS",
+      "timestamp": 1786896041252,
+      "ipAddress": "127.0.0.1",
+      "status": "success",
+      "details": "Reconciliation audit succeeded. All queried Stripe transactions match internal database records perfectly."
+    },
+    {
+      "id": "audit_5c15888f-5be3-405c-859f-823d22df9296",
+      "userId": "system",
+      "action": "RECONCILIATION_AUDIT_SUCCESS",
+      "timestamp": 1786896066446,
+      "ipAddress": "127.0.0.1",
+      "status": "success",
+      "details": "Reconciliation audit succeeded. All queried Stripe transactions match internal database records perfectly."
+    },
+    {
+      "id": "audit_586b9f99-7aad-40a4-b4e1-d9a51dcd1796",
+      "userId": "system",
+      "action": "RECONCILIATION_AUDIT_SUCCESS",
+      "timestamp": 1786896091365,
+      "ipAddress": "127.0.0.1",
+      "status": "success",
+      "details": "Reconciliation audit succeeded. All queried Stripe transactions match internal database records perfectly."
+    },
+    {
+      "id": "audit_1631435f-d9d0-46e0-aa9c-a20c5082776c",
+      "userId": "system",
+      "action": "RECONCILIATION_AUDIT_SUCCESS",
+      "timestamp": 1786896123993,
+      "ipAddress": "127.0.0.1",
+      "status": "success",
+      "details": "Reconciliation audit succeeded. All queried Stripe transactions match internal database records perfectly."
+    },
+    {
+      "id": "audit_d8974922-918a-48f9-a794-ef0a551619ca",
+      "userId": "system",
+      "action": "RECONCILIATION_AUDIT_SUCCESS",
+      "timestamp": 1786896141284,
+      "ipAddress": "127.0.0.1",
+      "status": "success",
+      "details": "Reconciliation audit succeeded. All queried Stripe transactions match internal database records perfectly."
+    },
+    {
+      "id": "audit_960d7bd0-553d-4ee7-bb1a-545833934b8e",
+      "userId": "system",
+      "action": "RECONCILIATION_AUDIT_SUCCESS",
+      "timestamp": 1786896166380,
+      "ipAddress": "127.0.0.1",
+      "status": "success",
+      "details": "Reconciliation audit succeeded. All queried Stripe transactions match internal database records perfectly."
+    },
+    {
+      "id": "audit_296d20f1-1207-4692-80f5-8628e45aa606",
+      "userId": "system",
+      "action": "RECONCILIATION_AUDIT_SUCCESS",
+      "timestamp": 1786896167636,
+      "ipAddress": "127.0.0.1",
+      "status": "success",
+      "details": "Reconciliation audit succeeded. All queried Stripe transactions match internal database records perfectly."
+    },
+    {
+      "id": "audit_273b0046-906e-4839-adbc-2f09ff51830b",
+      "userId": "system",
+      "action": "RECONCILIATION_AUDIT_SUCCESS",
+      "timestamp": 1786896191419,
+      "ipAddress": "127.0.0.1",
+      "status": "success",
+      "details": "Reconciliation audit succeeded. All queried Stripe transactions match internal database records perfectly."
+    },
+    {
+      "id": "audit_6b03258d-17f5-4681-aa9b-94f6128b6d86",
+      "userId": "system",
+      "action": "RECONCILIATION_AUDIT_SUCCESS",
+      "timestamp": 1786896216234,
+      "ipAddress": "127.0.0.1",
+      "status": "success",
+      "details": "Reconciliation audit succeeded. All queried Stripe transactions match internal database records perfectly."
+    },
+    {
+      "id": "audit_9b0480ba-6e76-435e-bd25-faa7dd162cc8",
+      "userId": "system",
+      "action": "RECONCILIATION_AUDIT_SUCCESS",
+      "timestamp": 1786897203811,
+      "ipAddress": "127.0.0.1",
+      "status": "success",
+      "details": "Reconciliation audit succeeded. All queried Stripe transactions match internal database records perfectly."
+    },
+    {
+      "id": "audit_21511905-6e6a-43f7-a48e-af6ad12a81a6",
+      "userId": "system",
+      "action": "RECONCILIATION_AUDIT_SUCCESS",
+      "timestamp": 1786897225217,
+      "ipAddress": "127.0.0.1",
+      "status": "success",
+      "details": "Reconciliation audit succeeded. All queried Stripe transactions match internal database records perfectly."
+    },
+    {
+      "id": "audit_075e936c-a165-4022-add4-cad37d17cc69",
+      "userId": "system",
+      "action": "RECONCILIATION_AUDIT_SUCCESS",
+      "timestamp": 1786897250123,
+      "ipAddress": "127.0.0.1",
+      "status": "success",
+      "details": "Reconciliation audit succeeded. All queried Stripe transactions match internal database records perfectly."
+    },
+    {
+      "id": "audit_0167e391-0028-47cc-aeb1-9f22ae1c4645",
+      "userId": "system",
+      "action": "RECONCILIATION_AUDIT_SUCCESS",
+      "timestamp": 1786898439290,
+      "ipAddress": "127.0.0.1",
+      "status": "success",
+      "details": "Reconciliation audit succeeded. All queried Stripe transactions match internal database records perfectly."
+    },
+    {
+      "id": "audit_c6f1f4e9-7962-4f33-86f7-a81f02822177",
+      "userId": "system",
+      "action": "RECONCILIATION_AUDIT_SUCCESS",
+      "timestamp": 1786898463042,
+      "ipAddress": "127.0.0.1",
+      "status": "success",
+      "details": "Reconciliation audit succeeded. All queried Stripe transactions match internal database records perfectly."
+    },
+    {
+      "id": "audit_dc303a9a-6003-4624-8d1f-3cc54c4f1e9f",
+      "userId": "system",
+      "action": "RECONCILIATION_AUDIT_SUCCESS",
+      "timestamp": 1786898464115,
+      "ipAddress": "127.0.0.1",
+      "status": "success",
+      "details": "Reconciliation audit succeeded. All queried Stripe transactions match internal database records perfectly."
+    },
+    {
+      "id": "audit_0dfa56cc-627a-4872-9a93-fdeb032b0a56",
+      "userId": "system",
+      "action": "RECONCILIATION_AUDIT_SUCCESS",
+      "timestamp": 1786898489156,
+      "ipAddress": "127.0.0.1",
+      "status": "success",
+      "details": "Reconciliation audit succeeded. All queried Stripe transactions match internal database records perfectly."
+    },
+    {
+      "id": "audit_ab27a75e-270c-4048-8760-1b88513c46fd",
+      "userId": "system",
+      "action": "RECONCILIATION_AUDIT_SUCCESS",
+      "timestamp": 1786898514299,
+      "ipAddress": "127.0.0.1",
+      "status": "success",
+      "details": "Reconciliation audit succeeded. All queried Stripe transactions match internal database records perfectly."
+    },
+    {
+      "id": "audit_f9c2f15d-f053-429e-9908-7f1567952b34",
+      "userId": "system",
+      "action": "RECONCILIATION_AUDIT_SUCCESS",
+      "timestamp": 1786898539120,
+      "ipAddress": "127.0.0.1",
+      "status": "success",
+      "details": "Reconciliation audit succeeded. All queried Stripe transactions match internal database records perfectly."
+    },
+    {
+      "id": "audit_ff1d4acc-56bc-41c8-b3c4-3f0c888985a7",
+      "userId": "system",
+      "action": "RECONCILIATION_AUDIT_SUCCESS",
+      "timestamp": 1786898564130,
+      "ipAddress": "127.0.0.1",
+      "status": "success",
+      "details": "Reconciliation audit succeeded. All queried Stripe transactions match internal database records perfectly."
+    },
+    {
+      "id": "audit_b7a13f5c-ef27-4283-bc5d-e4a2298ebea1",
+      "userId": "user_652ab08a-23d2-41a1-8639-b672b9b972d9",
+      "action": "IDENTITY_LOCKED",
+      "timestamp": 1786898586028,
+      "ipAddress": "system",
+      "status": "success",
+      "details": "Account identity locked for tg-redirect-1786898585918@example.com in live production mode."
+    },
+    {
+      "id": "audit_cd5498f4-b198-488a-b81f-558a270419ea",
+      "userId": "user_652ab08a-23d2-41a1-8639-b672b9b972d9",
+      "action": "REGISTER",
+      "timestamp": 1786898586031,
+      "ipAddress": "127.0.0.1",
+      "status": "success",
+      "details": "Self-service registration completed for tg-redirect-1786898585918@example.com"
+    },
+    {
+      "id": "audit_20b8bd42-486f-4cdb-ba1e-93b924b62e7f",
+      "userId": "user_652ab08a-23d2-41a1-8639-b672b9b972d9",
+      "action": "IDENTITY_LOCKED",
+      "timestamp": 1786898586117,
+      "ipAddress": "system",
+      "status": "success",
+      "details": "Account identity locked for tg-redirect-1786898585918@example.com in live production mode."
+    },
+    {
+      "id": "audit_f6722c1d-a2a6-4917-857d-b191cc9e79df",
+      "userId": "user_652ab08a-23d2-41a1-8639-b672b9b972d9",
+      "action": "LOGIN",
+      "timestamp": 1786898586119,
+      "ipAddress": "127.0.0.1",
+      "status": "success",
+      "details": "Login successful with MFA verification"
+    },
+    {
+      "id": "audit_53b0551f-c05b-4896-a624-ca692b7e2883",
+      "userId": "user_899cd02c-a6ca-4d3c-a314-145f74734d3b",
+      "action": "IDENTITY_LOCKED",
+      "timestamp": 1786898592556,
+      "ipAddress": "system",
+      "status": "success",
+      "details": "Account identity locked for tg-proof-1786898592450@example.com in live production mode."
+    },
+    {
+      "id": "audit_d821946f-e687-4da6-b4be-70b52bbe8609",
+      "userId": "user_899cd02c-a6ca-4d3c-a314-145f74734d3b",
+      "action": "REGISTER",
+      "timestamp": 1786898592560,
+      "ipAddress": "127.0.0.1",
+      "status": "success",
+      "details": "Self-service registration completed for tg-proof-1786898592450@example.com"
+    },
+    {
+      "id": "audit_bfbebf4a-7edd-44f9-8c86-a0ecd5c81d26",
+      "userId": "user_899cd02c-a6ca-4d3c-a314-145f74734d3b",
+      "action": "IDENTITY_LOCKED",
+      "timestamp": 1786898592653,
+      "ipAddress": "system",
+      "status": "success",
+      "details": "Account identity locked for tg-proof-1786898592450@example.com in live production mode."
+    },
+    {
+      "id": "audit_0542f565-5b5c-47a3-8d65-1f771ffcd51f",
+      "userId": "user_899cd02c-a6ca-4d3c-a314-145f74734d3b",
+      "action": "LOGIN",
+      "timestamp": 1786898592656,
+      "ipAddress": "127.0.0.1",
+      "status": "success",
+      "details": "Login successful with MFA verification"
     }
   ],
   "bankAccounts": []

@@ -9,11 +9,11 @@ async function run() {
   process.env.NODE_ENV = 'production';
   process.env.PORT = '4011';
   process.env.BYPASS_EMAIL_VERIFICATION = 'true';
-  if (!process.env.SOVEREIGN_ENCRYPTION_KEY) {
-    process.env.SOVEREIGN_ENCRYPTION_KEY = 'abcdefghijklmnopqrstuvwxyzABCDEF';
+  if (!process.env.SOVEREIGN_ENCRYPTION_KEY || process.env.SOVEREIGN_ENCRYPTION_KEY.trim().length < 32) {
+    process.env.SOVEREIGN_ENCRYPTION_KEY = 'abcdefghijklmnopqrstuvwxyzABCDEF012345';
   }
-  if (!process.env.JWT_SECRET) {
-    process.env.JWT_SECRET = 'abcdefghijklmnopqrstuvwxyzABCDEF';
+  if (!process.env.JWT_SECRET || process.env.JWT_SECRET.trim().length < 32) {
+    process.env.JWT_SECRET = 'abcdefghijklmnopqrstuvwxyzABCDEF012345';
   }
   if (!process.env.SOVEREIGN_ADMIN_EMAILS) {
     process.env.SOVEREIGN_ADMIN_EMAILS = 'admin@secure.local';

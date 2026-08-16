@@ -12,6 +12,15 @@ async function run() {
   process.env.PORT = '4021';
   process.env.BYPASS_EMAIL_VERIFICATION = 'true';
   process.env.STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY || 'sk_test_fallback_proof';
+  if (!process.env.SOVEREIGN_ENCRYPTION_KEY || process.env.SOVEREIGN_ENCRYPTION_KEY.trim().length < 32) {
+    process.env.SOVEREIGN_ENCRYPTION_KEY = 'abcdefghijklmnopqrstuvwxyzABCDEF012345';
+  }
+  if (!process.env.JWT_SECRET || process.env.JWT_SECRET.trim().length < 32) {
+    process.env.JWT_SECRET = 'abcdefghijklmnopqrstuvwxyzABCDEF012345';
+  }
+  if (!process.env.SOVEREIGN_ADMIN_EMAILS) {
+    process.env.SOVEREIGN_ADMIN_EMAILS = 'admin@secure.local';
+  }
 
   const nativeFetch = globalThis.fetch.bind(globalThis);
   globalThis.fetch = async (input: any, init?: any): Promise<Response> => {

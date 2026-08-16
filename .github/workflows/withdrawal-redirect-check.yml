@@ -31,4 +31,7 @@ jobs:
       - name: Tangerine Withdrawal Redirect Smoke Test
         env:
           NODE_ENV: production
+          SOVEREIGN_ENCRYPTION_KEY: 'abcdefghijklmnopqrstuvwxyzABCDEF012345'
+          JWT_SECRET: 'abcdefghijklmnopqrstuvwxyzABCDEF012345'
+          SOVEREIGN_ADMIN_EMAILS: 'admin@secure.local'
         run: npm run test:withdrawal:tangerine-redirect
