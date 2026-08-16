@@ -9,6 +9,7 @@ import { Transaction } from '../types';
 import { fetchLiveExchangeRates } from '../lib/blockchain';
 import { canCoverWithdrawal, convertCadToUsd, convertUsdToCad } from '../lib/financial-hardening';
 import { StripePaymentElementModal } from './StripePaymentElementModal';
+import { StripeCanadaWireDeposit } from './StripeCanadaWireDeposit';
 import { SettlementConfirmationDialog, SettlementConfirmationData } from './SettlementConfirmationDialog';
 
 const bankUrls: Record<string, string> = {
@@ -97,13 +98,14 @@ export default function CashTransferModal({
   const [linkedBanks, setLinkedBanks] = useState<LinkedBank[]>(() => {
     const saved = localStorage.getItem('cb_linked_banks');
     return saved ? JSON.parse(saved) : [
+      { id: 'bank-stripe-ca', bankName: 'JPMorgan Chase (Stripe Payments Canada)', accountType: 'Checking', lastFour: '1072' },
       { id: 'bank-1', bankName: 'Chase Bank', accountType: 'Checking', lastFour: '8329' },
       { id: 'bank-2', bankName: 'Wells Fargo', accountType: 'Savings', lastFour: '4012' }
     ];
   });
 
   // e-Transfer and Canadian network states
-  const [depositMethod, setDepositMethod] = useState<'bank' | 'etransfer'>(citizenship === 'CA' ? 'etransfer' : 'bank');
+  const [depositMethod, setDepositMethod] = useState<'bank' | 'etransfer' | 'stripe_wire'>('stripe_wire');
   const [withdrawMethod, setWithdrawMethod] = useState<'bank' | 'etransfer' | 'stripe'>(citizenship === 'CA' ? 'etransfer' : 'bank');
   const [etransferBankName, setEtransferBankName] = useState('TD Canada Trust');
   const [etransferEmail, setEtransferEmail] = useState(() => localStorage.getItem('cb_auth_email') || '');
@@ -113,7 +115,7 @@ export default function CashTransferModal({
 
   // Sync to prop changes
   useEffect(() => {
-    setDepositMethod(citizenship === 'CA' ? 'etransfer' : 'bank');
+    setDepositMethod('stripe_wire');
     setWithdrawMethod(citizenship === 'CA' ? 'etransfer' : 'bank');
   }, [citizenship]);
 
@@ -1797,18 +1799,30 @@ export default function CashTransferModal({
                   ) : (
                     <>
                       {/* Method Toggle */}
-                      <div className="bg-gray-100 p-1 rounded-xl grid grid-cols-2 gap-1 select-none">
+                      <div className="bg-gray-100 p-1 rounded-xl grid grid-cols-3 gap-1 select-none">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setDepositMethod('stripe_wire');
+                            setLocalError(null);
+                          }}
+                          className={`py-1.5 text-[11px] font-bold rounded-lg transition-all cursor-pointer truncate ${
+                            depositMethod === 'stripe_wire' ? 'bg-white text-gray-900 shadow-xs' : 'text-gray-500 hover:text-gray-800'
+                          }`}
+                        >
+                          Stripe Wire/EFT 🇨🇦
+                        </button>
                         <button
                           type="button"
                           onClick={() => {
                             setDepositMethod('bank');
                             setLocalError(null);
                           }}
-                          className={`py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                          className={`py-1.5 text-[11px] font-bold rounded-lg transition-all cursor-pointer truncate ${
                             depositMethod === 'bank' ? 'bg-white text-gray-900 shadow-xs' : 'text-gray-500 hover:text-gray-800'
                           }`}
                         >
-                          Direct Bank Transfer (CAD) 🇨🇦
+                          Direct Bank Link
                         </button>
                         <button
                           type="button"
@@ -1816,15 +1830,36 @@ export default function CashTransferModal({
                             setDepositMethod('etransfer');
                             setLocalError(null);
                           }}
-                          className={`py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                          className={`py-1.5 text-[11px] font-bold rounded-lg transition-all cursor-pointer truncate ${
                             depositMethod === 'etransfer' ? 'bg-white text-gray-900 shadow-xs' : 'text-gray-500 hover:text-gray-800'
                           }`}
                         >
-                          Interac e-Transfer (CA) 🇨🇦
+                          Interac e-Transfer 🇨🇦
                         </button>
                       </div>
 
-                      {depositMethod === 'bank' ? (
+                      {depositMethod === 'stripe_wire' ? (
+                        <StripeCanadaWireDeposit
+                          usdBalance={usdBalance}
+                          showToast={showToast}
+                          onClose={onClose}
+                          onDepositSuccess={(amountUsd, txId) => {
+                            const tx: Transaction = {
+                              id: txId || `tx-wire-ca-${Date.now()}`,
+                              type: 'RECEIVE',
+                              assetSymbol: 'USD',
+                              amount: amountUsd,
+                              fiatAmount: amountUsd,
+                              timestamp: Date.now(),
+                              details: `Stripe Payments Canada Ltd (JPMorgan Chase) Wire/EFT Deposit - Ref: HW7L-RDP-4G7B (CA$${(amountUsd / 0.735).toFixed(2)})`
+                            };
+                            onAddTransaction(tx);
+                            if (onRefreshBalances) {
+                              onRefreshBalances();
+                            }
+                          }}
+                        />
+                      ) : depositMethod === 'bank' ? (
                         <>
                           {/* Amount Input */}
                           <div className="border border-gray-200 rounded-2xl p-4 bg-gray-50/50">
@@ -2719,7 +2754,47 @@ export default function CashTransferModal({
                     </button>
                   </div>
 
-                  <div className="space-y-3 max-h-[250px] overflow-y-auto">
+                  <div className="space-y-3 max-h-[280px] overflow-y-auto">
+                    {/* Primary Canadian Clearing Rail Card: Stripe Payments Canada Ltd */}
+                    <div className="p-4 bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950 border border-indigo-500/40 rounded-xl text-white space-y-2.5 shadow-md">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-2.5">
+                          <div className="w-9 h-9 bg-indigo-500/20 border border-indigo-500/40 rounded-lg flex items-center justify-center text-cyan-400">
+                            <Building2 className="h-5 w-5" />
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-1.5">
+                              <h5 className="text-xs font-bold text-white">Stripe Payments Canada Ltd</h5>
+                              <span className="text-[9px] bg-emerald-500/20 text-emerald-300 px-1.5 py-0.5 rounded font-mono font-bold">PRIMARY CA</span>
+                            </div>
+                            <p className="text-[10px] text-slate-400 font-mono">
+                              JPMorgan Chase Bank N.A. (Toronto Branch)
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => {
+                            setActiveTab('deposit');
+                            setDepositMethod('stripe_wire');
+                          }}
+                          className="px-2.5 py-1 bg-cyan-500/15 hover:bg-cyan-500/25 text-cyan-300 border border-cyan-500/40 rounded-lg text-[10px] font-bold transition cursor-pointer"
+                        >
+                          Deposit Funds
+                        </button>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2 pt-1 text-[10px] font-mono border-t border-slate-800 text-slate-300">
+                        <div>
+                          <span className="text-slate-500 block text-[9px]">Account / SWIFT:</span>
+                          <span className="font-bold text-cyan-400">4011811072</span> • <span className="text-amber-400">CHASCATT</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-500 block text-[9px]">Transit / Inst / Memo:</span>
+                          <span>00012-270 • <strong className="text-amber-300">HW7L-RDP-4G7B</strong></span>
+                        </div>
+                      </div>
+                    </div>
+
                     {linkedBanks.map((bank) => (
                       <div key={bank.id} className="p-4 bg-gray-50 border border-gray-200 rounded-xl flex items-center justify-between">
                         <div className="flex items-center space-x-3">

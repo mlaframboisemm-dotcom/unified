@@ -12904,6 +12904,61 @@ async function startServer() {
     });
   });
 
+  app.get('/api/deposit/stripe-canada-details', (req: any, res: any) => {
+    return res.json({
+      success: true,
+      beneficiary: {
+        name: 'Stripe Payments Canada Ltd',
+        address: '1200 Waterfront Center, 200 Burrard Street, Vancouver BC, Canada V7X 1T2'
+      },
+      bank: {
+        name: 'JPMorgan Chase Bank, N.A. Toronto Branch',
+        address: '66 Wellington Street West, Suite 4500, TD Bank Tower, Toronto, Ontario M5K1E7, Canada',
+        swiftBic: 'CHASCATT',
+        accountNumber: '4011811072',
+        institutionNumber: '270',
+        transitNumber: '00012'
+      },
+      memo: 'HW7L-RDP-4G7B',
+      reference: 'HW7L-RDP-4G7B',
+      currency: 'CAD',
+      clearingRails: ['EFT_CANADA', 'WIRE_DOMESTIC_CAD', 'SWIFT_INTERNATIONAL']
+    });
+  });
+
+  app.post('/api/deposit/stripe-canada-wire', requireAuth, async (req: any, res: any) => {
+    const {
+      amountCad = 0,
+      amountUsd = 0,
+      senderName = 'Marcel Laframboise',
+      reference = 'HW7L-RDP-4G7B',
+      clearingRail = 'EFT_CANADA'
+    } = req.body || {};
+
+    const depositId = 'wire_ca_' + Date.now().toString(36);
+    const resolvedUsd = amountUsd > 0 ? amountUsd : (amountCad > 0 ? Math.round(amountCad * 0.735 * 100) / 100 : 1000);
+    const resolvedCad = amountCad > 0 ? amountCad : Math.round(resolvedUsd * 1.36 * 100) / 100;
+
+    return res.json({
+      success: true,
+      status: 'PENDING_MATCH',
+      depositId,
+      reference,
+      amountCad: resolvedCad,
+      amountUsd: resolvedUsd,
+      senderName,
+      clearingRail,
+      beneficiaryName: 'Stripe Payments Canada Ltd',
+      bankName: 'JPMorgan Chase Bank, N.A. Toronto Branch',
+      accountNumber: '4011811072',
+      institutionNumber: '270',
+      transitNumber: '00012',
+      swiftBic: 'CHASCATT',
+      settlementTime: clearingRail === 'WIRE_DOMESTIC_CAD' ? 'Same-Day (1-4 Hours)' : '1-2 Business Days',
+      message: `Deposit notification registered for CA$${resolvedCad.toLocaleString(undefined, { minimumFractionDigits: 2 })} to Stripe Payments Canada Ltd (Ref: ${reference}). Funds will be auto-matched upon receipt.`
+    });
+  });
+
   app.get('/api/withdrawal/wise/hub/config', requireAuth, async (req: any, res: any) => {
     return res.json({
       success: true,

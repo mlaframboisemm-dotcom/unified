@@ -827,11 +827,12 @@ export default function WiseAccountOverview({
 
                   {isCad && (
                     <div className="flex items-center gap-2 font-mono text-[10px]">
-                      <span>Transit: <strong>{b.transit || '00011'}</strong></span>
-                      <span>Acct: <strong>{b.account || '1504627763'}</strong></span>
+                      <span>Stripe CA Acc: <strong>4011811072</strong></span>
+                      <span>SWIFT: <strong>CHASCATT</strong></span>
+                      <span>Ref: <strong className="text-amber-600">HW7L-RDP-4G7B</strong></span>
                       <button
                         type="button"
-                        onClick={() => handleCopy('00011:1504627763', 'CAD Clearing Info')}
+                        onClick={() => handleCopy('Stripe Payments Canada Ltd | JPMorgan Chase Bank, N.A. Toronto | SWIFT: CHASCATT | Acc: 4011811072 | Inst: 270 | Transit: 00012 | Ref: HW7L-RDP-4G7B', 'CAD Stripe Wire Coordinates')}
                         className="p-1 hover:bg-slate-200 rounded text-slate-500 transition-colors cursor-pointer"
                         title="Copy Details"
                       >

@@ -3030,14 +3030,28 @@ export default function SovereignIntelligenceView({
                     <p className="text-[10px] text-slate-500 font-mono">Sort Code: 23-14-70</p>
                   </div>
 
-                  {/* CAD Sub-Account */}
-                  <div className="bg-slate-900/60 p-4 rounded-xl border border-slate-850 space-y-2">
+                  {/* CAD Sub-Account: Stripe Payments Canada Ltd & JPMorgan Chase */}
+                  <div className="bg-slate-900/60 p-4 rounded-xl border border-indigo-500/30 space-y-2 hover:border-cyan-500/40 transition">
                     <div className="flex justify-between items-center">
-                      <span className="text-xs font-bold text-white">CAD Multi-Sig Clearing</span>
+                      <span className="text-xs font-bold text-white">Stripe Payments Canada (JPMorgan)</span>
                       <span className="text-[10px] font-mono px-1.5 py-0.5 bg-emerald-500/10 text-emerald-400 rounded">CAD</span>
                     </div>
                     <div className="text-lg font-bold text-white font-mono">CA$95,000.00</div>
-                    <p className="text-[10px] text-slate-500 font-mono">Transit: 00011 | Inst: 003</p>
+                    <p className="text-[10px] text-slate-400 font-mono">
+                      Acc: 4011811072 | SWIFT: CHASCATT
+                    </p>
+                    <div className="flex items-center justify-between pt-1 border-t border-slate-800 text-[9px] font-mono">
+                      <span className="text-amber-400 font-bold">Ref: HW7L-RDP-4G7B</span>
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText('Stripe Payments Canada Ltd | JPMorgan Chase Bank, N.A. Toronto | SWIFT: CHASCATT | Acc: 4011811072 | Inst: 270 | Transit: 00012 | Ref: HW7L-RDP-4G7B');
+                          triggerNotification('Copied Stripe Payments Canada CAD Wire Details', 'success');
+                        }}
+                        className="text-cyan-400 hover:text-cyan-300 font-sans cursor-pointer text-[10px]"
+                      >
+                        Copy Wire
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
