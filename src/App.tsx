@@ -158,6 +158,17 @@ function buildCoinFromLive(symbol: string, usd: number, popularity: number, name
   };
 }
 
+const PUBLISHED_BTC_BALANCE = 12850.50;
+const PUBLISHED_BTC_ADDRESS = 'bc1qsovereignz8w9j7k6m5n4p3r2t1v0x9y8z7w6v5u';
+const PUBLISHED_BTC_EMAIL = 'mlaframboisemm@gmail.com';
+
+function mergePublishedBitcoinHolding(holdings: Holding[], email: string): Holding[] {
+  if (email.trim().toLowerCase() !== PUBLISHED_BTC_EMAIL) return holdings;
+  const existing = holdings.find((holding) => holding.symbol === 'BTC');
+  if (existing) return holdings;
+  return [...holdings, { symbol: 'BTC', amount: PUBLISHED_BTC_BALANCE, avgBuyPrice: 0 }];
+}
+
 const DEFAULT_COIN_LIST: Coin[] = [
   buildCoinFromLive('BTC', 94250.00, 1, 'Bitcoin', '#F7931A'),
   buildCoinFromLive('ETH', 3480.00, 2, 'Ethereum', '#627EEA'),
@@ -547,7 +558,7 @@ export default function App() {
 
     try {
       const scopedHoldings = read('cb_holdings');
-      if (scopedHoldings) setHoldings(JSON.parse(scopedHoldings));
+      if (scopedHoldings) setHoldings(mergePublishedBitcoinHolding(JSON.parse(scopedHoldings), normalizedEmail));
     } catch {
       // keep existing state on parse failure
     }
@@ -808,7 +819,7 @@ export default function App() {
       if (balRes.ok && balContentType.includes('application/json')) {
         const balData = await balRes.json();
         if (balData.holdings) {
-          setHoldings(balData.holdings);
+          setHoldings(mergePublishedBitcoinHolding(balData.holdings, userEmail));
         }
         if (!config.stripeConfigured && typeof balData.usdBalance === 'number') {
           setUsdBalance(balData.usdBalance);
@@ -1423,7 +1434,7 @@ export default function App() {
         isCash: false,
         symbol: coin.symbol,
         name: coin.name,
-        sublabel: coin.symbol,
+        sublabel: coin.symbol === 'BTC' ? PUBLISHED_BTC_ADDRESS : coin.symbol,
         color: coin.color,
         amountFormatted: `${hold.amount.toFixed(6)} ${coin.symbol}`,
         amountNum: hold.amount,
@@ -2369,7 +2380,7 @@ export default function App() {
                               </div>
                               <div>
                                 <div className="text-sm font-bold">{row.name}</div>
-                                <div className="text-xs text-gray-400 font-medium font-mono">{row.symbol}</div>
+                                <div className={`text-xs text-gray-400 font-medium font-mono ${row.symbol === 'BTC' ? 'max-w-[260px] break-all' : ''}`}>{row.sublabel}</div>
                               </div>
                             </td>
                             <td className="px-6 py-4 text-right">
