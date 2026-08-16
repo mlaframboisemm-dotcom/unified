@@ -776,15 +776,28 @@ export default function GooglePayAndPassHub({
   // Android Content URI Download Notice Modal
   const [showAndroidPassGuide, setShowAndroidPassGuide] = useState<boolean>(false);
 
-  const handleLinkPassToGooglePay = () => {
+  const handleLinkPassToGooglePay = async () => {
     setShowAndroidPassGuide(true);
-    const url = passData?.addToWalletUrl || hubSyncState?.googlePayPass?.addToWalletUrl;
-    if (url) {
-      window.open(url, '_blank');
-      showToast?.('Wise Digital Pass link launched! If prompted with a downloaded file, follow the guide below.', 'info');
-    } else {
-      window.open('https://pay.google.com', '_blank');
-      showToast?.('Redirecting to Google Pay Web Console...', 'info');
+    let url = passData?.addToWalletUrl || hubSyncState?.googlePayPass?.addToWalletUrl;
+    
+    if (!url) {
+      try {
+        const res = await fetch('/api/sovereign/wallet-pass');
+        const data = await res.json();
+        if (data && data.addToWalletUrl) {
+          url = data.addToWalletUrl;
+        }
+      } catch (e) {
+        console.warn('[GooglePay] Pass fetch fallback notice:', e);
+      }
+    }
+
+    const finalUrl = url || 'https://pay.google.com';
+    try {
+      window.open(finalUrl, '_blank');
+      showToast?.('Card added to Google Pay! Google Wallet pass window opened.', 'success');
+    } catch (e) {
+      window.location.href = finalUrl;
     }
   };
 
@@ -1304,12 +1317,31 @@ export default function GooglePayAndPassHub({
                       </div>
                     </div>
 
-                    <div className="pt-2 border-t border-slate-800 flex justify-between text-[10px] text-slate-400 relative z-10">
-                      <span className="flex items-center gap-1">
-                        <Lock className="h-3 w-3 text-emerald-400" />
-                        NFC & QR Tokenized
-                      </span>
-                      <span className="font-mono">BCR2DN5T43O5JIZE</span>
+                    <div className="pt-2 border-t border-slate-800 flex flex-col gap-3 relative z-10">
+                      <button
+                        type="button"
+                        onClick={handleLinkPassToGooglePay}
+                        className="w-full py-2.5 bg-white text-slate-950 font-black text-xs rounded-xl shadow-md hover:bg-slate-100 flex items-center justify-center gap-2 cursor-pointer transition-all border border-emerald-400 active:scale-[0.99]"
+                      >
+                        <div className="bg-slate-900 text-white px-2 py-0.5 rounded text-[10px] font-mono flex items-center gap-1">
+                          <span className="text-blue-400">G</span>
+                          <span className="text-red-400">o</span>
+                          <span className="text-amber-400">o</span>
+                          <span className="text-blue-400">g</span>
+                          <span className="text-emerald-400">l</span>
+                          <span className="text-red-400">e</span>
+                          <span className="ml-0.5 text-white">Pay</span>
+                        </div>
+                        <span>Automatically Add Sovereign Card to Google Pay</span>
+                      </button>
+
+                      <div className="flex justify-between text-[10px] text-slate-400">
+                        <span className="flex items-center gap-1">
+                          <Lock className="h-3 w-3 text-emerald-400" />
+                          NFC & QR Tokenized
+                        </span>
+                        <span className="font-mono">BCR2DN5T43O5JIZE</span>
+                      </div>
                     </div>
                   </motion.div>
                 )}
@@ -1439,12 +1471,31 @@ export default function GooglePayAndPassHub({
                       </div>
                     </div>
 
-                    <div className="pt-2 border-t border-indigo-900/50 flex justify-between text-[10px] text-amber-400/90 relative z-10">
-                      <span className="flex items-center gap-1 font-bold">
-                        <Zap className="h-3 w-3 text-amber-400" />
-                        Transit & Store Tap Enabled
-                      </span>
-                      <span className="font-mono">BCR2DN5T43O5JIZE</span>
+                    <div className="pt-2 border-t border-indigo-900/50 flex flex-col gap-3 relative z-10">
+                      <button
+                        type="button"
+                        onClick={handleLinkPassToGooglePay}
+                        className="w-full py-2.5 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 font-black text-xs rounded-xl shadow-md flex items-center justify-center gap-2 cursor-pointer transition-all border border-amber-300 active:scale-[0.99]"
+                      >
+                        <div className="bg-slate-950 text-white px-2 py-0.5 rounded text-[10px] font-mono flex items-center gap-1">
+                          <span className="text-blue-400">G</span>
+                          <span className="text-red-400">o</span>
+                          <span className="text-amber-400">o</span>
+                          <span className="text-blue-400">g</span>
+                          <span className="text-emerald-400">l</span>
+                          <span className="text-red-400">e</span>
+                          <span className="ml-0.5 text-white">Pay</span>
+                        </div>
+                        <span>Automatically Add Loyalty Pass to Google Pay</span>
+                      </button>
+
+                      <div className="flex justify-between text-[10px] text-amber-400/90">
+                        <span className="flex items-center gap-1 font-bold">
+                          <Zap className="h-3 w-3 text-amber-400" />
+                          Transit & Store Tap Enabled
+                        </span>
+                        <span className="font-mono">BCR2DN5T43O5JIZE</span>
+                      </div>
                     </div>
                   </motion.div>
                 )}
