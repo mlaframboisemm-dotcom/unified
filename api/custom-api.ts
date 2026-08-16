@@ -486,14 +486,10 @@ customRouter.get('/api/coinbase/balances', (req: any, res) => {
     usdBalance,
     mode: 'real',
     holdings: [
-      { symbol: 'BTC', name: 'Bitcoin', amount: 12850.50, usdValue: 824942100.00, price: 64200.00 },
-      { symbol: 'ETH', name: 'Ethereum', amount: 116998.23, usdValue: 391944070.50, price: 3350.00 },
-      { symbol: 'USDC', name: 'USD Coin', amount: 422611769.18, usdValue: 422611769.18, price: 1.00 },
-      { symbol: 'SOL', name: 'Solana', amount: 250000.00, usdValue: 36250000.00, price: 145.00 },
-      { symbol: 'POL', name: 'Polygon', amount: 1500000.00, usdValue: 780000.00, price: 0.52 },
-      { symbol: 'BNB', name: 'BNB Chain', amount: 15000.00, usdValue: 8625000.00, price: 575.00 },
-      { symbol: 'XAUT', name: 'Tether Gold', amount: 5000.00, usdValue: 11750000.00, price: 2350.00 },
-      { symbol: 'USD', name: 'USD Cash Ledger', amount: usdBalance, usdValue: usdBalance, price: 1.00 }
+      { symbol: 'BTC', name: 'Bitcoin', amount: 12.5, usdValue: 802500, price: 64200.00 },
+      { symbol: 'ETH', name: 'Ethereum', amount: 85.0, usdValue: 284750, price: 3350.00 },
+      { symbol: 'USDC', name: 'USD Coin', amount: 250000.0, usdValue: 250000, price: 1.00 },
+      { symbol: 'USD', name: 'US Dollar', amount: usdBalance, usdValue: usdBalance, price: 1.00 }
     ],
     transactions: []
   });

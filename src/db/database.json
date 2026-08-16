@@ -1,11 +1,11 @@
 {
   "users": [
     {
-      "id": "user_b5b880ac-a49c-4e4e-9d99-b94530e24fd3",
+      "id": "user_b557286e-8111-48eb-985b-e0fe00888178",
       "name": "Secure Admin",
       "email": "admin@secure.local",
-      "passwordHash": "a92a6cd424e5257031fa75dbf5939e04d09b0bed5d375306d51867c818834bc3808eacd0a6f6625387a60d46556d70a24d7ce0b32c96c61248de2dc530b768ff",
-      "salt": "1ca70c669b67a90aeb845ae1b6262661",
+      "passwordHash": "59cb9c77e2cac1be698c9a96f2c691a21744144a84257c7c4466c1f490d598294fb9b2fc420fc66d930151369b0692d0554ccfad23125bfd98d6882db343c9fe",
+      "salt": "efbab0a5f82bd78188d1a6eff859d7e3",
       "twoFactorSecret": "JBSWY3DPEHPK3PXP",
       "twoFactorEnabled": true,
       "kycLevel": 2,
@@ -14,7 +14,7 @@
       "productionMode": "live",
       "blockchainLinked": true,
       "lockedToEmail": "admin@secure.local",
-      "lockedAt": "2026-08-16T18:29:15.520Z"
+      "lockedAt": "2026-08-16T16:52:51.443Z"
     },
     {
       "id": "user_mlaframboisemm",
@@ -30,7 +30,7 @@
       "productionMode": "live",
       "blockchainLinked": true,
       "lockedToEmail": "mlaframboisemm@gmail.com",
-      "lockedAt": "2026-08-16T18:29:15.522Z",
+      "lockedAt": "2026-08-16T16:52:51.446Z",
       "kycFullName": "marcel laframbosie",
       "kycAddress": "475 albert st",
       "kycCity": "oshawa",
@@ -39,13 +39,13 @@
       "kycPostalCode": "l1h4s7",
       "kycTaxId": "0512",
       "kycPhone": "9057184275",
-      "kycVerifiedAt": "2026-08-16T18:29:15.522Z"
+      "kycVerifiedAt": "2026-08-16T16:52:51.446Z"
     }
   ],
   "wallets": [
     {
-      "id": "wallet-user_b5b880ac-a49c-4e4e-9d99-b94530e24fd3-usd",
-      "userId": "user_b5b880ac-a49c-4e4e-9d99-b94530e24fd3",
+      "id": "wallet-user_b557286e-8111-48eb-985b-e0fe00888178-usd",
+      "userId": "user_b557286e-8111-48eb-985b-e0fe00888178",
       "assetSymbol": "USD",
       "balance": 1791100,
       "publicAddressEthereum": "",
@@ -54,7 +54,7 @@
       "productionMode": "live",
       "blockchainLinked": true,
       "lockedToEmail": "admin@secure.local",
-      "lockedAt": "2026-08-16T18:29:15.520Z"
+      "lockedAt": "2026-08-16T16:52:51.444Z"
     },
     {
       "id": "wallet-user_mlaframboisemm-usd",
@@ -67,7 +67,7 @@
       "productionMode": "live",
       "blockchainLinked": true,
       "lockedToEmail": "mlaframboisemm@gmail.com",
-      "lockedAt": "2026-08-16T18:29:15.522Z"
+      "lockedAt": "2026-08-16T16:52:51.446Z"
     },
     {
       "id": "wallet-user_mlaframboisemm-usdc",
@@ -80,7 +80,7 @@
       "productionMode": "live",
       "blockchainLinked": true,
       "lockedToEmail": "mlaframboisemm@gmail.com",
-      "lockedAt": "2026-08-16T18:29:15.522Z"
+      "lockedAt": "2026-08-16T16:52:51.446Z"
     },
     {
       "id": "wallet-user_mlaframboisemm-eth",
@@ -93,82 +93,71 @@
       "productionMode": "live",
       "blockchainLinked": true,
       "lockedToEmail": "mlaframboisemm@gmail.com",
-      "lockedAt": "2026-08-16T18:29:15.522Z"
+      "lockedAt": "2026-08-16T16:52:51.446Z"
     },
     {
-      "id": "wallet-user_mlaframboisemm-btc",
-      "userId": "user_mlaframboisemm",
+      "id": "wallet-user_b557286e-8111-48eb-985b-e0fe00888178-btc",
+      "userId": "user_b557286e-8111-48eb-985b-e0fe00888178",
       "assetSymbol": "BTC",
-      "balance": 12850.50,
-      "publicAddressEthereum": "",
-      "publicAddressBitcoin": "bc1qsovereignz8w9j7k6m5n4p3r2t1v0x9y8z7w6v5u",
-      "identityLocked": true,
-      "productionMode": "live",
-      "blockchainLinked": true,
-      "lockedToEmail": "mlaframboisemm@gmail.com",
-      "lockedAt": "2026-08-16T18:29:15.522Z"
-    },
-    {
-      "id": "wallet-user_mlaframboisemm-sol",
-      "userId": "user_mlaframboisemm",
-      "assetSymbol": "SOL",
-      "balance": 250000.00,
+      "balance": 0.001,
       "publicAddressEthereum": "",
       "publicAddressBitcoin": "",
       "identityLocked": true,
       "productionMode": "live",
       "blockchainLinked": true,
-      "lockedToEmail": "mlaframboisemm@gmail.com",
-      "lockedAt": "2026-08-16T18:29:15.522Z"
-    },
-    {
-      "id": "wallet-user_mlaframboisemm-xaut",
-      "userId": "user_mlaframboisemm",
-      "assetSymbol": "XAUT",
-      "balance": 5000.00,
-      "publicAddressEthereum": "0xabcdef1234567890abcdef1234567890abcdef12",
-      "publicAddressBitcoin": "",
-      "identityLocked": true,
-      "productionMode": "live",
-      "blockchainLinked": true,
-      "lockedToEmail": "mlaframboisemm@gmail.com",
-      "lockedAt": "2026-08-16T18:29:15.522Z"
+      "lockedToEmail": "",
+      "lockedAt": "2026-08-16T16:52:51.856Z"
     }
   ],
-  "transactions": [],
+  "transactions": [
+    {
+      "id": "tx-trade-1786899171856-9161094a",
+      "userId": "user_b557286e-8111-48eb-985b-e0fe00888178",
+      "type": "BUY",
+      "assetSymbol": "BTC",
+      "amount": 0.001,
+      "fiatAmount": 100,
+      "timestamp": 1786899171856,
+      "details": "Bought 0.001000 BTC with USD Cash Balance",
+      "hash": "0x984c89e2982e1e0038dad82c57eeac77",
+      "status": "completed",
+      "ledgerDebit": "USD",
+      "ledgerCredit": "BTC"
+    }
+  ],
   "auditLogs": [
     {
-      "id": "audit_2f2f20f4-5696-4cd9-84ce-4c0e4123545d",
-      "userId": "user_b5b880ac-a49c-4e4e-9d99-b94530e24fd3",
+      "id": "audit_7e47a3c2-63bb-4a1d-a2cf-b8a0f54a8b97",
+      "userId": "user_b557286e-8111-48eb-985b-e0fe00888178",
       "action": "IDENTITY_LOCKED",
-      "timestamp": 1786904955743,
+      "timestamp": 1786899171745,
       "ipAddress": "system",
       "status": "success",
       "details": "Account identity locked for admin@secure.local in live production mode."
     },
     {
-      "id": "audit_6d573817-c5d8-4eee-ab40-bed721a54f60",
-      "userId": "user_b5b880ac-a49c-4e4e-9d99-b94530e24fd3",
+      "id": "audit_111086bd-38cb-4469-b31b-48f6717e3f88",
+      "userId": "user_b557286e-8111-48eb-985b-e0fe00888178",
       "action": "LOGIN",
-      "timestamp": 1786904955743,
+      "timestamp": 1786899171745,
       "ipAddress": "127.0.0.1",
       "status": "success",
       "details": "Login successful with MFA verification"
     },
     {
-      "id": "audit_1463dda2-5744-4f36-876c-7bbac451d84b",
-      "userId": "user_b5b880ac-a49c-4e4e-9d99-b94530e24fd3",
+      "id": "audit_cc5882e1-e2a8-44a6-b5f2-504227fa0040",
+      "userId": "user_b557286e-8111-48eb-985b-e0fe00888178",
       "action": "IDENTITY_LOCKED",
-      "timestamp": 1786904955833,
+      "timestamp": 1786899171846,
       "ipAddress": "system",
       "status": "success",
       "details": "Account identity locked for admin@secure.local in live production mode."
     },
     {
-      "id": "audit_bd43ab24-22d7-435d-9190-81023b00adb9",
-      "userId": "user_b5b880ac-a49c-4e4e-9d99-b94530e24fd3",
+      "id": "audit_bec2e7c7-4151-4d05-8c3b-73b6e9db0ff5",
+      "userId": "user_b557286e-8111-48eb-985b-e0fe00888178",
       "action": "LOGIN",
-      "timestamp": 1786904955834,
+      "timestamp": 1786899171846,
       "ipAddress": "127.0.0.1",
       "status": "success",
       "details": "Login successful with MFA verification"

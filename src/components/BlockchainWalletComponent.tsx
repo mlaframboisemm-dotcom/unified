@@ -301,6 +301,12 @@ export default function BlockchainWalletComponent({
     return recognizeNetwork(recipientAddress);
   }, [recipientAddress]);
 
+  // Automated Live Gas & Sufficiency Calculation
+  const liveGasEstimation: GasCalculationResult = useMemo(() => {
+    const nativeBal = parseFloat(ethBalance) || 0;
+    return calculateAutomatedGas(selectedToken, sendAmount, selectedNetwork.name, nativeBal);
+  }, [selectedToken, sendAmount, selectedNetwork.name, ethBalance]);
+
   // Helper to get unit price of any token
   const getTokenUnitPrice = useCallback((symbol: string): number => {
     if (symbol === 'ETH') return ethPriceUsd;
@@ -308,17 +314,6 @@ export default function BlockchainWalletComponent({
     if (existing && existing.unitPriceUsd > 0) return existing.unitPriceUsd;
     return resolveTokenPrice(symbol);
   }, [ethPriceUsd, tokenBalances]);
-
-  // Automated Live Gas & Sufficiency Calculation
-  const liveGasEstimation: GasCalculationResult = useMemo(() => {
-    const nativeBal = parseFloat(ethBalance) || 0;
-    return calculateAutomatedGas(
-      selectedToken,
-      { [selectedToken]: nativeBal },
-      { [selectedToken]: getTokenUnitPrice(selectedToken) },
-      'standard'
-    );
-  }, [selectedToken, ethBalance, getTokenUnitPrice]);
 
   // Network Switch Handler
   const handleSwitchNetwork = (network: NetworkConfig) => {
