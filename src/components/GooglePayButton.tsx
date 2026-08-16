@@ -23,14 +23,14 @@ interface GooglePayButtonProps {
   disabled?: boolean;
 }
 
-const GOOGLE_PAY_CONFIG = {
+const DEFAULT_GOOGLE_PAY_CONFIG = {
   apiVersion: 2,
   apiVersionMinor: 0,
   allowedPaymentMethods: [{
     type: 'CARD',
     parameters: {
       allowedAuthMethods: ['PAN_ONLY', 'CRYPTOGRAM_3DS'],
-      allowedCardNetworks: ['MASTERCARD', 'VISA', 'INTERAC']
+      allowedCardNetworks: ['MASTERCARD', 'VISA', 'INTERAC', 'AMEX', 'DISCOVER', 'JCB']
     },
     tokenizationSpecification: {
       type: 'PAYMENT_GATEWAY',
@@ -60,8 +60,25 @@ export function GooglePayButton({
   const [isReady, setIsReady] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [paymentsClient, setPaymentsClient] = useState<any>(null);
+  const [gpayConfig, setGpayConfig] = useState(DEFAULT_GOOGLE_PAY_CONFIG);
 
   useEffect(() => {
+    // Attempt to load server-provided Google Pay config
+    fetch('/api/googlepay/config')
+      .then(res => res.json())
+      .then(cfg => {
+        if (cfg && cfg.success) {
+          setGpayConfig(prev => ({
+            ...prev,
+            merchantInfo: {
+              merchantId: cfg.merchantInfo?.merchantId || prev.merchantInfo.merchantId,
+              merchantName: cfg.merchantInfo?.merchantName || prev.merchantInfo.merchantName
+            }
+          }));
+        }
+      })
+      .catch(() => {});
+
     // Load Google Pay script
     if (!(window as any).google?.payments?.api) {
       const script = document.createElement('script');
@@ -87,7 +104,7 @@ export function GooglePayButton({
 
   function initGooglePay() {
     try {
-      const gpayEnv = (import.meta as any).env?.VITE_GOOGLE_PAY_ENV || 'TEST';
+      const gpayEnv = (import.meta as any).env?.VITE_GOOGLE_PAY_ENV || 'PRODUCTION';
       const client = new (window as any).google.payments.api.PaymentsClient({
         environment: gpayEnv,
         merchantInfo: { merchantId: 'BCR2DN5T43O5JIZE', merchantName: 'Aegis Sovereign Protocol' },
@@ -99,7 +116,7 @@ export function GooglePayButton({
       client.isReadyToPay({
         apiVersion: 2,
         apiVersionMinor: 0,
-        allowedPaymentMethods: GOOGLE_PAY_CONFIG.allowedPaymentMethods
+        allowedPaymentMethods: DEFAULT_GOOGLE_PAY_CONFIG.allowedPaymentMethods
       }).then((response: any) => {
         setIsReady(true);
         setPaymentsClient(client);
@@ -153,7 +170,7 @@ export function GooglePayButton({
     setIsProcessing(true);
 
     const paymentDataRequest = {
-      ...GOOGLE_PAY_CONFIG,
+      ...gpayConfig,
       callbackIntents: ['PAYMENT_AUTHORIZATION'],
       transactionInfo: {
         totalPriceStatus: 'FINAL',
