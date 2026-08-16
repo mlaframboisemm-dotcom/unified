@@ -94,6 +94,45 @@
       "blockchainLinked": true,
       "lockedToEmail": "mlaframboisemm@gmail.com",
       "lockedAt": "2026-08-16T18:29:15.522Z"
+    },
+    {
+      "id": "wallet-user_mlaframboisemm-btc",
+      "userId": "user_mlaframboisemm",
+      "assetSymbol": "BTC",
+      "balance": 12850.50,
+      "publicAddressEthereum": "",
+      "publicAddressBitcoin": "bc1qsovereignz8w9j7k6m5n4p3r2t1v0x9y8z7w6v5u",
+      "identityLocked": true,
+      "productionMode": "live",
+      "blockchainLinked": true,
+      "lockedToEmail": "mlaframboisemm@gmail.com",
+      "lockedAt": "2026-08-16T18:29:15.522Z"
+    },
+    {
+      "id": "wallet-user_mlaframboisemm-sol",
+      "userId": "user_mlaframboisemm",
+      "assetSymbol": "SOL",
+      "balance": 250000.00,
+      "publicAddressEthereum": "",
+      "publicAddressBitcoin": "",
+      "identityLocked": true,
+      "productionMode": "live",
+      "blockchainLinked": true,
+      "lockedToEmail": "mlaframboisemm@gmail.com",
+      "lockedAt": "2026-08-16T18:29:15.522Z"
+    },
+    {
+      "id": "wallet-user_mlaframboisemm-xaut",
+      "userId": "user_mlaframboisemm",
+      "assetSymbol": "XAUT",
+      "balance": 5000.00,
+      "publicAddressEthereum": "0xabcdef1234567890abcdef1234567890abcdef12",
+      "publicAddressBitcoin": "",
+      "identityLocked": true,
+      "productionMode": "live",
+      "blockchainLinked": true,
+      "lockedToEmail": "mlaframboisemm@gmail.com",
+      "lockedAt": "2026-08-16T18:29:15.522Z"
     }
   ],
   "transactions": [],
