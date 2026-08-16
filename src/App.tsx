@@ -40,6 +40,13 @@ import { convertUsdToCad, DEFAULT_USD_CAD_RATE } from './lib/financial-hardening
 import { debouncedStorageSetItem } from './lib/sync-to-storage';
 import { db } from './lib/firebase';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { OfflineSyncStatusBar } from './components/OfflineSyncStatusBar';
+import { 
+  saveTransactionWithOfflineFallback, 
+  cacheTransactionsLocally, 
+  getCachedTransactions,
+  syncOfflineQueueToFirestore 
+} from './lib/indexeddb-offline-sync';
 
 const configuredApiBase = String(
   (import.meta as any).env?.VITE_API_BASE ||
@@ -267,6 +274,27 @@ export default function App() {
       bankName: 'Wise US Inc (Wilmington, DE, USA)'
     };
   });
+
+  // Local-First transaction persistence handler (IndexedDB + Firestore fallback)
+  const recordNewTransaction = (tx: Transaction) => {
+    setTransactions((prev) => [tx, ...prev]);
+    saveTransactionWithOfflineFallback(tx, userEmail).catch((err) => {
+      console.warn('[Local-First IndexedDB Sync Warning]:', err);
+    });
+  };
+
+  // Restore cached transactions from IndexedDB if initial state is empty & sync offline queue on mount
+  useEffect(() => {
+    getCachedTransactions().then((cached) => {
+      if (Array.isArray(cached) && cached.length > 0 && transactions.length === 0) {
+        setTransactions(cached);
+      }
+    });
+
+    if (typeof navigator !== 'undefined' && navigator.onLine) {
+      syncOfflineQueueToFirestore().catch(() => {});
+    }
+  }, []);
   const [isStripeConfigured, setIsStripeConfigured] = useState<boolean>(false);
   
   // Market search & filters
@@ -847,6 +875,10 @@ export default function App() {
     debouncedStorageSetItem('cb_transactions', JSON.stringify(transactions), 300);
     if (isAuthenticated && userEmail) {
       debouncedStorageSetItem(getUserScopedStorageKey(userEmail, 'cb_transactions'), JSON.stringify(transactions), 300);
+    }
+    // Local-first IndexedDB persistence
+    if (Array.isArray(transactions) && transactions.length > 0) {
+      cacheTransactionsLocally(transactions);
     }
   }, [transactions, isAuthenticated, userEmail]);
 
@@ -1504,7 +1536,7 @@ export default function App() {
           hash: generatedTxHash,
           details: `Purchased ${params.amount.toFixed(6)} ${params.symbol}`
         };
-        setTransactions((prev) => [newTx, ...prev]);
+        recordNewTransaction(newTx);
         showToast(`Successfully bought ${params.amount.toFixed(6)} ${params.symbol} for $${params.fiatAmount.toFixed(2)}!`, 'success');
       } else if (type === 'SELL') {
         setHoldings((prev) =>
@@ -1524,7 +1556,7 @@ export default function App() {
           hash: generatedTxHash,
           details: `Sold ${params.amount.toFixed(6)} ${params.symbol}`
         };
-        setTransactions((prev) => [newTx, ...prev]);
+        recordNewTransaction(newTx);
         showToast(`Successfully sold ${params.amount.toFixed(6)} ${params.symbol} for $${params.fiatAmount.toFixed(2)}!`, 'success');
       } else if (type === 'CONVERT') {
         const targetSym = params.targetSymbol || 'ETH';
@@ -1555,7 +1587,7 @@ export default function App() {
           hash: generatedTxHash,
           details: `Converted ${params.amount.toFixed(6)} ${params.symbol} to ${targetAmount.toFixed(6)} ${targetSym}`
         };
-        setTransactions((prev) => [newTx, ...prev]);
+        recordNewTransaction(newTx);
         showToast(`Successfully converted ${params.amount.toFixed(6)} ${params.symbol} into ${targetAmount.toFixed(6)} ${targetSym}!`, 'success');
       }
     }
@@ -1619,7 +1651,7 @@ export default function App() {
           hash: generatedTxHash,
           details: `Sent to ${details}`
         };
-        setTransactions((prev) => [newTx, ...prev]);
+        recordNewTransaction(newTx);
         showToast(`Successfully sent ${amount.toFixed(6)} ${symbol} to ${details}! Tx Hash: ${generatedTxHash}`, 'success');
       }
     } else if (type === 'RECEIVE') {
@@ -1643,7 +1675,7 @@ export default function App() {
         hash: generatedTxHash,
         details: details || `Received external deposit`
       };
-      setTransactions((prev) => [newTx, ...prev]);
+      recordNewTransaction(newTx);
       showToast(`Deposit of ${amount.toFixed(6)} ${symbol} ($${fiatAmount.toFixed(2)}) confirmed!`, 'success');
     }
   };
@@ -1674,7 +1706,7 @@ export default function App() {
         status: 'completed',
         details: `QR Payment to ${recipient} (${note})`
       };
-      setTransactions((prev) => [newTx, ...prev]);
+      recordNewTransaction(newTx);
       showToast(`QR Cash Payment of $${amount.toFixed(2)} ${assetSymbol} sent to ${recipient}!`, 'success');
       return true;
     } else {
@@ -1769,7 +1801,7 @@ export default function App() {
       timestamp: Date.now(),
       details: `Coinbase Visa Card Spend. Earned +$${rewardFiat.toFixed(2)} cashback`
     };
-    setTransactions((prev) => [tx, ...prev]);
+    recordNewTransaction(tx);
     return true;
   };
 
@@ -2699,7 +2731,7 @@ export default function App() {
                     ledgerDebit: `Cryptocurrency Vault Holding (${symbol})`,
                     ledgerCredit: 'On-Chain Miner/Validator Coinbase'
                   };
-                  setTransactions((prev) => [tx, ...prev]);
+                  recordNewTransaction(tx);
                 }}
                 showToast={showToast}
               />
@@ -2724,8 +2756,14 @@ export default function App() {
 
         {/* --- Tab 5: Transaction History list --- */}
         {currentTab === 'history' && (
-          <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-xs max-w-4xl mx-auto">
-            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
+          <div className="space-y-4 max-w-4xl mx-auto">
+            {/* Local-First IndexedDB Offline Sync Status */}
+            <OfflineSyncStatusBar 
+              showToast={showToast}
+            />
+
+            <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-xs">
+              <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
               <h3 className="text-sm font-bold text-gray-900 flex items-center space-x-2">
                 <Clock className="h-4.5 w-4.5 text-gray-500" />
                 <span>Account Activity Ledger</span>
@@ -2911,6 +2949,7 @@ export default function App() {
               )}
             </div>
           </div>
+        </div>
         )}
 
         {/* --- Tab 6: Stripe Synchronization Hub --- */}
@@ -3387,7 +3426,7 @@ export default function App() {
             setStripeAvailable(nextBalance);
           }
         }}
-        onAddTransaction={(tx) => setTransactions((prev) => [tx, ...prev])}
+        onAddTransaction={(tx) => recordNewTransaction(tx)}
         showToast={showToast}
         initialTab={cashModalAction}
         citizenship={(citizenship === 'CA' ? 'CA' : 'US') as 'US' | 'CA'}
@@ -3414,7 +3453,7 @@ export default function App() {
         onClose={() => setIsPlaidLinkModalOpen(false)}
         holdings={holdings}
         onUpdateHoldings={setHoldings}
-        onAddTransaction={(tx) => setTransactions((prev) => [tx, ...prev])}
+        onAddTransaction={(tx) => recordNewTransaction(tx)}
         showToast={showToast}
         userEmail={userEmail}
         citizenship={citizenship}

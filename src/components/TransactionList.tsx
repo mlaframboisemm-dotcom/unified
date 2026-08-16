@@ -7,6 +7,7 @@ import {
   LedgerAccount,
   IntegrationsState
 } from '../types.js';
+import { OfflineSyncStatusBar } from './OfflineSyncStatusBar';
 import { 
   ArrowRight, 
   Check, 
@@ -404,6 +405,9 @@ export default function TransactionList({
               exit={{ opacity: 0, y: -10 }}
               className="space-y-6"
             >
+              {/* Offline-First Persistence Status Bar (IndexedDB + Firestore Fallback) */}
+              <OfflineSyncStatusBar />
+
               {/* Real-time Production Integration Channels & Plaid Link Panel */}
               <div className="bg-slate-50 border border-slate-100 rounded-xl p-4">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-3 flex items-center gap-1.5 font-mono">
@@ -659,6 +663,9 @@ export default function TransactionList({
               exit={{ opacity: 0, y: -10 }}
               className="space-y-4"
             >
+              {/* Offline-First Persistence Status Bar */}
+              <OfflineSyncStatusBar />
+
               {/* Header & Export Actions */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-gray-100">
                 <div>
