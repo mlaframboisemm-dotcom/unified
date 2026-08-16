@@ -12,6 +12,7 @@ import { spawn } from 'child_process';
 import { GoogleGenAI } from '@google/genai';
 // @ts-ignore - ethers v6 has built-in TypeScript support
 import { ethers } from 'ethers';
+import { sendBitcoinNative } from './src/lib/bitcoin-native-send.js';
 import crypto from 'crypto';
 import nodemailer from 'nodemailer';
 import { MailerSend, EmailParams, Sender, Recipient } from 'mailersend';
@@ -2934,10 +2935,59 @@ app.post('/api/wallet/send', requireAuth, tradeRateLimiter, requireMfa, requireK
     return res.status(500).json({ error: 'PRODUCTION_CONFIG_INVALID', message: error.message });
   }
 
-  const { asset, amount, toAddress, note, assetSymbol, recipientAddress, memo } = req.body;
+    const { asset, amount, toAddress, note, assetSymbol, recipientAddress, memo } = req.body;
   const activeToAddress = toAddress || recipientAddress;
-  const activeAsset = asset || assetSymbol;
-  
+  const activeAsset = String(asset || assetSymbol || '').toUpperCase();
+
+  if (activeAsset === 'BTC') {
+    try {
+      enforceProductionSecretHardening('wallet');
+      const btcResult = await sendBitcoinNative({
+        amountBtc: Number(amount),
+        recipientAddress: String(recipientAddress || toAddress || '').trim(),
+        requestId: String(req.headers['x-request-id'] || `btc-${Date.now()}`)
+      });
+      await recordLedgerEntry({
+        type: 'transfer',
+        status: 'executed',
+        payload: {
+          action: 'wallet_send',
+          method: 'bitcoin_native',
+          asset: 'BTC',
+          amount: btcResult.amountBtc,
+          feeSats: btcResult.feeSats,
+          fromAddress: btcResult.sourceAddress,
+          toAddress: btcResult.recipientAddress,
+          txHash: btcResult.txid,
+          network: btcResult.network,
+          requestId: String(req.headers['x-request-id'] || ''),
+          userId: req.user.id
+        },
+        result: {
+          txHash: btcResult.txid,
+          network: btcResult.network,
+          feeSats: btcResult.feeSats
+        }
+      });
+      return res.json({
+        success: true,
+        hash: btcResult.txid,
+        asset: 'BTC',
+        amount: btcResult.amountBtc,
+        from: btcResult.sourceAddress,
+        to: btcResult.recipientAddress,
+        feeSats: btcResult.feeSats,
+        network: btcResult.network,
+        message: 'Bitcoin transaction broadcast successfully.',
+        timestamp: new Date().toISOString()
+      });
+    } catch (error: any) {
+      console.error('[BTC_SEND] Bitcoin transaction rejected:', error?.message || error);
+      const sanitized = sanitizeError(error, (req as any).correlationId || 'unknown');
+      return res.status(400).json(sanitized);
+    }
+  }
+
   if (!activeToAddress || !ethers.isAddress(activeToAddress)) {
     return res.status(400).json({ error: 'Invalid destination Ethereum address' });
   }
@@ -5939,6 +5989,13 @@ app.get('/api/transactions/spendability', requireAuth, requireMfa, async (req: a
 
     const hasWalletKey = Boolean(process.env.MARSHALL_WALLET_PRIVATE_KEY);
     const canUseWalletSend = hasWalletKey && isAdminRequest(req);
+    const hasBitcoinCustodyConfig = Boolean(
+      process.env.BTC_ENABLE_BROADCAST === 'true' &&
+      process.env.BTC_RPC_URL &&
+      process.env.BTC_SIGNING_WIF &&
+      process.env.BTC_SOURCE_ADDRESS
+    );
+    const canUseBitcoinNativeSend = hasBitcoinCustodyConfig && isAdminRequest(req);
     const hasCoinbase = Boolean(process.env.COINBASE_API_KEY_ID && process.env.COINBASE_API_SECRET_RAW);
     const hasKraken = Boolean(process.env.KRAKEN_API_KEY && process.env.KRAKEN_API_SECRET);
     const hasExchange = hasCoinbase || hasKraken;
@@ -5961,6 +6018,14 @@ app.get('/api/transactions/spendability', requireAuth, requireMfa, async (req: a
           : !hasWalletKey
             ? 'MARSHALL_WALLET_PRIVATE_KEY is missing.'
             : 'This account is not authorized for wallet send operations.'
+      },
+      bitcoinNativeSend: {
+        spendable: canUseBitcoinNativeSend,
+        reason: canUseBitcoinNativeSend
+          ? 'Bitcoin RPC, signing key, source address, and explicit broadcast enablement are configured.'
+          : !hasBitcoinCustodyConfig
+            ? 'BTC_ENABLE_BROADCAST, BTC_RPC_URL, BTC_SIGNING_WIF, and BTC_SOURCE_ADDRESS are required.'
+            : 'This account is not authorized for Bitcoin wallet send operations.'
       },
       exchangeTradeAndSwap: {
         spendable: hasExchange,

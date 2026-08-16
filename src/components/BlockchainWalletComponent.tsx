@@ -304,7 +304,12 @@ export default function BlockchainWalletComponent({
   // Automated Live Gas & Sufficiency Calculation
   const liveGasEstimation: GasCalculationResult = useMemo(() => {
     const nativeBal = parseFloat(ethBalance) || 0;
-    return calculateAutomatedGas(selectedToken, sendAmount, selectedNetwork.name, nativeBal);
+    return calculateAutomatedGas(
+      selectedToken,
+      { [selectedToken]: nativeBal },
+      { [selectedToken]: ethPriceUsd },
+      'standard'
+    );
   }, [selectedToken, sendAmount, selectedNetwork.name, ethBalance]);
 
   // Helper to get unit price of any token

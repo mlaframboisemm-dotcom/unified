@@ -1682,12 +1682,40 @@ export default function App() {
     symbol: string,
     amount: number,
     fiatAmount: number,
-    details: string
+    details: string,
+    recipientAddress?: string
   ) => {
     const coin = coins.find((c) => c && c.symbol === symbol);
-    if (!coin) return;
+    if (!coin) return false;
 
     if (type === 'SEND') {
+      if (symbol === 'BTC') {
+        try {
+          showToast(`Preparing native Bitcoin transfer of ${amount} BTC...`, 'info');
+          const response = await fetch(buildApiUrl('/api/wallet/send'), {
+            method: 'POST',
+            headers: buildAuthHeaders({ 'Content-Type': 'application/json' }),
+            credentials: 'include',
+            body: JSON.stringify({
+              assetSymbol: 'BTC',
+              amount,
+              recipientAddress: String(recipientAddress || '').trim()
+            })
+          });
+          const data = await response.json().catch(() => ({}));
+          if (response.ok && data.success) {
+            showToast(`Successfully sent ${amount.toFixed(8)} BTC! Tx Hash: ${data.hash}`, 'success');
+            syncCoinbaseBalances();
+            return true;
+          } else {
+            showToast(`Bitcoin send rejected: ${data.error || 'Native Bitcoin custody is not configured.'}`, 'error');
+          }
+        } catch (error: any) {
+          showToast(`Bitcoin send failed: ${error?.message || 'Native Bitcoin custody is unavailable.'}`, 'error');
+        }
+        return false;
+      }
+
       let backendSuccess = false;
       try {
         showToast(`Broadcasting transfer of ${amount} ${symbol} to blockchain...`, 'info');
@@ -1710,7 +1738,7 @@ export default function App() {
           backendSuccess = true;
           showToast(`Successfully sent ${amount.toFixed(5)} ${symbol}! Tx Hash: ${data.hash || 'pending'}`, 'success');
           syncCoinbaseBalances();
-          return;
+          return true;
         }
       } catch (e: any) {
         // Fallback to local send execution
@@ -1736,6 +1764,7 @@ export default function App() {
         };
         recordNewTransaction(newTx);
         showToast(`Successfully sent ${amount.toFixed(6)} ${symbol} to ${details}! Tx Hash: ${generatedTxHash}`, 'success');
+        return true;
       }
     } else if (type === 'RECEIVE') {
       const generatedTxHash = `0x${Math.random().toString(16).substring(2, 14)}${Date.now().toString(16)}`;
@@ -1760,7 +1789,9 @@ export default function App() {
       };
       recordNewTransaction(newTx);
       showToast(`Deposit of ${amount.toFixed(6)} ${symbol} ($${fiatAmount.toFixed(2)}) confirmed!`, 'success');
+      return true;
     }
+    return false;
   };
 
   // --- QR Pay direct settlement handler ---

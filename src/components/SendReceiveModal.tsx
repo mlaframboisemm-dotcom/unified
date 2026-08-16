@@ -15,8 +15,9 @@ interface SendReceiveModalProps {
     symbol: string,
     amount: number,
     fiatAmount: number,
-    details: string
-  ) => void;
+    details: string,
+    recipientAddress?: string
+  ) => boolean | Promise<boolean>;
 }
 
 export default function SendReceiveModal({
@@ -122,16 +123,21 @@ export default function SendReceiveModal({
     }
 
     setLoading(true);
-    setTimeout(() => {
+    setTimeout(async () => {
       const detailsMsg = `Sent ${convertedCryptoAmount.toFixed(6)} ${sendSymbol} to ${recipient.substring(0, 16)}... via ${sendTokenInfo.network} (Gas Fee: ${gasEstimate.gasFeeCrypto.toFixed(6)} ${gasEstimate.gasToken})`;
-      onExecuteTransaction(
+      const executed = await onExecuteTransaction(
         'SEND',
         sendSymbol,
         convertedCryptoAmount,
         convertedFiatAmount,
-        detailsMsg
+        detailsMsg,
+        recipient
       );
       setLoading(false);
+      if (!executed) {
+        setErrorMsg(`The ${sendSymbol} transfer was not broadcast. Check custody configuration and try again.`);
+        return;
+      }
       setSuccessMsg(`Successfully broadcast on ${sendTokenInfo.network}! Sent ${convertedCryptoAmount.toFixed(6)} ${sendSymbol} ($${convertedFiatAmount.toFixed(2)}) to ${recipient}.`);
       setSendAmount('100');
     }, 1200);
