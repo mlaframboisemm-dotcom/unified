@@ -24,6 +24,21 @@ export interface Holding {
   avgBuyPrice: number;
 }
 
+export interface StakedAssetPosition {
+  id: string;
+  symbol: string;
+  name: string;
+  stakedAmount: number;
+  unclaimedRewards: number;
+  apy: number;
+  lockupDays: number;
+  validator: string;
+  slashingProtected: boolean;
+  autoCompound: boolean;
+  lastCompoundedAt?: number;
+  liquidityType: 'Liquid' | 'Epoch-Bound' | 'Flexible' | 'Fixed';
+}
+
 export interface Transaction {
   id: string;
   type: 'BUY' | 'SELL' | 'CONVERT' | 'EARN' | 'SEND' | 'RECEIVE';

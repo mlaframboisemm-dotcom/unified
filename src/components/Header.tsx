@@ -22,7 +22,8 @@ import {
   Layers,
   Sparkles,
   Clock,
-  ShieldAlert
+  ShieldAlert,
+  TrendingUp
 } from 'lucide-react';
 import { Coin } from '../types';
 
@@ -89,6 +90,7 @@ export default function Header({
 
   const primaryNavItems = [
     { id: 'dashboard', label: 'Assets', icon: Wallet },
+    { id: 'yield', label: 'Yield Optimization', badge: 'APY', icon: TrendingUp },
     { id: 'wallet', label: 'Web3 Wallet', badge: 'Live', icon: Wallet },
     { id: 'trade', label: 'Trade', icon: Compass },
     { id: 'sovereign', label: 'Sovereign Hub', icon: ShieldCheck },

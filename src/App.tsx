@@ -12,6 +12,7 @@ import SovereignIntelligenceView from './components/SovereignIntelligenceView';
 import { hashPin, encryptData, decryptData } from './lib/crypto';
 import TradeWidget from './components/TradeWidget';
 import SmartRebalanceWidget from './components/SmartRebalanceWidget';
+import YieldOptimizationView from './components/YieldOptimizationView';
 import AssetDetailModal from './components/AssetDetailModal';
 import EarnRewards from './components/EarnRewards';
 import CoinbaseCard from './components/CoinbaseCard';
@@ -2410,6 +2411,28 @@ export default function App() {
             </div>
 
           </div>
+        )}
+
+        {/* --- Tab: Yield Optimization & Staking APY --- */}
+        {currentTab === 'yield' && (
+          <YieldOptimizationView
+            coins={coins}
+            holdings={holdings}
+            usdBalance={usdBalance}
+            onUpdateHoldings={(newHoldings) => {
+              setHoldings(newHoldings);
+              localStorage.setItem('cb_holdings', JSON.stringify(newHoldings));
+            }}
+            onAddTransaction={(tx) => {
+              setTransactions((prev) => [tx, ...prev]);
+              localStorage.setItem('cb_transactions', JSON.stringify([tx, ...transactions]));
+            }}
+            showToast={showToast}
+            onOpenTradeModal={(symbol) => {
+              setSelectedAssetSymbol(symbol);
+              setCurrentTab('trade');
+            }}
+          />
         )}
 
         {/* --- Tab 2: Trade marketplace --- */}
