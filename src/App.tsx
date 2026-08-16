@@ -814,7 +814,16 @@ export default function App() {
           setUsdBalance(balData.usdBalance);
         }
         if (balData.transactions) {
-          setTransactions(balData.transactions);
+          setTransactions((prev) => {
+            const map = new Map<string, Transaction>();
+            balData.transactions.forEach((tx: Transaction) => map.set(tx.id, tx));
+            prev.forEach((tx: Transaction) => {
+              if (!map.has(tx.id)) {
+                map.set(tx.id, tx);
+              }
+            });
+            return Array.from(map.values()).sort((a, b) => b.timestamp - a.timestamp);
+          });
         }
         if (config.stripeConfigured) {
           await fetchStripeBalance(true);
@@ -1483,6 +1492,10 @@ export default function App() {
     try {
       showToast(`Initiating secure ${type} execution...`, 'info');
 
+      const targetSym = params.targetSymbol || 'ETH';
+      const targetCoin = coins.find((c) => c && c.symbol === targetSym);
+      const computedTargetAmount = targetCoin && targetCoin.price > 0 ? params.fiatAmount / targetCoin.price : params.amount;
+
       const response = await fetch(buildApiUrl('/api/coinbase/trade'), {
         method: 'POST',
         headers: buildAuthHeaders({
@@ -1495,13 +1508,72 @@ export default function App() {
           symbol: params.symbol,
           amount: params.amount,
           fiatAmount: params.fiatAmount,
-          targetSymbol: params.targetSymbol
+          targetSymbol: params.targetSymbol,
+          targetAmount: computedTargetAmount
         })
       });
 
       const data = await response.json();
       if (response.ok && data.success) {
         backendSuccess = true;
+        
+        // Optimistically apply state changes immediately
+        if (type === 'BUY') {
+          setUsdBalance((prev) => Math.max(0, prev - params.fiatAmount));
+          setHoldings((prev) => {
+            const exists = prev.find((h) => h.symbol === params.symbol);
+            if (exists) {
+              return prev.map((h) =>
+                h.symbol === params.symbol ? { ...h, amount: h.amount + params.amount } : h
+              );
+            } else {
+              return [...prev, { symbol: params.symbol, amount: params.amount, avgBuyPrice: coin.price || 0 }];
+            }
+          });
+        } else if (type === 'SELL') {
+          setHoldings((prev) =>
+            prev
+              .map((h) => (h.symbol === params.symbol ? { ...h, amount: Math.max(0, h.amount - params.amount) } : h))
+              .filter((h) => h.amount > 0)
+          );
+          setUsdBalance((prev) => prev + params.fiatAmount);
+        } else if (type === 'CONVERT') {
+          setHoldings((prev) => {
+            let updated = prev
+              .map((h) => (h.symbol === params.symbol ? { ...h, amount: Math.max(0, h.amount - params.amount) } : h))
+              .filter((h) => h.amount > 0);
+
+            const targetExists = updated.find((h) => h.symbol === targetSym);
+            if (targetExists) {
+              return updated.map((h) => (h.symbol === targetSym ? { ...h, amount: h.amount + computedTargetAmount } : h));
+            } else {
+              return [...updated, { symbol: targetSym, amount: computedTargetAmount, avgBuyPrice: targetCoin?.price || 0 }];
+            }
+          });
+        }
+
+        if (data.transaction) {
+          recordNewTransaction(data.transaction);
+        } else {
+          const generatedTxHash = `0x${Math.random().toString(16).substring(2, 12)}${Date.now().toString(16)}`;
+          const fallbackTx: Transaction = {
+            id: `tx-${type.toLowerCase()}-${Date.now()}`,
+            type,
+            assetSymbol: type === 'CONVERT' ? `${params.symbol} → ${targetSym}` : params.symbol,
+            amount: params.amount,
+            fiatAmount: params.fiatAmount,
+            timestamp: Date.now(),
+            status: 'completed',
+            hash: generatedTxHash,
+            details: type === 'BUY'
+              ? `Purchased ${params.amount.toFixed(6)} ${params.symbol}`
+              : type === 'SELL'
+              ? `Sold ${params.amount.toFixed(6)} ${params.symbol}`
+              : `Converted ${params.amount.toFixed(6)} ${params.symbol} into ${computedTargetAmount.toFixed(6)} ${targetSym}`
+          };
+          recordNewTransaction(fallbackTx);
+        }
+
         showToast(data.message || `Successfully executed ${type} trade!`, 'success');
         syncCoinbaseBalances();
         return;

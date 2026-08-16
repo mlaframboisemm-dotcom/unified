@@ -45,6 +45,24 @@ export default function TradeWidget({
 
   const [activeTab, setActiveTab] = useState<'buy' | 'sell' | 'convert'>('buy');
   
+  // One-Click Fast Execution State
+  const [isOneClickTrade, setIsOneClickTrade] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('cb_one_click_trade_enabled') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const handleToggleOneClick = (enabled: boolean) => {
+    setIsOneClickTrade(enabled);
+    try {
+      localStorage.setItem('cb_one_click_trade_enabled', String(enabled));
+    } catch (e) {
+      // ignore
+    }
+  };
+
   // Coin select states
   const [selectedCoinSymbol, setSelectedCoinSymbol] = useState(selectedAssetSymbol);
   const [convertFromSymbol, setConvertFromSymbol] = useState('BTC');
@@ -83,6 +101,16 @@ export default function TradeWidget({
       setSelectedCoinSymbol(selectedAssetSymbol);
     }
   }, [selectedAssetSymbol]);
+
+  // Auto-dismiss success notification banner after 5 seconds so trade form stays open and ready
+  useEffect(() => {
+    if (successMessage) {
+      const timer = setTimeout(() => {
+        setSuccessMessage(null);
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [successMessage]);
 
   const isCAD = citizenship === 'CA';
   const currencySymbol = isCAD ? 'CA$' : '$';
@@ -143,7 +171,14 @@ export default function TradeWidget({
     }
   };
 
-  const handleAction = () => {
+  const handlePresetFiat = (val: number) => {
+    if (activeTab === 'buy') {
+      setAmountFiat(val.toString());
+      setIsFiatInput(true);
+    }
+  };
+
+  const handleAction = async () => {
     setErrorMessage(null);
     setSuccessMessage(null);
 
@@ -161,17 +196,18 @@ export default function TradeWidget({
       }
 
       setLoading(true);
-      setTimeout(() => {
-        onExecuteTrade('BUY', {
+      try {
+        await onExecuteTrade('BUY', {
           symbol: selectedCoin.symbol,
           amount: crypto,
           fiatAmount: fiat / rate
         });
+        setSuccessMessage(`⚡ Successfully purchased ${crypto.toFixed(6)} ${selectedCoin.symbol} for ${currencySymbol}${totalCost.toFixed(2)}.`);
+      } catch (err: any) {
+        setErrorMessage(err?.message || 'Failed to execute buy order.');
+      } finally {
         setLoading(false);
-        setSuccessMessage(`Successfully purchased ${crypto.toFixed(6)} ${selectedCoin.symbol} for ${currencySymbol}${totalCost.toFixed(2)}.`);
-        setAmountFiat('100');
-        setAmountCrypto('');
-      }, 800);
+      }
     } 
     
     else if (activeTab === 'sell') {
@@ -187,13 +223,12 @@ export default function TradeWidget({
       }
 
       setLoading(true);
-      setTimeout(() => {
-        onExecuteTrade('SELL', {
+      try {
+        await onExecuteTrade('SELL', {
           symbol: selectedCoin.symbol,
           amount: cryptoAmount,
           fiatAmount: derivedFiatVal / rate
         });
-        setLoading(false);
 
         const payoutDestLabel = 
           sellPayoutMethod === 'bank' ? (isCAD ? 'RBC Checking (*4920) via Interac Direct Offramp' : 'Chase Checking (*4920) via Direct ACH Offramp')
@@ -201,10 +236,12 @@ export default function TradeWidget({
           : sellPayoutMethod === 'wise' ? 'Wise Multi-Currency International Bank Account'
           : `${isCAD ? 'CAD' : 'USD'} Cash Balance`;
 
-        setSuccessMessage(`Successfully sold ${cryptoAmount.toFixed(6)} ${selectedCoin.symbol} for ${currencySymbol}${totalCost.toFixed(2)}. Payout dispatched to ${payoutDestLabel}.`);
-        setAmountCrypto('');
-        setAmountFiat('');
-      }, 800);
+        setSuccessMessage(`⚡ Successfully sold ${cryptoAmount.toFixed(6)} ${selectedCoin.symbol} for ${currencySymbol}${totalCost.toFixed(2)}. Payout dispatched to ${payoutDestLabel}.`);
+      } catch (err: any) {
+        setErrorMessage(err?.message || 'Failed to execute sell order.');
+      } finally {
+        setLoading(false);
+      }
     } 
     
     else if (activeTab === 'convert') {
@@ -225,17 +262,19 @@ export default function TradeWidget({
       }
 
       setLoading(true);
-      setTimeout(() => {
-        onExecuteTrade('CONVERT', {
+      try {
+        await onExecuteTrade('CONVERT', {
           symbol: fromCoin.symbol,
           amount: fromAmount,
           fiatAmount: swapUSDValue,
           targetSymbol: toCoin.symbol
         });
+        setSuccessMessage(`⚡ Successfully swapped ${fromAmount} ${fromCoin.symbol} for ${targetCryptoAmount.toFixed(6)} ${toCoin.symbol}.`);
+      } catch (err: any) {
+        setErrorMessage(err?.message || 'Failed to execute swap order.');
+      } finally {
         setLoading(false);
-        setSuccessMessage(`Successfully swapped ${fromAmount} ${fromCoin.symbol} for ${targetCryptoAmount.toFixed(6)} ${toCoin.symbol}.`);
-        setConvertAmount('');
-      }, 800);
+      }
     }
   };
 
@@ -250,53 +289,95 @@ export default function TradeWidget({
 
   return (
     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden flex flex-col h-full min-h-[420px]" id="trade-widget">
-      {/* Tabs */}
-      <div className="flex border-b border-gray-100 bg-gray-50/50">
-        {[
-          { id: 'buy', label: 'Buy' },
-          { id: 'sell', label: 'Sell' },
-          { id: 'convert', label: 'Swap / Convert' }
-        ].map((tabItem) => (
-          <button
-            key={tabItem.id}
-            onClick={() => {
-              setActiveTab(tabItem.id as 'buy' | 'sell' | 'convert');
-              setErrorMessage(null);
-              setSuccessMessage(null);
-            }}
-            className={`flex-1 py-4 text-center text-xs sm:text-sm font-bold border-b-2 cursor-pointer transition-all ${
-              activeTab === tabItem.id
-                ? 'border-[#0052FF] text-[#0052FF] bg-white shadow-2xs'
-                : 'border-transparent text-gray-500 hover:text-gray-900 hover:bg-gray-50/80'
-            }`}
-          >
-            {tabItem.label}
-          </button>
-        ))}
+      {/* Tabs & 1-Click Toggle Header */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between border-b border-gray-100 bg-gray-50/50">
+        <div className="flex flex-1">
+          {[
+            { id: 'buy', label: 'Buy' },
+            { id: 'sell', label: 'Sell' },
+            { id: 'convert', label: 'Swap / Convert' }
+          ].map((tabItem) => (
+            <button
+              key={tabItem.id}
+              onClick={() => {
+                setActiveTab(tabItem.id as 'buy' | 'sell' | 'convert');
+                setErrorMessage(null);
+                setSuccessMessage(null);
+              }}
+              className={`flex-1 py-3.5 text-center text-xs sm:text-sm font-bold border-b-2 cursor-pointer transition-all ${
+                activeTab === tabItem.id
+                  ? 'border-[#0052FF] text-[#0052FF] bg-white shadow-2xs'
+                  : 'border-transparent text-gray-500 hover:text-gray-900 hover:bg-gray-50/80'
+              }`}
+            >
+              {tabItem.label}
+            </button>
+          ))}
+        </div>
+
+        {/* 1-Click Fast Execution Switch */}
+        <div className="flex items-center justify-between sm:justify-end px-3 py-2 border-t sm:border-t-0 border-gray-100 bg-white sm:bg-transparent">
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <span className={`text-[11px] font-bold ${isOneClickTrade ? 'text-[#0052FF]' : 'text-gray-500'}`}>
+              ⚡ 1-Click Trade
+            </span>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={isOneClickTrade}
+              onClick={() => handleToggleOneClick(!isOneClickTrade)}
+              className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors cursor-pointer ${
+                isOneClickTrade ? 'bg-[#0052FF]' : 'bg-gray-300'
+              }`}
+            >
+              <span
+                className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
+                  isOneClickTrade ? 'translate-x-4' : 'translate-x-1'
+                }`}
+              />
+            </button>
+          </label>
+        </div>
       </div>
 
       {/* Widget Body */}
       <div className="p-5 sm:p-6 flex-1 flex flex-col justify-between">
-        {successMessage ? (
-          <div className="flex-1 flex flex-col items-center justify-center text-center space-y-4 py-8 animate-fade-in">
-            <CheckCircle2 className="h-14 w-14 text-emerald-500" />
-            <div>
-              <h3 className="text-lg font-bold text-gray-900">Trade Executed</h3>
-              <p className="text-sm text-gray-600 mt-2 max-w-xs mx-auto">
-                {successMessage}
-              </p>
+        {/* 1-Click Fast Execution Status Banner */}
+        {isOneClickTrade && (
+          <div className="mb-3 p-2 bg-blue-50 border border-blue-100 rounded-xl flex items-center justify-between text-xs text-blue-800 font-medium animate-fade-in">
+            <span className="flex items-center gap-1.5 font-semibold">
+              <span className="w-2 h-2 rounded-full bg-blue-600 animate-pulse" />
+              1-Click Fast Trade Active — Instant routing enabled
+            </span>
+            <span className="text-[10px] bg-white text-blue-600 font-bold px-2 py-0.5 rounded-md border border-blue-200">
+              Zero Delay
+            </span>
+          </div>
+        )}
+
+        {/* Inline Confirmed Notification (Non-blocking: Keeps trade form open and ready) */}
+        {successMessage && (
+          <div className="mb-4 bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-xl p-3.5 flex items-start justify-between gap-2 animate-fade-in shadow-xs">
+            <div className="flex items-start gap-2.5">
+              <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+              <div>
+                <span className="text-xs font-bold block text-emerald-950">Trade Confirmed</span>
+                <p className="text-xs text-emerald-800 font-medium">{successMessage}</p>
+              </div>
             </div>
             <button
+              type="button"
               onClick={() => setSuccessMessage(null)}
-              className="px-6 py-2.5 bg-[#0052FF] text-white text-sm font-semibold rounded-xl hover:bg-blue-700 cursor-pointer transition-colors shadow-xs"
+              className="text-emerald-700 hover:text-emerald-900 p-1 text-xs font-bold cursor-pointer"
             >
-              Done
+              ✕
             </button>
           </div>
-        ) : (
-          <div className="space-y-4 flex-1 flex flex-col justify-between">
-            {/* Input and Coins Selectors */}
-            <div className="space-y-3">
+        )}
+
+        <div className="space-y-4 flex-1 flex flex-col justify-between">
+          {/* Input and Coins Selectors */}
+          <div className="space-y-3">
               {/* Asset Selector for Buy/Sell */}
               {activeTab !== 'convert' ? (
                 <div className="space-y-2 mb-3">
@@ -668,7 +749,6 @@ export default function TradeWidget({
               </button>
             </div>
           </div>
-        )}
       </div>
     </div>
   );

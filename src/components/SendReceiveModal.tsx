@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
-import { X, ArrowUpRight, ArrowDownLeft, CheckCircle2, Copy, RefreshCw, Smartphone, QrCode, Mail, Wallet, Plus, ShieldCheck, ExternalLink, Check } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { X, ArrowUpRight, ArrowDownLeft, CheckCircle2, Copy, RefreshCw, Smartphone, QrCode, Mail, Wallet, Plus, ShieldCheck, ExternalLink, Check, Fuel, Zap, Globe, Gauge } from 'lucide-react';
 import { Coin, Holding } from '../types';
 import { getAssetLegitimacyInfo } from '../lib/assetLegitimacy';
+import { recognizeNetwork, calculateAutomatedGas, resolveTokenInfo, UNIVERSAL_TOKEN_REGISTRY, GasCalculationResult } from '../lib/token-network-gas';
 
 interface SendReceiveModalProps {
   coins: Coin[];
@@ -31,8 +32,9 @@ export default function SendReceiveModal({
   // Send States
   const [sendSymbol, setSendSymbol] = useState('BTC');
   const [sendAmount, setSendAmount] = useState('100');
-  const [recipient, setRecipient] = useState('friend@example.com');
+  const [recipient, setRecipient] = useState('0x71C7656EC7ab88b098defB751B7401B5f6d1476B');
   const [isFiat, setIsFiat] = useState(true);
+  const [gasTier, setGasTier] = useState<'economy' | 'standard' | 'fast' | 'instant'>('standard');
 
   // Receive States
   const [receiveSymbol, setReceiveSymbol] = useState('BTC');
@@ -43,39 +45,61 @@ export default function SendReceiveModal({
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
+  // Derive coins map
+  const coinPriceMap = useMemo(() => {
+    const map: Record<string, number> = {};
+    coins.forEach(c => { map[c.symbol] = c.price; });
+    return map;
+  }, [coins]);
+
+  // Derive user gas balances
+  const userGasBalances = useMemo(() => {
+    const map: Record<string, number> = {};
+    holdings.forEach(h => { map[h.symbol] = h.amount; });
+    return map;
+  }, [holdings]);
+
   if (!isOpen) return null;
 
-  if (!coins || coins.length === 0) {
-    return (
-      <div className="fixed inset-0 z-50 overflow-y-auto">
-        <div className="fixed inset-0 bg-gray-900/40 backdrop-blur-xs" onClick={onClose} />
-        <div className="flex min-h-full items-center justify-center p-4">
-          <div className="relative transform overflow-hidden rounded-2xl bg-white p-6 shadow-xl w-full max-w-md flex flex-col items-center justify-center text-center py-12 min-h-[400px]">
-            <div className="w-8 h-8 border-2 border-[#0052FF] border-t-transparent rounded-full animate-spin mb-4" />
-            <p className="text-xs text-gray-500 font-semibold">Loading live market rates...</p>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  const currentCoin = coins.find((c) => c.symbol === (action === 'send' ? sendSymbol : receiveSymbol)) || {
+    symbol: action === 'send' ? sendSymbol : receiveSymbol,
+    name: action === 'send' ? sendSymbol : receiveSymbol,
+    price: coinPriceMap[action === 'send' ? sendSymbol : receiveSymbol] || 1,
+    change24h: 0,
+    volume24h: 0,
+    marketCap: 0,
+    high24h: 0,
+    low24h: 0
+  };
 
-  const currentCoin = coins.find((c) => c.symbol === (action === 'send' ? sendSymbol : receiveSymbol)) || coins[0];
   const currentHolding = holdings.find((h) => h.symbol === sendSymbol) || { symbol: sendSymbol, amount: 0 };
 
   // Calculate fiat to crypto conversion
   const sendAmountNum = parseFloat(sendAmount) || 0;
-  const convertedCryptoAmount = isFiat ? sendAmountNum / currentCoin.price : sendAmountNum;
-  const convertedFiatAmount = isFiat ? sendAmountNum : sendAmountNum * currentCoin.price;
+  const currentCoinPrice = currentCoin.price || 1;
+  const convertedCryptoAmount = isFiat ? sendAmountNum / currentCoinPrice : sendAmountNum;
+  const convertedFiatAmount = isFiat ? sendAmountNum : sendAmountNum * currentCoinPrice;
+
+  // Auto-recognize recipient network
+  const recipientNetwork = recognizeNetwork(recipient);
+  const sendTokenInfo = resolveTokenInfo(sendSymbol);
+  const receiveTokenInfo = resolveTokenInfo(receiveSymbol);
+
+  // Auto-calculated Gas
+  const gasEstimate: GasCalculationResult = calculateAutomatedGas(
+    sendSymbol,
+    userGasBalances,
+    coinPriceMap,
+    gasTier
+  );
 
   // Render a wallet address based on the selected receive coin
   const getWalletAddress = (symbol: string) => {
-    switch (symbol) {
-      case 'BTC': return 'bc1q9rny26szrgl26u64mdg0cuhvpt2p77jwh792ka';
-      case 'ETH': return '0x71C7656EC7ab88b098defB751B7401B5f6d1476B';
-      case 'SOL': return 'FvJDg947zY8f4L6kSghB8b9uUv9T8ZzK1C2xL7N3aU';
-      case 'XRP': return 'rEb8TK3gYQCfyAam7C16m6W8ZfS23nVTwk';
-      default: return '0x39a1D8B4eC6294D290F571bF8C28b173Fdb920a6';
-    }
+    const token = resolveTokenInfo(symbol);
+    if (token.network.includes('Bitcoin')) return 'bc1q9rny26szrgl26u64mdg0cuhvpt2p77jwh792ka';
+    if (token.network.includes('Solana')) return 'FvJDg947zY8f4L6kSghB8b9uUv9T8ZzK1C2xL7N3aU';
+    if (token.network.includes('XRP')) return 'rEb8TK3gYQCfyAam7C16m6W8ZfS23nVTwk';
+    return '0x71C7656EC7ab88b098defB751B7401B5f6d1476B';
   };
 
   const handleSendSubmit = () => {
@@ -99,15 +123,16 @@ export default function SendReceiveModal({
 
     setLoading(true);
     setTimeout(() => {
+      const detailsMsg = `Sent ${convertedCryptoAmount.toFixed(6)} ${sendSymbol} to ${recipient.substring(0, 16)}... via ${sendTokenInfo.network} (Gas Fee: ${gasEstimate.gasFeeCrypto.toFixed(6)} ${gasEstimate.gasToken})`;
       onExecuteTransaction(
         'SEND',
         sendSymbol,
         convertedCryptoAmount,
         convertedFiatAmount,
-        `Sent to ${recipient}`
+        detailsMsg
       );
       setLoading(false);
-      setSuccessMsg(`Successfully sent ${convertedCryptoAmount.toFixed(6)} ${sendSymbol} ($${convertedFiatAmount.toFixed(2)}) to ${recipient}.`);
+      setSuccessMsg(`Successfully broadcast on ${sendTokenInfo.network}! Sent ${convertedCryptoAmount.toFixed(6)} ${sendSymbol} ($${convertedFiatAmount.toFixed(2)}) to ${recipient}.`);
       setSendAmount('100');
     }, 1200);
   };
@@ -122,26 +147,35 @@ export default function SendReceiveModal({
   const handleRecordDeposit = (depositAmount: number) => {
     setLoading(true);
     setTimeout(() => {
-      const valueUSD = depositAmount * currentCoin.price;
+      const valueUSD = depositAmount * (currentCoin.price || 1);
+      const detailsMsg = `Received external blockchain deposit of ${depositAmount} ${receiveSymbol} on ${receiveTokenInfo.network}`;
       onExecuteTransaction(
         'RECEIVE',
         receiveSymbol,
         depositAmount,
         valueUSD,
-        `Received external blockchain deposit`
+        detailsMsg
       );
       setLoading(false);
-      setSuccessMsg(`Successfully deposited ${depositAmount} ${receiveSymbol} ($${valueUSD.toFixed(2)}) into your Coinbase account!`);
+      setSuccessMsg(`Successfully confirmed deposit of ${depositAmount} ${receiveSymbol} ($${valueUSD.toFixed(2)}) on ${receiveTokenInfo.network}!`);
     }, 1000);
   };
+
+  // Combined list of tokens
+  const allAvailableTokens = useMemo(() => {
+    const set = new Set<string>();
+    coins.forEach(c => set.add(c.symbol));
+    Object.keys(UNIVERSAL_TOKEN_REGISTRY).forEach(sym => set.add(sym));
+    return Array.from(set);
+  }, [coins]);
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto" id="send-receive-modal">
       {/* Backdrop */}
-      <div className="fixed inset-0 bg-gray-900/40 backdrop-blur-xs" onClick={onClose} />
+      <div className="fixed inset-0 bg-gray-900/50 backdrop-blur-xs" onClick={onClose} />
 
       <div className="flex min-h-full items-center justify-center p-4">
-        <div className="relative transform overflow-hidden rounded-2xl bg-white p-6 shadow-xl transition-all w-full max-w-md animate-slide-up">
+        <div className="relative transform overflow-hidden rounded-2xl bg-white p-6 shadow-2xl transition-all w-full max-w-lg animate-slide-up border border-gray-100">
           
           {/* Header */}
           <div className="flex justify-between items-center border-b border-gray-100 pb-3 mb-4">
@@ -153,10 +187,10 @@ export default function SendReceiveModal({
                   setErrorMsg(null);
                 }}
                 className={`px-4 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
-                  action === 'send' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'
+                  action === 'send' ? 'bg-white text-gray-900 shadow-xs' : 'text-gray-500 hover:text-gray-800'
                 }`}
               >
-                Send
+                Send Crypto
               </button>
               <button
                 onClick={() => {
@@ -165,10 +199,10 @@ export default function SendReceiveModal({
                   setErrorMsg(null);
                 }}
                 className={`px-4 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
-                  action === 'receive' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'
+                  action === 'receive' ? 'bg-white text-gray-900 shadow-xs' : 'text-gray-500 hover:text-gray-800'
                 }`}
               >
-                Receive
+                Receive Crypto
               </button>
             </div>
             <button
@@ -182,16 +216,16 @@ export default function SendReceiveModal({
           {/* Body */}
           {successMsg ? (
             <div className="flex flex-col items-center justify-center text-center py-6 space-y-4">
-              <CheckCircle2 className="h-14 w-14 text-green-500" />
+              <CheckCircle2 className="h-14 w-14 text-emerald-500" />
               <div>
-                <h4 className="text-base font-bold text-gray-900">Transaction Confirmed</h4>
-                <p className="text-xs sm:text-sm text-gray-500 mt-2 max-w-xs">{successMsg}</p>
+                <h4 className="text-base font-bold text-gray-900">Immutable Ledger Confirmed</h4>
+                <p className="text-xs text-gray-500 mt-2 max-w-sm">{successMsg}</p>
               </div>
               <button
                 onClick={() => setSuccessMsg(null)}
                 className="px-6 py-2 bg-[#0052FF] hover:bg-blue-700 text-white text-xs sm:text-sm font-bold rounded-lg cursor-pointer transition-colors"
               >
-                Go Back
+                Execute Another Transaction
               </button>
             </div>
           ) : action === 'send' ? (
@@ -200,55 +234,71 @@ export default function SendReceiveModal({
               {/* Asset selection */}
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
-                  <label className="text-[10px] font-bold text-gray-400 uppercase block">Pay with</label>
-                  {(() => {
-                    const leg = getAssetLegitimacyInfo(sendSymbol);
-                    return (
-                      <span className="text-[10px] bg-emerald-50 text-emerald-700 font-bold px-2 py-0.5 rounded border border-emerald-200/60 flex items-center gap-1">
-                        <ShieldCheck className="w-3 h-3 text-emerald-600" />
-                        {leg.legitimacyBadge}
-                      </span>
-                    );
-                  })()}
+                  <label className="text-[10px] font-bold text-gray-400 uppercase block">Select Token to Send</label>
+                  <span className="text-[10px] bg-emerald-50 text-emerald-700 font-bold px-2 py-0.5 rounded border border-emerald-200/60 flex items-center gap-1">
+                    <ShieldCheck className="w-3 h-3 text-emerald-600" />
+                    {sendTokenInfo.legitimacyBadge}
+                  </span>
                 </div>
                 <select
                   value={sendSymbol}
                   onChange={(e) => setSendSymbol(e.target.value)}
                   className="w-full bg-gray-50 border border-gray-200 text-gray-800 text-xs sm:text-sm font-semibold px-3 py-2 rounded-xl focus:outline-none cursor-pointer"
                 >
-                  {coins.map((coin) => {
-                    const held = holdings.find((h) => h.symbol === coin.symbol) || { amount: 0 };
-                    const leg = getAssetLegitimacyInfo(coin.symbol);
+                  {allAvailableTokens.map((sym) => {
+                    const held = holdings.find((h) => h.symbol === sym) || { amount: 0 };
+                    const token = resolveTokenInfo(sym);
                     return (
-                      <option key={coin.symbol} value={coin.symbol}>
-                        {coin.name} ({coin.symbol}) — {held.amount.toFixed(4)} held • {leg.formattedAddress}
+                      <option key={sym} value={sym}>
+                        {token.name} ({sym}) — {held.amount.toFixed(4)} held • {token.network}
                       </option>
                     );
                   })}
                 </select>
-                {(() => {
-                  const leg = getAssetLegitimacyInfo(sendSymbol);
-                  return (
-                    <div className="p-2 bg-slate-900 text-slate-100 rounded-lg flex items-center justify-between text-[10px] font-mono">
-                      <span className="truncate text-blue-300 font-bold mr-1">Addr: {leg.contractAddress}</span>
-                      <span className="text-slate-400 text-[9px] shrink-0 font-sans font-bold">{leg.verifierName}</span>
-                    </div>
-                  );
-                })()}
+                
+                {/* Linked Contract Address Display */}
+                <div className="p-2.5 bg-slate-900 text-slate-100 rounded-xl flex items-center justify-between text-[11px] font-mono shadow-inner">
+                  <div className="truncate mr-2">
+                    <span className="text-slate-400 block text-[9px] uppercase font-sans font-bold">Linked Contract / L1 Address</span>
+                    <span className="text-blue-300 font-semibold">{sendTokenInfo.contractAddress}</span>
+                  </div>
+                  <a
+                    href={sendTokenInfo.explorerTokenUrl || sendTokenInfo.explorerUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-xs bg-slate-800 hover:bg-slate-700 text-blue-400 px-2 py-1 rounded flex items-center gap-1 shrink-0 transition-colors"
+                  >
+                    <span>Explorer</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                </div>
               </div>
 
-              {/* Recipient info */}
-              <div>
-                <label className="text-[10px] font-bold text-gray-400 uppercase block mb-1">To (Email or Address)</label>
+              {/* Recipient info & Auto Network Recognition */}
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold text-gray-400 uppercase block">Recipient Address or Identifier</label>
                 <div className="relative">
                   <Mail className="absolute left-3 top-3 h-4.5 w-4.5 text-gray-400" />
                   <input
                     type="text"
-                    placeholder="Enter email or 0x address"
+                    placeholder="Enter 0x address, Bitcoin bc1, Solana address, or email"
                     value={recipient}
                     onChange={(e) => setRecipient(e.target.value)}
-                    className="w-full bg-gray-50 border border-gray-200 text-gray-800 text-xs sm:text-sm pl-10 pr-3 py-2.5 rounded-xl focus:outline-none focus:ring-1 focus:ring-[#0052FF]"
+                    className="w-full bg-gray-50 border border-gray-200 text-gray-800 text-xs font-mono pl-10 pr-3 py-2.5 rounded-xl focus:outline-none focus:ring-1 focus:ring-[#0052FF]"
                   />
+                </div>
+                {/* Auto Network Recognition Badge */}
+                <div className="p-2 bg-blue-50 border border-blue-100 rounded-lg flex items-center justify-between text-xs text-blue-900">
+                  <div className="flex items-center gap-1.5">
+                    <Globe className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                    <div>
+                      <span className="font-bold text-[11px] block">{recipientNetwork.networkName}</span>
+                      <span className="text-[10px] text-blue-600 block">{recipientNetwork.matchedPattern}</span>
+                    </div>
+                  </div>
+                  <span className="text-[10px] font-bold bg-blue-200/70 text-blue-800 px-1.5 py-0.5 rounded">
+                    Auto-Recognized
+                  </span>
                 </div>
               </div>
 
@@ -256,7 +306,7 @@ export default function SendReceiveModal({
               <div className="border border-gray-200 rounded-xl p-4 bg-gray-50/50">
                 <div className="flex justify-between items-center">
                   <div className="flex-1">
-                    <label className="text-[10px] font-bold text-gray-400 uppercase block mb-1">Amount</label>
+                    <label className="text-[10px] font-bold text-gray-400 uppercase block mb-1">Send Amount</label>
                     <div className="flex items-center">
                       {isFiat && <span className="text-xl font-bold text-gray-500 mr-0.5">$</span>}
                       <input
@@ -270,15 +320,52 @@ export default function SendReceiveModal({
                     <span className="text-xs text-gray-400 mt-1 block">
                       {isFiat
                         ? `≈ ${convertedCryptoAmount.toFixed(6)} ${sendSymbol}`
-                        : `≈ $${convertedFiatAmount.toFixed(2)}`}
+                        : `≈ $${convertedFiatAmount.toFixed(2)} USD`}
                     </span>
                   </div>
                   <button
                     onClick={() => setIsFiat(!isFiat)}
-                    className="p-2 bg-white border border-gray-100 rounded-full text-gray-500 hover:text-gray-900 cursor-pointer"
+                    className="p-2 bg-white border border-gray-100 rounded-full text-gray-500 hover:text-gray-900 cursor-pointer shadow-xs"
+                    title="Toggle Fiat / Crypto input"
                   >
                     <RefreshCw className="h-4 w-4" />
                   </button>
+                </div>
+              </div>
+
+              {/* Automated Gas & Network Fee Engine */}
+              <div className="p-3 bg-gray-50 border border-gray-200 rounded-xl space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <Fuel className="w-4 h-4 text-orange-500" />
+                    <span className="text-xs font-bold text-gray-800">Automated Network Gas Fee</span>
+                  </div>
+                  <span className="text-xs font-mono font-bold text-gray-900">
+                    {gasEstimate.gasFeeCrypto.toFixed(6)} {gasEstimate.gasToken} (~${gasEstimate.gasFeeUsd.toFixed(2)})
+                  </span>
+                </div>
+
+                {/* Gas Speed Tiers */}
+                <div className="grid grid-cols-4 gap-1.5 pt-1">
+                  {(['economy', 'standard', 'fast', 'instant'] as const).map((tier) => (
+                    <button
+                      key={tier}
+                      type="button"
+                      onClick={() => setGasTier(tier)}
+                      className={`py-1.5 px-2 rounded-lg text-[10px] font-bold capitalize transition-all cursor-pointer ${
+                        gasTier === tier
+                          ? 'bg-[#0052FF] text-white shadow-xs'
+                          : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-100'
+                      }`}
+                    >
+                      {tier}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="flex items-center justify-between text-[10px] text-gray-500 pt-1 border-t border-gray-200">
+                  <span>Gas Limit: {gasEstimate.gasLimit} • Price: {gasEstimate.gasPriceGwei.toFixed(1)} Gwei</span>
+                  <span>Est. Time: ~{gasEstimate.estimatedTimeSeconds}s</span>
                 </div>
               </div>
 
@@ -291,57 +378,60 @@ export default function SendReceiveModal({
               <button
                 onClick={handleSendSubmit}
                 disabled={loading}
-                className="w-full py-3 bg-[#0052FF] hover:bg-blue-700 disabled:bg-gray-300 text-white font-bold rounded-xl transition-colors text-center text-sm cursor-pointer"
+                className="w-full py-3 bg-[#0052FF] hover:bg-blue-700 disabled:bg-gray-300 text-white font-bold rounded-xl transition-colors text-center text-sm cursor-pointer shadow-sm"
               >
-                {loading ? 'Executing Secure Send...' : `Send ${sendSymbol}`}
+                {loading ? 'Validating & Broadcasting On-Chain...' : `Execute & Record ${sendSymbol} Transfer`}
               </button>
             </div>
           ) : (
             /* RECEIVE CRYPTO PANEL */
             <div className="space-y-4 flex flex-col items-center text-center">
-              <div className="w-full space-y-1.5">
+              <div className="w-full space-y-1.5 text-left">
                 <div className="flex items-center justify-between">
                   <label className="text-[10px] font-bold text-gray-400 uppercase block">Select Asset to Receive</label>
-                  {(() => {
-                    const leg = getAssetLegitimacyInfo(receiveSymbol);
-                    return (
-                      <span className="text-[10px] bg-emerald-50 text-emerald-700 font-bold px-2 py-0.5 rounded border border-emerald-200/60 flex items-center gap-1">
-                        <ShieldCheck className="w-3 h-3 text-emerald-600" />
-                        {leg.legitimacyBadge}
-                      </span>
-                    );
-                  })()}
+                  <span className="text-[10px] bg-emerald-50 text-emerald-700 font-bold px-2 py-0.5 rounded border border-emerald-200/60 flex items-center gap-1">
+                    <ShieldCheck className="w-3 h-3 text-emerald-600" />
+                    {receiveTokenInfo.legitimacyBadge}
+                  </span>
                 </div>
                 <select
                   value={receiveSymbol}
                   onChange={(e) => setReceiveSymbol(e.target.value)}
                   className="w-full bg-gray-50 border border-gray-200 text-gray-800 text-xs sm:text-sm font-semibold px-4 py-2 rounded-xl focus:outline-none cursor-pointer"
                 >
-                  {coins.map((coin) => {
-                    const leg = getAssetLegitimacyInfo(coin.symbol);
+                  {allAvailableTokens.map((sym) => {
+                    const token = resolveTokenInfo(sym);
                     return (
-                      <option key={coin.symbol} value={coin.symbol}>
-                        {coin.name} ({coin.symbol}) • {leg.formattedAddress}
+                      <option key={sym} value={sym}>
+                        {token.name} ({sym}) • {token.network}
                       </option>
                     );
                   })}
                 </select>
-                {(() => {
-                  const leg = getAssetLegitimacyInfo(receiveSymbol);
-                  return (
-                    <div className="p-2 bg-slate-900 text-slate-100 rounded-lg flex items-center justify-between text-[10px] font-mono text-left">
-                      <span className="truncate text-blue-300 font-bold mr-1">Token Contract: {leg.contractAddress}</span>
-                      <span className="text-slate-400 text-[9px] shrink-0 font-sans font-bold">{leg.verifierName}</span>
-                    </div>
-                  );
-                })()}
+                
+                {/* Linked Contract Address */}
+                <div className="p-2.5 bg-slate-900 text-slate-100 rounded-xl flex items-center justify-between text-[11px] font-mono text-left shadow-inner">
+                  <div className="truncate mr-2">
+                    <span className="text-slate-400 block text-[9px] uppercase font-sans font-bold">Contract / Protocol Identifier</span>
+                    <span className="text-blue-300 font-semibold">{receiveTokenInfo.contractAddress}</span>
+                  </div>
+                  <a
+                    href={receiveTokenInfo.explorerTokenUrl || receiveTokenInfo.explorerUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-xs bg-slate-800 hover:bg-slate-700 text-blue-400 px-2 py-1 rounded flex items-center gap-1 shrink-0 transition-colors"
+                  >
+                    <span>Explorer</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                </div>
               </div>
 
               {/* QR Code display */}
-              <div className="bg-white p-4 border border-gray-100 rounded-2xl shadow-xs">
+              <div className="bg-white p-4 border border-gray-100 rounded-2xl shadow-sm">
                 <div className="w-40 h-40 bg-gray-50 flex items-center justify-center rounded-xl border border-dashed border-gray-200 relative">
                   <QrCode className="h-28 w-28 text-gray-900" />
-                  <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-[#0052FF] border-2 border-white flex items-center justify-center text-white text-[10px] font-bold">
+                  <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-[#0052FF] border-2 border-white flex items-center justify-center text-white text-[10px] font-bold shadow-sm">
                     C
                   </div>
                 </div>
@@ -349,24 +439,24 @@ export default function SendReceiveModal({
 
               {/* Secure Address Copy section */}
               <div className="w-full">
-                <span className="text-[10px] font-bold text-gray-400 uppercase block mb-1">Your {receiveSymbol} Wallet Address</span>
+                <span className="text-[10px] font-bold text-gray-400 uppercase block mb-1 text-left">Your {receiveSymbol} Deposit Address ({receiveTokenInfo.network})</span>
                 <div className="flex bg-gray-50 p-2 rounded-xl border border-gray-200 items-center justify-between">
-                  <p className="text-[11px] text-gray-600 font-mono font-semibold truncate flex-1 px-2 text-left">
+                  <p className="text-[11px] text-gray-700 font-mono font-semibold truncate flex-1 px-2 text-left">
                     {getWalletAddress(receiveSymbol)}
                   </p>
                   <button
                     onClick={handleCopyAddress}
-                    className="p-1.5 bg-white hover:bg-gray-100 rounded-lg text-gray-500 hover:text-gray-900 transition-all border border-gray-100 cursor-pointer"
+                    className="p-1.5 bg-white hover:bg-gray-100 rounded-lg text-gray-600 hover:text-gray-900 transition-all border border-gray-200 cursor-pointer shadow-2xs"
                     title="Copy wallet address"
                   >
-                    {copied ? <span className="text-[10px] text-green-600 font-bold px-1">Copied!</span> : <Copy className="h-4 w-4" />}
+                    {copied ? <span className="text-[10px] text-emerald-600 font-bold px-1">Copied!</span> : <Copy className="h-4 w-4" />}
                   </button>
                 </div>
               </div>
 
-              {/* Quick deposit helper */}
-              <div className="w-full pt-3 border-t border-gray-100 mt-2">
-                <span className="text-[10px] font-bold text-gray-400 uppercase block mb-2">Record Incoming Deposit</span>
+              {/* Quick deposit simulator & record into ledger */}
+              <div className="w-full pt-3 border-t border-gray-100 mt-2 text-left">
+                <span className="text-[10px] font-bold text-gray-400 uppercase block mb-2">Simulate Blockchain Inbound Deposit</span>
                 <div className="grid grid-cols-2 gap-2">
                   <button
                     onClick={() => handleRecordDeposit(receiveSymbol === 'BTC' ? 0.05 : receiveSymbol === 'ETH' ? 0.5 : 5.0)}
@@ -377,12 +467,12 @@ export default function SendReceiveModal({
                     <span>+{receiveSymbol === 'BTC' ? '0.05' : receiveSymbol === 'ETH' ? '0.5' : '5.0'} {receiveSymbol}</span>
                   </button>
                   <button
-                    onClick={() => handleRecordDeposit(receiveSymbol === 'BTC' ? 0.2 : receiveSymbol === 'ETH' ? 2.0 : 20.0)}
+                    onClick={() => handleRecordDeposit(receiveSymbol === 'BTC' ? 0.25 : receiveSymbol === 'ETH' ? 2.5 : 25.0)}
                     disabled={loading}
                     className="px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-800 text-[11px] font-bold rounded-lg cursor-pointer transition-all flex items-center justify-center space-x-1"
                   >
                     <Plus className="h-3 w-3" />
-                    <span>+{receiveSymbol === 'BTC' ? '0.2' : receiveSymbol === 'ETH' ? '2.0' : '20.0'} {receiveSymbol}</span>
+                    <span>+{receiveSymbol === 'BTC' ? '0.25' : receiveSymbol === 'ETH' ? '2.5' : '25.0'} {receiveSymbol}</span>
                   </button>
                 </div>
               </div>

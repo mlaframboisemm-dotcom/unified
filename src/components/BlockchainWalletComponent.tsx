@@ -1,7 +1,16 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { ethers } from 'ethers';
 import { getAssetLegitimacyInfo } from '../lib/assetLegitimacy';
 import RecoveryKeyBackupWizard, { BackupWallet } from './RecoveryKeyBackupWizard';
+import {
+  UNIVERSAL_TOKEN_REGISTRY,
+  calculateAutomatedGas,
+  recognizeNetwork,
+  buildImmutableLedgerEntry,
+  resolveTokenInfo,
+  RecognizedNetwork,
+  GasCalculationResult
+} from '../lib/token-network-gas';
 import {
   Wallet,
   ArrowUpRight,
@@ -33,7 +42,8 @@ import {
   Globe,
   Fuel,
   CheckCircle,
-  FileCheck
+  FileCheck,
+  Zap
 } from 'lucide-react';
 
 interface TokenBalance {
@@ -191,6 +201,8 @@ export interface BlockchainWalletComponentProps {
   privateKey?: string;
   rpcUrl?: string;
   onTransactionSuccess?: (txHash: string) => void;
+  onRecordTransaction?: (tx: any) => void;
+  onAddTransaction?: (type: 'SEND' | 'RECEIVE' | 'BUY' | 'SELL' | 'CONVERT', symbol: string, amount: number, fiatAmount: number, details: string) => void;
   className?: string;
 }
 
@@ -199,6 +211,8 @@ export default function BlockchainWalletComponent({
   privateKey: initialPrivateKey,
   rpcUrl = 'https://ethereum-rpc.publicnode.com',
   onTransactionSuccess,
+  onRecordTransaction,
+  onAddTransaction,
   className = ''
 }: BlockchainWalletComponentProps) {
   // Active Network State
@@ -282,6 +296,17 @@ export default function BlockchainWalletComponent({
   // ETH Price Reference
   const [ethPriceUsd, setEthPriceUsd] = useState<number>(3350);
 
+  // Automated Network Recognition for Recipient Address
+  const recognizedRecipientNetwork: RecognizedNetwork = useMemo(() => {
+    return recognizeNetwork(recipientAddress);
+  }, [recipientAddress]);
+
+  // Automated Live Gas & Sufficiency Calculation
+  const liveGasEstimation: GasCalculationResult = useMemo(() => {
+    const nativeBal = parseFloat(ethBalance) || 0;
+    return calculateAutomatedGas(selectedToken, sendAmount, selectedNetwork.name, nativeBal);
+  }, [selectedToken, sendAmount, selectedNetwork.name, ethBalance]);
+
   // Helper to get unit price of any token
   const getTokenUnitPrice = useCallback((symbol: string): number => {
     if (symbol === 'ETH') return ethPriceUsd;
@@ -332,6 +357,29 @@ export default function BlockchainWalletComponent({
       setShowPrivateKeyInput(true);
       setIsKeyRevealed(true);
 
+      // Persist newly generated address into Address Hub repository permanently
+      try {
+        const savedAddrs = localStorage.getItem('cb_addresses');
+        let parsedAddrs: any[] = [];
+        if (savedAddrs) {
+          try { parsedAddrs = JSON.parse(savedAddrs); } catch {}
+        }
+        if (!parsedAddrs.some((a: any) => a.address?.toLowerCase() === randomWallet.address.toLowerCase())) {
+          parsedAddrs.push({
+            id: `addr-${Date.now()}`,
+            coinSymbol: selectedNetwork.symbol || 'ETH',
+            address: randomWallet.address,
+            label: 'Web3 Self-Custody Account',
+            createdAt: Date.now(),
+            isGenerated: true,
+            balance: 0
+          });
+          localStorage.setItem('cb_addresses', JSON.stringify(parsedAddrs));
+        }
+      } catch (e) {
+        console.warn('Address persistence notice:', e);
+      }
+
       // Setup backup wizard
       setBackupWalletData({
         id: `wallet_${Date.now()}`,
@@ -356,6 +404,27 @@ export default function BlockchainWalletComponent({
         const derivedWallet = new ethers.Wallet(keyStr.trim());
         setWalletAddress(derivedWallet.address);
         localStorage.setItem('web3_active_private_key', keyStr.trim());
+
+        // Persist newly configured address permanently into Address Hub
+        try {
+          const savedAddrs = localStorage.getItem('cb_addresses');
+          let parsedAddrs: any[] = [];
+          if (savedAddrs) {
+            try { parsedAddrs = JSON.parse(savedAddrs); } catch {}
+          }
+          if (!parsedAddrs.some((a: any) => a.address?.toLowerCase() === derivedWallet.address.toLowerCase())) {
+            parsedAddrs.push({
+              id: `addr-${Date.now()}`,
+              coinSymbol: selectedNetwork.symbol || 'ETH',
+              address: derivedWallet.address,
+              label: 'Custom Web3 Imported Account',
+              createdAt: Date.now(),
+              isGenerated: false,
+              balance: 0
+            });
+            localStorage.setItem('cb_addresses', JSON.stringify(parsedAddrs));
+          }
+        } catch {}
       } catch {
         // invalid key string ignored
       }

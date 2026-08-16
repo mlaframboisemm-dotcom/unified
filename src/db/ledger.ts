@@ -650,7 +650,21 @@ class RelationalLedgerDatabase {
         return w;
       });
 
-      if (!found) throw new Error(`Wallet not found for asset ${assetSymbol}`);
+      if (!found) {
+        targetState.wallets.push({
+          id: `wallet-${userId}-${String(assetSymbol).toLowerCase()}`,
+          userId: String(userId),
+          assetSymbol: String(assetSymbol).toUpperCase(),
+          balance: parseFloat(newBalance) || 0,
+          publicAddressEthereum: '',
+          publicAddressBitcoin: '',
+          identityLocked: true,
+          productionMode: 'live',
+          blockchainLinked: true,
+          lockedToEmail: '',
+          lockedAt: new Date().toISOString()
+        });
+      }
       if (!this.transactionSnapshot) this.save();
       return { affectedRows: 1 };
     }

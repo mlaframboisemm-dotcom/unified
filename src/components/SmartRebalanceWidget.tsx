@@ -59,7 +59,24 @@ export default function SmartRebalanceWidget({
   const [isExecuting, setIsExecuting] = useState<string | null>(null);
   const [executionSuccess, setExecutionSuccess] = useState<string | null>(null);
   const [executionError, setExecutionError] = useState<string | null>(null);
-  const [isExpanded, setIsExpanded] = useState<boolean>(true);
+  const [isExpanded, setIsExpanded] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('cb_smart_rebalance_expanded');
+      return saved !== null ? saved === 'true' : true;
+    } catch {
+      return true;
+    }
+  });
+
+  const handleToggleExpanded = () => {
+    const nextState = !isExpanded;
+    setIsExpanded(nextState);
+    try {
+      localStorage.setItem('cb_smart_rebalance_expanded', String(nextState));
+    } catch (e) {
+      // ignore
+    }
+  };
 
   // Calculate Total Portfolio Value & Asset Allocations
   const portfolioAnalysis = useMemo(() => {
@@ -149,7 +166,7 @@ export default function SmartRebalanceWidget({
     try {
       if (sug.action === 'SELL_TO_CASH') {
         // Sell crypto to cash
-        onExecuteTrade('SELL', {
+        await onExecuteTrade('SELL', {
           symbol: sug.symbol,
           amount: parseFloat(sug.cryptoDiffAmount.toFixed(6)),
           fiatAmount: parseFloat(sug.fiatDiffUsd.toFixed(2))
@@ -164,7 +181,7 @@ export default function SmartRebalanceWidget({
             `Insufficient cash balance ($${usdBalance.toFixed(2)}) to execute $${sug.fiatDiffUsd.toFixed(2)} purchase.`
           );
         }
-        onExecuteTrade('BUY', {
+        await onExecuteTrade('BUY', {
           symbol: sug.symbol,
           amount: parseFloat(sug.cryptoDiffAmount.toFixed(6)),
           fiatAmount: parseFloat(sug.fiatDiffUsd.toFixed(2))
@@ -195,7 +212,7 @@ export default function SmartRebalanceWidget({
       const buys = actionable.filter((s) => s.action === 'BUY_WITH_CASH');
 
       for (const sell of sells) {
-        onExecuteTrade('SELL', {
+        await onExecuteTrade('SELL', {
           symbol: sell.symbol,
           amount: parseFloat(sell.cryptoDiffAmount.toFixed(6)),
           fiatAmount: parseFloat(sell.fiatDiffUsd.toFixed(2))
@@ -203,7 +220,7 @@ export default function SmartRebalanceWidget({
       }
 
       for (const buy of buys) {
-        onExecuteTrade('BUY', {
+        await onExecuteTrade('BUY', {
           symbol: buy.symbol,
           amount: parseFloat(buy.cryptoDiffAmount.toFixed(6)),
           fiatAmount: parseFloat(buy.fiatDiffUsd.toFixed(2))
@@ -247,7 +264,7 @@ export default function SmartRebalanceWidget({
 
         <button
           type="button"
-          onClick={() => setIsExpanded(!isExpanded)}
+          onClick={handleToggleExpanded}
           className="p-2 hover:bg-gray-100 rounded-xl text-gray-400 hover:text-gray-600 transition cursor-pointer"
         >
           {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
