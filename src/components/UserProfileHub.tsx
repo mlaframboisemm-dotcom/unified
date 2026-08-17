@@ -26,6 +26,7 @@ import {
 import OnboardingKyc from './OnboardingKyc';
 import GoogleDriveFolderHub from './GoogleDriveFolderHub';
 import RecoveryKeyBackupWizard, { BackupWallet } from './RecoveryKeyBackupWizard';
+import BitcoinSecurityAndReconciliationHub from './BitcoinSecurityAndReconciliationHub';
 
 interface UserProfileHubProps {
   userName: string;
@@ -50,7 +51,7 @@ export default function UserProfileHub({
   onOpenMonthlyReport,
   setCurrentTab
 }: UserProfileHubProps) {
-  const [activeSubTab, setActiveSubTab] = useState<'overview' | 'kyc' | 'security' | 'drive' | 'methods'>('overview');
+  const [activeSubTab, setActiveSubTab] = useState<'overview' | 'kyc' | 'security' | 'btc_vault' | 'drive' | 'methods'>('overview');
   const [showSeedPhrase, setShowSeedPhrase] = useState(false);
   const [showPrivateKey, setShowPrivateKey] = useState(false);
   const [copiedText, setCopiedText] = useState<string | null>(null);
@@ -200,6 +201,7 @@ export default function UserProfileHub({
           { id: 'overview', label: 'Profile Overview', icon: User },
           { id: 'kyc', label: 'Identity & Limits', icon: ShieldCheck },
           { id: 'security', label: 'Safety & Security', icon: Lock },
+          { id: 'btc_vault', label: 'Institutional Vault & Audit', icon: ShieldCheck },
           { id: 'drive', label: 'Google Workspace', icon: HardDrive },
           { id: 'methods', label: 'Payment Methods', icon: CreditCard }
         ].map((tab) => {
@@ -499,6 +501,13 @@ export default function UserProfileHub({
               </div>
 
               <div className="flex items-center gap-2 shrink-0">
+                <button
+                  onClick={() => setActiveSubTab('btc_vault')}
+                  className="px-3 py-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold text-xs rounded-xl shadow-xs cursor-pointer transition-all flex items-center gap-1.5"
+                >
+                  <ShieldCheck className="w-3.5 h-3.5" />
+                  <span>Cold Vault & Audit Hub ↗</span>
+                </button>
                 {isVaultUnlocked ? (
                   <>
                     <button
@@ -747,6 +756,15 @@ export default function UserProfileHub({
             )}
           </div>
         </div>
+      )}
+
+      {/* Tab Content: Bitcoin Institutional Vault & Reconciliation */}
+      {activeSubTab === 'btc_vault' && (
+        <BitcoinSecurityAndReconciliationHub
+          btcBalance={1280.50}
+          btcAddress="bc1qz8w9j7k6m5n4p3r2t1v0x9y8z7w6v5u"
+          btcPriceUsd={98450}
+        />
       )}
 
       {/* Tab Content 4: Google Workspace Drive */}

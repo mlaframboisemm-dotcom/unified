@@ -1,11 +1,11 @@
 {
   "users": [
     {
-      "id": "user_b557286e-8111-48eb-985b-e0fe00888178",
+      "id": "user_7b77846f-26dd-4520-862f-3a849b70991d",
       "name": "Secure Admin",
       "email": "admin@secure.local",
-      "passwordHash": "59cb9c77e2cac1be698c9a96f2c691a21744144a84257c7c4466c1f490d598294fb9b2fc420fc66d930151369b0692d0554ccfad23125bfd98d6882db343c9fe",
-      "salt": "efbab0a5f82bd78188d1a6eff859d7e3",
+      "passwordHash": "18daff5d196a8ad94c62d72920fc14d3453cd067aa936be4dc2fb3b1e9dcfe2b7469687341301520afaba2b9b4db0dd580d2819935f452cfa66344acdd674df9",
+      "salt": "e35f60a6f5cb474c8573c7b0343c52ee",
       "twoFactorSecret": "JBSWY3DPEHPK3PXP",
       "twoFactorEnabled": true,
       "kycLevel": 2,
@@ -14,7 +14,16 @@
       "productionMode": "live",
       "blockchainLinked": true,
       "lockedToEmail": "admin@secure.local",
-      "lockedAt": "2026-08-16T16:52:51.443Z"
+      "lockedAt": "2026-08-17T21:03:17.951Z",
+      "kycFullName": "",
+      "kycAddress": "",
+      "kycCity": "",
+      "kycState": "",
+      "kycProvince": "",
+      "kycPostalCode": "",
+      "kycTaxId": "",
+      "kycPhone": "",
+      "kycVerifiedAt": ""
     },
     {
       "id": "user_mlaframboisemm",
@@ -30,7 +39,7 @@
       "productionMode": "live",
       "blockchainLinked": true,
       "lockedToEmail": "mlaframboisemm@gmail.com",
-      "lockedAt": "2026-08-16T16:52:51.446Z",
+      "lockedAt": "2026-08-17T21:03:17.954Z",
       "kycFullName": "marcel laframbosie",
       "kycAddress": "475 albert st",
       "kycCity": "oshawa",
@@ -39,13 +48,13 @@
       "kycPostalCode": "l1h4s7",
       "kycTaxId": "0512",
       "kycPhone": "9057184275",
-      "kycVerifiedAt": "2026-08-16T16:52:51.446Z"
+      "kycVerifiedAt": "2026-08-17T21:08:15.895Z"
     }
   ],
   "wallets": [
     {
-      "id": "wallet-user_b557286e-8111-48eb-985b-e0fe00888178-usd",
-      "userId": "user_b557286e-8111-48eb-985b-e0fe00888178",
+      "id": "wallet-user_7b77846f-26dd-4520-862f-3a849b70991d-usd",
+      "userId": "user_7b77846f-26dd-4520-862f-3a849b70991d",
       "assetSymbol": "USD",
       "balance": 1791100,
       "publicAddressEthereum": "",
@@ -54,7 +63,7 @@
       "productionMode": "live",
       "blockchainLinked": true,
       "lockedToEmail": "admin@secure.local",
-      "lockedAt": "2026-08-16T16:52:51.444Z"
+      "lockedAt": "2026-08-17T21:03:17.951Z"
     },
     {
       "id": "wallet-user_mlaframboisemm-usd",
@@ -67,7 +76,7 @@
       "productionMode": "live",
       "blockchainLinked": true,
       "lockedToEmail": "mlaframboisemm@gmail.com",
-      "lockedAt": "2026-08-16T16:52:51.446Z"
+      "lockedAt": "2026-08-17T21:03:17.954Z"
     },
     {
       "id": "wallet-user_mlaframboisemm-usdc",
@@ -80,7 +89,7 @@
       "productionMode": "live",
       "blockchainLinked": true,
       "lockedToEmail": "mlaframboisemm@gmail.com",
-      "lockedAt": "2026-08-16T16:52:51.446Z"
+      "lockedAt": "2026-08-17T21:03:17.954Z"
     },
     {
       "id": "wallet-user_mlaframboisemm-eth",
@@ -93,87 +102,68 @@
       "productionMode": "live",
       "blockchainLinked": true,
       "lockedToEmail": "mlaframboisemm@gmail.com",
-      "lockedAt": "2026-08-16T16:52:51.446Z"
+      "lockedAt": "2026-08-17T21:03:17.954Z"
     },
     {
       "id": "wallet-user_mlaframboisemm-btc",
       "userId": "user_mlaframboisemm",
       "assetSymbol": "BTC",
-      "balance": 1280.50,
+      "balance": 1280.5,
       "publicAddressEthereum": "",
       "publicAddressBitcoin": "bc1qz8w9j7k6m5n4p3r2t1v0x9y8z7w6v5u",
       "identityLocked": true,
       "productionMode": "live",
       "blockchainLinked": true,
       "lockedToEmail": "mlaframboisemm@gmail.com",
-      "lockedAt": "2026-08-16T16:52:51.446Z"
-    },
-    {
-      "id": "wallet-user_b557286e-8111-48eb-985b-e0fe00888178-btc",
-      "userId": "user_b557286e-8111-48eb-985b-e0fe00888178",
-      "assetSymbol": "BTC",
-      "balance": 0.001,
-      "publicAddressEthereum": "",
-      "publicAddressBitcoin": "",
-      "identityLocked": true,
-      "productionMode": "live",
-      "blockchainLinked": true,
-      "lockedToEmail": "",
-      "lockedAt": "2026-08-16T16:52:51.856Z"
+      "lockedAt": "2026-08-17T21:08:08.333Z"
     }
   ],
-  "transactions": [
-    {
-      "id": "tx-trade-1786899171856-9161094a",
-      "userId": "user_b557286e-8111-48eb-985b-e0fe00888178",
-      "type": "BUY",
-      "assetSymbol": "BTC",
-      "amount": 0.001,
-      "fiatAmount": 100,
-      "timestamp": 1786899171856,
-      "details": "Bought 0.001000 BTC with USD Cash Balance",
-      "hash": "0x984c89e2982e1e0038dad82c57eeac77",
-      "status": "completed",
-      "ledgerDebit": "USD",
-      "ledgerCredit": "BTC"
-    }
-  ],
+  "transactions": [],
   "auditLogs": [
     {
-      "id": "audit_7e47a3c2-63bb-4a1d-a2cf-b8a0f54a8b97",
-      "userId": "user_b557286e-8111-48eb-985b-e0fe00888178",
+      "id": "audit_38875e79-c990-418d-b89d-82a2014d2d85",
+      "userId": "user_7b77846f-26dd-4520-862f-3a849b70991d",
       "action": "IDENTITY_LOCKED",
-      "timestamp": 1786899171745,
+      "timestamp": 1787000598278,
       "ipAddress": "system",
       "status": "success",
       "details": "Account identity locked for admin@secure.local in live production mode."
     },
     {
-      "id": "audit_111086bd-38cb-4469-b31b-48f6717e3f88",
-      "userId": "user_b557286e-8111-48eb-985b-e0fe00888178",
+      "id": "audit_c91696e8-7212-4f6b-862f-d62170f7444f",
+      "userId": "user_7b77846f-26dd-4520-862f-3a849b70991d",
       "action": "LOGIN",
-      "timestamp": 1786899171745,
+      "timestamp": 1787000598279,
       "ipAddress": "127.0.0.1",
       "status": "success",
       "details": "Login successful with MFA verification"
     },
     {
-      "id": "audit_cc5882e1-e2a8-44a6-b5f2-504227fa0040",
-      "userId": "user_b557286e-8111-48eb-985b-e0fe00888178",
+      "id": "audit_1ec12207-07cc-4a64-9f05-b7562cb41f02",
+      "userId": "user_7b77846f-26dd-4520-862f-3a849b70991d",
       "action": "IDENTITY_LOCKED",
-      "timestamp": 1786899171846,
+      "timestamp": 1787000598423,
       "ipAddress": "system",
       "status": "success",
       "details": "Account identity locked for admin@secure.local in live production mode."
     },
     {
-      "id": "audit_bec2e7c7-4151-4d05-8c3b-73b6e9db0ff5",
-      "userId": "user_b557286e-8111-48eb-985b-e0fe00888178",
+      "id": "audit_64135fef-01cd-48d1-a309-3be909ae285e",
+      "userId": "user_7b77846f-26dd-4520-862f-3a849b70991d",
       "action": "LOGIN",
-      "timestamp": 1786899171846,
+      "timestamp": 1787000598424,
       "ipAddress": "127.0.0.1",
       "status": "success",
       "details": "Login successful with MFA verification"
+    },
+    {
+      "id": "audit_002d160b-2baa-4756-a8ae-a4a59640f8a5",
+      "userId": "system",
+      "action": "RECONCILIATION_AUDIT_SUCCESS",
+      "timestamp": 1787000664567,
+      "ipAddress": "127.0.0.1",
+      "status": "success",
+      "details": "Reconciliation audit succeeded. All queried Stripe transactions match internal database records perfectly."
     }
   ],
   "bankAccounts": []

@@ -2867,7 +2867,10 @@ export default function App() {
                 userName={userName || 'Marcel Laframboise'}
                 citizenship={citizenship}
                 showToast={showToast}
-                onOpenSendReceive={(act) => handleOpenSendReceive(act)}
+                onOpenSendReceive={(act) => {
+                  setSendReceiveAction(act);
+                  setIsSendReceiveOpen(true);
+                }}
               />
             </ErrorBoundary>
           </div>

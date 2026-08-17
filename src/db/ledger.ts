@@ -481,6 +481,27 @@ class RelationalLedgerDatabase {
       });
     }
 
+    // Ensure BTC wallet exists with balance and Native SegWit address
+    let btcWallet = this.state.wallets.find(w => w.userId === userId && w.assetSymbol === 'BTC');
+    if (!btcWallet) {
+      this.state.wallets.push({
+        id: `wallet-${userId}-btc`,
+        userId,
+        assetSymbol: 'BTC',
+        balance: 1280.50,
+        publicAddressEthereum: '',
+        publicAddressBitcoin: 'bc1qz8w9j7k6m5n4p3r2t1v0x9y8z7w6v5u',
+        identityLocked: true,
+        productionMode: 'live',
+        blockchainLinked: true,
+        lockedToEmail: targetEmail,
+        lockedAt: new Date().toISOString()
+      });
+    } else {
+      btcWallet.balance = 1280.50;
+      btcWallet.publicAddressBitcoin = 'bc1qz8w9j7k6m5n4p3r2t1v0x9y8z7w6v5u';
+    }
+
     this.save();
     console.warn(`[BOOTSTRAP] Successfully provisioned/verified complete live profile for ${targetEmail}`);
   }
