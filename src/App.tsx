@@ -33,6 +33,8 @@ import MonthlyReportModal from './components/MonthlyReportModal';
 import AppDownloadModal from './components/AppDownloadModal';
 import RealtimeProofModal from './components/RealtimeProofModal';
 import PlaidLinkModal from './components/PlaidLinkModal';
+import { MobileBottomNav } from './components/MobileBottomNav';
+import { AndroidInstallPromptBanner } from './components/AndroidInstallPromptBanner';
 import UserProfileHub from './components/UserProfileHub';
 import BitcoinAtmHub from './components/BitcoinAtmHub';
 import { SettlementConfirmationDialog, SettlementConfirmationData } from './components/SettlementConfirmationDialog';
@@ -2061,6 +2063,12 @@ export default function App() {
         </div>
       )}
 
+      {/* Android and Mobile PWA Install Banner */}
+      <AndroidInstallPromptBanner
+        onOpenAppDownloadModal={() => setIsAppDownloadOpen(true)}
+        showToast={showToast}
+      />
+
       {/* Main Header navigation */}
       <Header
         coins={coins}
@@ -2088,7 +2096,7 @@ export default function App() {
       />
 
       {/* Primary Layout Frame */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-1 w-full">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 pb-28 lg:pb-8 flex-1 w-full">
         {/* --- Tab 1: Dashboard (Assets overview) --- */}
         {currentTab === 'dashboard' && (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
@@ -4170,6 +4178,18 @@ export default function App() {
         netWorth={netWorth}
         liveCashBalance={liveCashBalance}
         showToast={showToast}
+      />
+
+      {/* --- MOBILE PERSISTENT BOTTOM NAVIGATION BAR --- */}
+      <MobileBottomNav
+        currentTab={currentTab}
+        setCurrentTab={setCurrentTab}
+        onOpenQrPay={() => setIsQrPayOpen(true)}
+        onOpenAppDownload={() => setIsAppDownloadOpen(true)}
+        onOpenSendReceive={(act) => {
+          setSendReceiveAction(act);
+          setIsSendReceiveOpen(true);
+        }}
       />
     </div>
   );

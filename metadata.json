@@ -1,6 +1,6 @@
 {
   "name": "Unified Finance Hub",
   "description": "Connects, aggregates, and synchronizes accounts across Stripe, Wise, Plaid, and a personal accounting ledger.",
-  "requestFramePermissions": [],
+  "requestFramePermissions": ["camera"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

@@ -56,3 +56,25 @@ pre, code, kbd, samp {
   overflow-wrap: anywhere;
 }
 
+/* Safe area support for notch & home indicators on iOS and Android */
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 16px);
+}
+.pt-safe {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+/* Utility to hide scrollbars while maintaining scroll functionality */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Improved tap targets and mobile responsiveness */
+button, a {
+  -webkit-tap-highlight-color: transparent;
+}
+
