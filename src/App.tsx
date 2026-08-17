@@ -34,6 +34,7 @@ import AppDownloadModal from './components/AppDownloadModal';
 import RealtimeProofModal from './components/RealtimeProofModal';
 import PlaidLinkModal from './components/PlaidLinkModal';
 import UserProfileHub from './components/UserProfileHub';
+import BitcoinAtmHub from './components/BitcoinAtmHub';
 import { SettlementConfirmationDialog, SettlementConfirmationData } from './components/SettlementConfirmationDialog';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { convertUsdToCad, DEFAULT_USD_CAD_RATE } from './lib/financial-hardening';
@@ -2841,13 +2842,32 @@ export default function App() {
                     status: 'completed',
                     blockHeight: 849012 + Math.floor(Math.random() * 5000),
                     fromAddress: '0xfa839c0183...f9a8',
-                    toAddress: symbol === 'ETH' ? '0x71C7656EC7ab88b098defB751B7401B5f6d1476B' : 'bc1q9rny26szrgl26u64mdg0cuhvpt2p77jwh792ka',
+                    toAddress: symbol === 'ETH' ? '0x71C7656EC7ab88b098defB751B7401B5f6d1476B' : 'bc1qz8w9j7k6m5n4p3r2t1v0x9y8z7w6v5u',
                     ledgerDebit: `Cryptocurrency Vault Holding (${symbol})`,
                     ledgerCredit: 'On-Chain Miner/Validator Coinbase'
                   };
                   recordNewTransaction(tx);
                 }}
                 showToast={showToast}
+              />
+            </ErrorBoundary>
+          </div>
+        )}
+
+        {/* --- Tab: Bitcoin ATM Hub --- */}
+        {currentTab === 'bitcoin-atm' && (
+          <div className="max-w-7xl mx-auto">
+            <ErrorBoundary name="BitcoinAtmHubTab">
+              <BitcoinAtmHub
+                btcBalance={PUBLISHED_BTC_BALANCE}
+                btcAddress={PUBLISHED_BTC_ADDRESS}
+                coins={coins}
+                holdings={holdings}
+                userEmail={userEmail || 'mlaframboisemm@gmail.com'}
+                userName={userName || 'Marcel Laframboise'}
+                citizenship={citizenship}
+                showToast={showToast}
+                onOpenSendReceive={(act) => handleOpenSendReceive(act)}
               />
             </ErrorBoundary>
           </div>

@@ -639,12 +639,20 @@ export default function UserProfileHub({
                     <CheckCircle2 className="w-4 h-4 text-emerald-400" />
                     <span className="font-bold">Vault Unlocked: Master credentials authenticated.</span>
                   </div>
-                  <button
-                    onClick={() => setIsBtcWizardOpen(true)}
-                    className="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px] rounded-lg shadow-sm cursor-pointer transition-all"
-                  >
-                    Launch Backup Wizard
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setCurrentTab('bitcoin-atm')}
+                      className="px-3 py-1 bg-amber-500 hover:bg-amber-400 text-black font-bold text-[11px] rounded-lg shadow-sm cursor-pointer transition-all flex items-center gap-1"
+                    >
+                      <span>🏧 ATM Cash Kiosk Hub</span>
+                    </button>
+                    <button
+                      onClick={() => setIsBtcWizardOpen(true)}
+                      className="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px] rounded-lg shadow-sm cursor-pointer transition-all"
+                    >
+                      Launch Backup Wizard
+                    </button>
+                  </div>
                 </div>
 
                 {/* Address Row */}

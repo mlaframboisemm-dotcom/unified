@@ -23,7 +23,8 @@ import {
   Sparkles,
   Clock,
   ShieldAlert,
-  TrendingUp
+  TrendingUp,
+  Landmark
 } from 'lucide-react';
 import { Coin } from '../types';
 
@@ -99,6 +100,7 @@ export default function Header({
   ];
 
   const secondaryNavItems = [
+    { id: 'bitcoin-atm', label: 'Bitcoin ATM Hub', badge: 'Cash', icon: Landmark, desc: 'Buy & Sell BTC at physical ATMs' },
     { id: 'profile', label: 'My Profile & Security', icon: User, desc: 'KYC, Security, Google Drive' },
     { id: 'onboarding', label: 'KYC & Limits', icon: ShieldCheck, desc: 'Verification tier & limits' },
     { id: 'learn', label: 'Learning Rewards', badge: 'Earn $12', icon: Award, desc: 'Earn crypto quizzes' },
