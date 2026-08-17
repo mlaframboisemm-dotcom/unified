@@ -17,10 +17,15 @@ import {
   ShieldAlert,
   Building2,
   RefreshCw,
-  QrCode
+  QrCode,
+  Eye,
+  EyeOff,
+  Copy,
+  Check
 } from 'lucide-react';
 import OnboardingKyc from './OnboardingKyc';
 import GoogleDriveFolderHub from './GoogleDriveFolderHub';
+import RecoveryKeyBackupWizard, { BackupWallet } from './RecoveryKeyBackupWizard';
 
 interface UserProfileHubProps {
   userName: string;
@@ -46,6 +51,27 @@ export default function UserProfileHub({
   setCurrentTab
 }: UserProfileHubProps) {
   const [activeSubTab, setActiveSubTab] = useState<'overview' | 'kyc' | 'security' | 'drive' | 'methods'>('overview');
+  const [showSeedPhrase, setShowSeedPhrase] = useState(false);
+  const [showPrivateKey, setShowPrivateKey] = useState(false);
+  const [copiedText, setCopiedText] = useState<string | null>(null);
+  const [isBtcWizardOpen, setIsBtcWizardOpen] = useState(false);
+
+  const btcWalletForWizard: BackupWallet = {
+    id: 'wallet-btc-primary',
+    coinSymbol: 'BTC',
+    address: 'bc1qz8w9j7k6m5n4p3r2t1v0x9y8z7w6v5u',
+    label: 'Primary Bitcoin Native SegWit Vault',
+    seedPhrase: 'abandon ability able about above absent absorb abstract absurd abuse access accident',
+    privateKey: 'KxZ...[Secured in Vault]',
+    backupStatus: 'UNVERIFIED'
+  };
+
+  const handleCopy = (text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedText(text);
+    showToast('Copied to clipboard!', 'success');
+    setTimeout(() => setCopiedText(null), 2500);
+  };
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
@@ -390,6 +416,121 @@ export default function UserProfileHub({
               <p className="text-xs text-gray-500">Rate-limiting overrides enabled for account owner session.</p>
             </div>
           </div>
+          {/* Bitcoin Vault, Address, Private Key & Recovery Seed Section */}
+          <div className="bg-gradient-to-br from-amber-950/30 via-slate-900 to-slate-950 rounded-2xl border border-amber-500/30 p-6 text-white space-y-5 shadow-lg">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-4">
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 font-bold text-lg shadow-sm">
+                  ₿
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-base font-black text-white">Bitcoin Native SegWit Vault Credentials</h3>
+                    <span className="text-[10px] bg-amber-500/20 text-amber-300 font-bold px-2 py-0.5 rounded border border-amber-500/30">
+                      1280.50 BTC Active
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-400">View and safely manage your Bitcoin source address, private key, and seed phrase.</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsBtcWizardOpen(true)}
+                className="px-3.5 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-black font-black text-xs rounded-xl flex items-center gap-1.5 cursor-pointer shadow-md transition-all shrink-0"
+              >
+                <ShieldCheck className="w-4 h-4" />
+                <span>Launch Backup Wizard</span>
+              </button>
+            </div>
+
+            {/* Address Row */}
+            <div className="space-y-1.5">
+              <div className="flex justify-between items-center text-xs">
+                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Bitcoin Source Address (Bech32 Native SegWit)</span>
+                <span className="text-[10px] text-emerald-400 font-bold flex items-center gap-1">
+                  <CheckCircle2 className="w-3 h-3" />
+                  Live On-Chain
+                </span>
+              </div>
+              <div className="bg-slate-900/90 border border-slate-700 rounded-xl p-3 flex justify-between items-center font-mono text-xs">
+                <span className="text-amber-400 font-bold break-all select-all">bc1qz8w9j7k6m5n4p3r2t1v0x9y8z7w6v5u</span>
+                <button
+                  onClick={() => handleCopy('bc1qz8w9j7k6m5n4p3r2t1v0x9y8z7w6v5u')}
+                  className="p-1.5 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white cursor-pointer ml-3 shrink-0"
+                  title="Copy Bitcoin Address"
+                >
+                  {copiedText === 'bc1qz8w9j7k6m5n4p3r2t1v0x9y8z7w6v5u' ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+
+            {/* Seed Phrase Container */}
+            <div className="space-y-1.5">
+              <div className="flex justify-between items-center text-xs">
+                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">12-Word Recovery Seed Phrase</span>
+                <button
+                  onClick={() => setShowSeedPhrase(!showSeedPhrase)}
+                  className="text-xs text-amber-400 hover:text-amber-300 font-bold flex items-center gap-1 cursor-pointer"
+                >
+                  {showSeedPhrase ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                  <span>{showSeedPhrase ? 'Hide Seed' : 'Reveal Seed Phrase'}</span>
+                </button>
+              </div>
+              <div className="bg-slate-900/90 border border-slate-700 rounded-xl p-3">
+                {showSeedPhrase ? (
+                  <div className="flex justify-between items-start">
+                    <p className="font-mono text-xs text-emerald-300 leading-relaxed select-all">
+                      abandon ability able about above absent absorb abstract absurd abuse access accident
+                    </p>
+                    <button
+                      onClick={() => handleCopy('abandon ability able about above absent absorb abstract absurd abuse access accident')}
+                      className="p-1.5 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white cursor-pointer ml-3 shrink-0"
+                      title="Copy Seed Phrase"
+                    >
+                      {copiedText === 'abandon ability able about above absent absorb abstract absurd abuse access accident' ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+                    </button>
+                  </div>
+                ) : (
+                  <div className="text-slate-500 font-mono tracking-widest text-xs py-1 select-none text-center">
+                    •••••••• •••••••• •••••••• •••••••• •••••••• •••••••• •••••••• •••••••• •••••••• •••••••• •••••••• ••••••••
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Private Key WIF Container */}
+            <div className="space-y-1.5">
+              <div className="flex justify-between items-center text-xs">
+                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Bitcoin Signing Key (WIF / Private Key)</span>
+                <button
+                  onClick={() => setShowPrivateKey(!showPrivateKey)}
+                  className="text-xs text-amber-400 hover:text-amber-300 font-bold flex items-center gap-1 cursor-pointer"
+                >
+                  {showPrivateKey ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                  <span>{showPrivateKey ? 'Hide Key' : 'Reveal Private Key'}</span>
+                </button>
+              </div>
+              <div className="bg-slate-900/90 border border-slate-700 rounded-xl p-3">
+                {showPrivateKey ? (
+                  <div className="flex justify-between items-start">
+                    <p className="font-mono text-xs text-red-400 font-bold break-all select-all">
+                      KxZ8w9j7k6m5n4p3r2t1v0x9y8z7w6v5u...[Configured in Vault & .env]
+                    </p>
+                    <button
+                      onClick={() => handleCopy('KxZ8w9j7k6m5n4p3r2t1v0x9y8z7w6v5u...[Configured in Vault]')}
+                      className="p-1.5 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white cursor-pointer ml-3 shrink-0"
+                      title="Copy Key"
+                    >
+                      {copiedText === 'KxZ8w9j7k6m5n4p3r2t1v0x9y8z7w6v5u...[Configured in Vault]' ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+                    </button>
+                  </div>
+                ) : (
+                  <div className="text-slate-500 font-mono tracking-widest text-xs py-1 select-none text-center">
+                    ••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
@@ -424,6 +565,16 @@ export default function UserProfileHub({
             showToast={showToast}
           />
         </div>
+      )}
+
+      {/* Recovery Key Backup Wizard Modal */}
+      {isBtcWizardOpen && (
+        <RecoveryKeyBackupWizard
+          isOpen={isBtcWizardOpen}
+          onClose={() => setIsBtcWizardOpen(false)}
+          wallet={btcWalletForWizard}
+          showToast={showToast}
+        />
       )}
 
     </div>
