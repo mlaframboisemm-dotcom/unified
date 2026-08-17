@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { 
   X, QrCode, Copy, Check, Download, Send, ArrowDownLeft, ShieldCheck, 
-  Smartphone, Wallet, RefreshCw, AlertCircle, CheckCircle2, DollarSign, Store, Sparkles
+  Smartphone, Wallet, RefreshCw, AlertCircle, CheckCircle2, DollarSign, Store, Sparkles, Camera
 } from 'lucide-react';
 import QRCode from 'qrcode';
 import { Coin } from '../types';
+import CameraQrScannerModal from './CameraQrScannerModal';
 
 interface QrPayModalProps {
   isOpen: boolean;
@@ -52,6 +53,7 @@ export default function QrPayModal({
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
   const [paymentSuccess, setPaymentSuccess] = useState<string | null>(null);
   const [paymentError, setPaymentError] = useState<string | null>(null);
+  const [isCameraOpen, setIsCameraOpen] = useState(false);
 
   // Merchant POS Tab State
   const [posMerchantName, setPosMerchantName] = useState<string>('Sovereign Merchant Terminal');
@@ -420,8 +422,26 @@ export default function QrPayModal({
               </div>
             </div>
 
+            <div>
+              <button
+                type="button"
+                onClick={() => setIsCameraOpen(true)}
+                className="w-full py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-black text-xs rounded-xl shadow-md flex items-center justify-center gap-2 cursor-pointer transition-all"
+              >
+                <Camera className="w-4 h-4" />
+                <span>Open Live Camera QR Scanner</span>
+              </button>
+            </div>
+
             {/* Quick Demo Pre-fill Buttons */}
             <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => handleParsePayload('bitcoin:bc1qz8w9j7k6m5n4p3r2t1v0x9y8z7w6v5u?amount=0.005&message=Coffee%20Payment')}
+                className="px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-700 text-[10px] font-bold rounded-lg border border-amber-200 cursor-pointer"
+              >
+                Sample Bitcoin QR (0.005 BTC)
+              </button>
               <button
                 type="button"
                 onClick={() => handleParsePayload('paydirect:coffee-shop@sovereigns.ca?amount=4.75&currency=USD&memo=Morning%20Espresso')}
@@ -572,6 +592,15 @@ export default function QrPayModal({
         </div>
 
       </div>
+
+      {/* Live Camera WebRTC Scanner Modal */}
+      <CameraQrScannerModal
+        isOpen={isCameraOpen}
+        onClose={() => setIsCameraOpen(false)}
+        onScanSuccess={(data) => handleParsePayload(data.raw)}
+        title="Scan Payment or ATM QR"
+        instruction="Point your camera at the QR code on a merchant terminal, ATM screen, or mobile wallet."
+      />
     </div>
   );
 }

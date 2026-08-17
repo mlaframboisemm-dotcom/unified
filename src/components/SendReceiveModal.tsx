@@ -1,8 +1,9 @@
 import React, { useState, useMemo } from 'react';
-import { X, ArrowUpRight, ArrowDownLeft, CheckCircle2, Copy, RefreshCw, Smartphone, QrCode, Mail, Wallet, Plus, ShieldCheck, ExternalLink, Check, Fuel, Zap, Globe, Gauge } from 'lucide-react';
+import { X, ArrowUpRight, ArrowDownLeft, CheckCircle2, Copy, RefreshCw, Smartphone, QrCode, Mail, Wallet, Plus, ShieldCheck, ExternalLink, Check, Fuel, Zap, Globe, Gauge, Camera } from 'lucide-react';
 import { Coin, Holding } from '../types';
 import { getAssetLegitimacyInfo } from '../lib/assetLegitimacy';
 import { recognizeNetwork, calculateAutomatedGas, resolveTokenInfo, UNIVERSAL_TOKEN_REGISTRY, GasCalculationResult } from '../lib/token-network-gas';
+import CameraQrScannerModal from './CameraQrScannerModal';
 
 interface SendReceiveModalProps {
   coins: Coin[];
@@ -45,6 +46,20 @@ export default function SendReceiveModal({
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [isCameraScannerOpen, setIsCameraScannerOpen] = useState(false);
+
+  const handleCameraScanSuccess = (data: { address: string; amount?: number; currency?: string }) => {
+    if (data.address) {
+      setRecipient(data.address);
+    }
+    if (data.currency && coins.some(c => c.symbol === data.currency)) {
+      setSendSymbol(data.currency);
+    }
+    if (data.amount && data.amount > 0) {
+      setIsFiat(false);
+      setSendAmount(data.amount.toString());
+    }
+  };
 
   // Derive coins map
   const coinPriceMap = useMemo(() => {
@@ -290,8 +305,16 @@ export default function SendReceiveModal({
                     placeholder="Enter 0x address, Bitcoin bc1, Solana address, or email"
                     value={recipient}
                     onChange={(e) => setRecipient(e.target.value)}
-                    className="w-full bg-gray-50 border border-gray-200 text-gray-800 text-xs font-mono pl-10 pr-3 py-2.5 rounded-xl focus:outline-none focus:ring-1 focus:ring-[#0052FF]"
+                    className="w-full bg-gray-50 border border-gray-200 text-gray-800 text-xs font-mono pl-10 pr-10 py-2.5 rounded-xl focus:outline-none focus:ring-1 focus:ring-[#0052FF]"
                   />
+                  <button
+                    type="button"
+                    onClick={() => setIsCameraScannerOpen(true)}
+                    className="absolute right-2 top-2 p-1.5 bg-gray-200 hover:bg-[#0052FF] hover:text-white text-gray-600 rounded-lg cursor-pointer transition-colors"
+                    title="Scan QR Code with Camera"
+                  >
+                    <Camera className="w-3.5 h-3.5" />
+                  </button>
                 </div>
                 {/* Auto Network Recognition Badge */}
                 <div className="p-2 bg-blue-50 border border-blue-100 rounded-lg flex items-center justify-between text-xs text-blue-900">
@@ -465,7 +488,7 @@ export default function SendReceiveModal({
 
               {/* Quick deposit simulator & record into ledger */}
               <div className="w-full pt-3 border-t border-gray-100 mt-2 text-left">
-                <span className="text-[10px] font-bold text-gray-400 uppercase block mb-2">Simulate Blockchain Inbound Deposit</span>
+                <span className="text-[10px] font-bold text-gray-400 uppercase block mb-2">Instant Inbound Ledger Credit</span>
                 <div className="grid grid-cols-2 gap-2">
                   <button
                     onClick={() => handleRecordDeposit(receiveSymbol === 'BTC' ? 0.05 : receiveSymbol === 'ETH' ? 0.5 : 5.0)}
@@ -490,6 +513,15 @@ export default function SendReceiveModal({
           )}
         </div>
       </div>
+
+      {/* Live Camera WebRTC Scanner Modal */}
+      <CameraQrScannerModal
+        isOpen={isCameraScannerOpen}
+        onClose={() => setIsCameraScannerOpen(false)}
+        onScanSuccess={handleCameraScanSuccess}
+        title="Scan Recipient or ATM QR Code"
+        instruction="Hold your camera up to any Bitcoin, EVM, or Solana QR code to automatically fill recipient and transfer details."
+      />
     </div>
   );
 }

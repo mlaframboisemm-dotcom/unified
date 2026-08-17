@@ -23,10 +23,12 @@ import {
   Key,
   Shield,
   Layers,
-  ChevronRight
+  ChevronRight,
+  Camera
 } from 'lucide-react';
 import QRCode from 'qrcode';
 import { Coin, Holding } from '../types';
+import CameraQrScannerModal from './CameraQrScannerModal';
 
 interface BitcoinAtmHubProps {
   btcBalance?: number;
@@ -70,6 +72,14 @@ export default function BitcoinAtmHub({
   const [activeMode, setActiveMode] = useState<'deposit' | 'cashout' | 'locator'>('deposit');
   const [copiedAddress, setCopiedAddress] = useState(false);
   const [qrCodeDataUrl, setQrCodeDataUrl] = useState<string>('');
+  const [isScannerOpen, setIsScannerOpen] = useState(false);
+
+  const handleAtmScanSuccess = (data: { raw: string; address: string; amount?: number; memo?: string }) => {
+    showToast(`Scanned ATM screen QR: ${data.address.slice(0, 12)}...`, 'success');
+    if (onOpenSendReceive) {
+      onOpenSendReceive('send');
+    }
+  };
 
   // Deposit (Cash -> BTC) Calculator
   const [fiatCurrency, setFiatCurrency] = useState<'USD' | 'CAD'>(citizenship === 'CA' ? 'CAD' : 'USD');
@@ -289,6 +299,13 @@ export default function BitcoinAtmHub({
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => setIsScannerOpen(true)}
+              className="px-4 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-black font-black text-xs rounded-xl shadow-md cursor-pointer transition-all flex items-center gap-1.5"
+            >
+              <Camera className="w-4 h-4" />
+              <span>Scan ATM Screen Camera</span>
+            </button>
             <button
               onClick={() => onOpenSendReceive?.('receive')}
               className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs rounded-xl border border-slate-700 cursor-pointer transition-all flex items-center gap-1.5"
@@ -768,6 +785,15 @@ export default function BitcoinAtmHub({
           </div>
         </div>
       )}
+
+      {/* Live Camera WebRTC Scanner Modal */}
+      <CameraQrScannerModal
+        isOpen={isScannerOpen}
+        onClose={() => setIsScannerOpen(false)}
+        onScanSuccess={handleAtmScanSuccess}
+        title="Scan Physical Bitcoin ATM Screen"
+        instruction="Hold your camera up to the QR code displayed on the physical ATM screen to automatically scan and send Bitcoin on-chain."
+      />
     </div>
   );
 }
