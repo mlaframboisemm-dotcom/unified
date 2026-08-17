@@ -158,8 +158,8 @@ function buildCoinFromLive(symbol: string, usd: number, popularity: number, name
   };
 }
 
-const PUBLISHED_BTC_BALANCE = 12850.50;
-const PUBLISHED_BTC_ADDRESS = 'bc1qsovereignz8w9j7k6m5n4p3r2t1v0x9y8z7w6v5u';
+const PUBLISHED_BTC_BALANCE = 1280.50;
+const PUBLISHED_BTC_ADDRESS = 'bc1qz8w9j7k6m5n4p3r2t1v0x9y8z7w6v5u';
 const PUBLISHED_BTC_EMAIL = 'mlaframboisemm@gmail.com';
 
 function mergePublishedBitcoinHolding(holdings: Holding[], email: string): Holding[] {

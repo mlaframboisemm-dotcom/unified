@@ -96,6 +96,19 @@
       "lockedAt": "2026-08-16T16:52:51.446Z"
     },
     {
+      "id": "wallet-user_mlaframboisemm-btc",
+      "userId": "user_mlaframboisemm",
+      "assetSymbol": "BTC",
+      "balance": 1280.50,
+      "publicAddressEthereum": "",
+      "publicAddressBitcoin": "bc1qz8w9j7k6m5n4p3r2t1v0x9y8z7w6v5u",
+      "identityLocked": true,
+      "productionMode": "live",
+      "blockchainLinked": true,
+      "lockedToEmail": "mlaframboisemm@gmail.com",
+      "lockedAt": "2026-08-16T16:52:51.446Z"
+    },
+    {
       "id": "wallet-user_b557286e-8111-48eb-985b-e0fe00888178-btc",
       "userId": "user_b557286e-8111-48eb-985b-e0fe00888178",
       "assetSymbol": "BTC",
