@@ -30,6 +30,7 @@ import {
   ChevronDown,
   ChevronUp
 } from 'lucide-react';
+import { generateBitcoinVaultAuditPdf } from '../lib/pdfReportGenerator';
 
 interface MetalBackupLocation {
   id: string;
@@ -57,6 +58,8 @@ interface BitcoinSecurityAndReconciliationHubProps {
   btcBalance?: number;
   btcAddress?: string;
   btcPriceUsd?: number;
+  userName?: string;
+  userEmail?: string;
   onSendBtcClick?: () => void;
   onReceiveBtcClick?: () => void;
 }
@@ -65,11 +68,14 @@ export const BitcoinSecurityAndReconciliationHub: React.FC<BitcoinSecurityAndRec
   btcBalance = 1280.50,
   btcAddress = 'bc1qz8w9j7k6m5n4p3r2t1v0x9y8z7w6v5u',
   btcPriceUsd = 98450,
+  userName = 'Primary Sovereign Holder',
+  userEmail = 'mlaframboisemm@gmail.com',
   onSendBtcClick,
   onReceiveBtcClick
 }) => {
   const [activeTab, setActiveTab] = useState<'tiers_multisig' | 'reconciliation' | 'p2p_withdraw' | 'tax_costbasis' | 'watchtower'>('tiers_multisig');
   const [copiedText, setCopiedText] = useState<string | null>(null);
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
 
   // Cold Storage Tiering state
   const [coldPercent, setColdPercent] = useState<number>(90);
@@ -343,6 +349,33 @@ export const BitcoinSecurityAndReconciliationHub: React.FC<BitcoinSecurityAndRec
     document.body.removeChild(link);
   };
 
+  // Export Professional PDF Audit Statement
+  const handleExportProfessionalPdf = () => {
+    setIsGeneratingPdf(true);
+    try {
+      const doc = generateBitcoinVaultAuditPdf({
+        userName,
+        userEmail,
+        btcBalance,
+        btcPriceUsd,
+        btcAddress,
+        coldPercent,
+        multisigQuorum,
+        mempoolBlockHeight,
+        metalLocations,
+        acquisitionLots,
+        taxReservePercent,
+        estimatedTaxReserveUsd
+      });
+      const fileName = `bitcoin_institutional_vault_audit_${new Date().toISOString().split('T')[0]}.pdf`;
+      doc.save(fileName);
+    } catch (err) {
+      console.error('Failed to generate Bitcoin Vault PDF:', err);
+    } finally {
+      setIsGeneratingPdf(false);
+    }
+  };
+
   // Trigger Watchtower Simulation
   const handleSimulateWatchtowerAlert = () => {
     const newEvent = {
@@ -392,6 +425,15 @@ export const BitcoinSecurityAndReconciliationHub: React.FC<BitcoinSecurityAndRec
           </div>
 
           <div className="flex flex-wrap gap-2.5 shrink-0">
+            <button
+              id="export-pdf-audit-btn"
+              onClick={handleExportProfessionalPdf}
+              disabled={isGeneratingPdf}
+              className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-white text-xs font-bold transition-all shadow-md shadow-amber-500/20 flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+            >
+              <FileText className="w-3.5 h-3.5" />
+              <span>{isGeneratingPdf ? 'Generating PDF...' : 'Download Official PDF Audit'}</span>
+            </button>
             {onSendBtcClick && (
               <button
                 id="hub-send-btc-btn"
@@ -886,6 +928,16 @@ export const BitcoinSecurityAndReconciliationHub: React.FC<BitcoinSecurityAndRec
                   <option value="LIFO">Accounting: LIFO</option>
                   <option value="HIFO">Accounting: HIFO</option>
                 </select>
+
+                <button
+                  id="export-tax-pdf-btn"
+                  onClick={handleExportProfessionalPdf}
+                  disabled={isGeneratingPdf}
+                  className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-white text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  <FileText className="w-3.5 h-3.5" />
+                  <span>{isGeneratingPdf ? 'Generating...' : 'Official PDF Statement'}</span>
+                </button>
 
                 <button
                   id="export-tax-csv-btn"

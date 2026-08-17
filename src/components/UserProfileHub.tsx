@@ -764,6 +764,8 @@ export default function UserProfileHub({
           btcBalance={1280.50}
           btcAddress="bc1qz8w9j7k6m5n4p3r2t1v0x9y8z7w6v5u"
           btcPriceUsd={98450}
+          userName={userName || 'Primary Sovereign Holder'}
+          userEmail={userEmail || 'mlaframboisemm@gmail.com'}
         />
       )}
 
