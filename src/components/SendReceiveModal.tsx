@@ -97,7 +97,7 @@ export default function SendReceiveModal({
   // Render a wallet address based on the selected receive coin
   const getWalletAddress = (symbol: string) => {
     const token = resolveTokenInfo(symbol);
-    if (token.network.includes('Bitcoin')) return 'bc1q9rny26szrgl26u64mdg0cuhvpt2p77jwh792ka';
+    if (token.network.includes('Bitcoin') || symbol === 'BTC') return 'bc1qz8w9j7k6m5n4p3r2t1v0x9y8z7w6v5u';
     if (token.network.includes('Solana')) return 'FvJDg947zY8f4L6kSghB8b9uUv9T8ZzK1C2xL7N3aU';
     if (token.network.includes('XRP')) return 'rEb8TK3gYQCfyAam7C16m6W8ZfS23nVTwk';
     return '0x71C7656EC7ab88b098defB751B7401B5f6d1476B';
@@ -370,7 +370,10 @@ export default function SendReceiveModal({
                 </div>
 
                 <div className="flex items-center justify-between text-[10px] text-gray-500 pt-1 border-t border-gray-200">
-                  <span>Gas Limit: {gasEstimate.gasLimit} • Price: {gasEstimate.gasPriceGwei.toFixed(1)} Gwei</span>
+                  <span className="flex items-center gap-1 text-emerald-600 font-bold">
+                    <Zap className="w-3 h-3 text-emerald-500" />
+                    <span>100% Sponsored by Sovereign Vault (0 Fee)</span>
+                  </span>
                   <span>Est. Time: ~{gasEstimate.estimatedTimeSeconds}s</span>
                 </div>
               </div>
