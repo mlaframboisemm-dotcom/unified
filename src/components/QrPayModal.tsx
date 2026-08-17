@@ -59,7 +59,8 @@ export default function QrPayModal({
   const [posQrUrl, setPosQrUrl] = useState<string>('');
   const [posStatus, setPosStatus] = useState<'awaiting' | 'scanned' | 'settled'>('awaiting');
 
-  // Default Receive Wallet Address
+  // Default Receive Wallet Addresses
+  const btcWalletAddress = 'bc1qz8w9j7k6m5n4p3r2t1v0x9y8z7w6v5u';
   const defaultWalletAddress = '0x58b178f7eee92fe888c0a1684d5fe6b78c0ff99f';
 
   // Generate QR code for Receive tab
@@ -71,6 +72,8 @@ export default function QrPayModal({
     
     if (selectedReceiveAsset === 'USD' || selectedReceiveAsset === 'CAD') {
       uri = `paydirect:${userEmail}?amount=${!isNaN(amt) ? amt : 0}&currency=${selectedReceiveAsset}${receiveMemo ? `&memo=${encodeURIComponent(receiveMemo)}` : ''}`;
+    } else if (selectedReceiveAsset === 'BTC') {
+      uri = `bitcoin:${btcWalletAddress}${!isNaN(amt) && amt > 0 ? `?amount=${amt}` : ''}${receiveMemo ? `&message=${encodeURIComponent(receiveMemo)}` : ''}`;
     } else {
       uri = `${selectedReceiveAsset.toLowerCase()}:${defaultWalletAddress}${!isNaN(amt) && amt > 0 ? `?amount=${amt}` : ''}${receiveMemo ? `&memo=${encodeURIComponent(receiveMemo)}` : ''}`;
     }
@@ -354,10 +357,14 @@ export default function QrPayModal({
                 <span className="text-xs font-mono font-bold text-gray-800 bg-white px-3 py-1 rounded-lg border border-gray-200 inline-block truncate max-w-xs">
                   {selectedReceiveAsset === 'USD' || selectedReceiveAsset === 'CAD'
                     ? userEmail
-                    : defaultWalletAddress}
+                    : selectedReceiveAsset === 'BTC'
+                      ? btcWalletAddress
+                      : defaultWalletAddress}
                 </span>
                 <p className="text-[11px] text-gray-500">
-                  Scan with any camera or QR wallet to initiate instant payment
+                  {selectedReceiveAsset === 'BTC'
+                    ? 'Scan with any Bitcoin wallet, Cash App, or Strike for BIP-21 instant settlement'
+                    : 'Scan with any camera or QR wallet to initiate instant payment'}
                 </p>
               </div>
             </div>
