@@ -53,13 +53,15 @@ export default function AddressHub({
     }
     return [
       {
-        id: 'addr-1',
+        id: 'addr-btc-primary',
         coinSymbol: 'BTC',
-        address: 'bc1q9rny26szrgl26u64mdg0cuhvpt2p77jwh792ka',
-        label: 'My Default Bitcoin Deposit Wallet',
+        address: 'bc1qz8w9j7k6m5n4p3r2t1v0x9y8z7w6v5u',
+        label: 'Primary Bitcoin Native SegWit Vault',
         createdAt: Date.now() - 30 * 24 * 60 * 60 * 1000,
         isGenerated: true,
-        balance: 0.45
+        seedPhrase: 'abandon ability able about above absent absorb abstract absurd abuse access accident',
+        privateKey: 'KxZ...[Configured in Vault]',
+        balance: 1280.50
       },
       {
         id: 'addr-2',
