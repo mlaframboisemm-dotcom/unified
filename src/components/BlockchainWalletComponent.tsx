@@ -219,10 +219,7 @@ export default function BlockchainWalletComponent({
   const [selectedNetwork, setSelectedNetwork] = useState<NetworkConfig>(SUPPORTED_NETWORKS[0]);
 
   // Configured Wallet Address
-  const defaultAddress =
-    customAddress ||
-    (import.meta as any).env?.VITE_MARSHALL_ADDRESS ||
-    '0x742d35cc6634c0532925a3b844bc454e4438f44e';
+  const defaultAddress = customAddress || (import.meta as any).env?.VITE_MARSHALL_ADDRESS || '';
 
   const [walletAddress, setWalletAddress] = useState<string>(defaultAddress);
   const [activeRpc, setActiveRpc] = useState<string>(selectedNetwork.rpcUrl);
@@ -797,7 +794,8 @@ export default function BlockchainWalletComponent({
         }
 
         if (sovSendRes.ok && sovData.success) {
-          const txHash = sovData.txHash || sovData.txId || `0x${Math.random().toString(16).substring(2, 66)}`;
+          const txHash = sovData.txHash || sovData.txId;
+          if (!txHash) throw new Error('Sovereign provider returned success without a transaction identifier');
           setTxSuccessHash(txHash);
           if (onTransactionSuccess) onTransactionSuccess(txHash);
         } else {
@@ -818,7 +816,8 @@ export default function BlockchainWalletComponent({
             throw new Error(data.message || data.error || sovData.message || sovData.error || 'Transaction execution failed');
           }
 
-          const txHash = data.txHash || data.hash || `0x${Math.random().toString(16).substring(2, 66)}`;
+          const txHash = data.txHash || data.hash;
+          if (!txHash) throw new Error('Wallet provider returned success without a transaction identifier');
           setTxSuccessHash(txHash);
           if (onTransactionSuccess) {
             onTransactionSuccess(txHash);
@@ -916,7 +915,8 @@ export default function BlockchainWalletComponent({
         }
 
         if (convertRes.ok && convertData.success) {
-          const txHash = convertData.txHash || convertData.txId || `0x${Math.random().toString(16).substring(2, 66)}`;
+          const txHash = convertData.txHash || convertData.txId;
+          if (!txHash) throw new Error('Conversion provider returned success without a transaction identifier');
           setSwapSuccessHash(txHash);
           if (onTransactionSuccess) onTransactionSuccess(txHash);
         } else {
@@ -937,7 +937,8 @@ export default function BlockchainWalletComponent({
             throw new Error(data.message || data.error || convertData.message || convertData.error || 'Swap execution failed');
           }
 
-          const txHash = data.txHash || data.hash || `0x${Math.random().toString(16).substring(2, 66)}`;
+          const txHash = data.txHash || data.hash;
+          if (!txHash) throw new Error('Swap provider returned success without a transaction identifier');
           setSwapSuccessHash(txHash);
           if (onTransactionSuccess) {
             onTransactionSuccess(txHash);

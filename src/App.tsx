@@ -424,15 +424,13 @@ export default function App() {
   const [activeReconTab, setActiveReconTab] = useState<'unified' | 'exchanges' | 'yield' | 'wise' | 'gold' | 'delegation' | 'osc-insurance'>('unified');
 
   const [marshallConfig, setMarshallConfig] = useState<any>(() => {
-    const saved = localStorage.getItem('cb_marshall_config');
-    if (saved) return JSON.parse(saved);
     return {
-      address: (import.meta as any).env?.VITE_MARSHALL_ADDRESS || '0x742d35cc6634c0532925a3b844bc454e4438f44e',
-      ledgerBalance: 260668051.49,
-      baseline: 250000000,
-      hasPrivateKey: true,
+      address: (import.meta as any).env?.VITE_MARSHALL_ADDRESS || '',
+      ledgerBalance: 0,
+      baseline: 0,
+      hasPrivateKey: false,
       lastUpdate: new Date().toISOString(),
-      status: 'SECURED'
+      status: 'NOT_CONNECTED'
     };
   });
 
@@ -608,12 +606,7 @@ export default function App() {
       // keep existing state on parse failure
     }
 
-    try {
-      const scopedMarshall = read('cb_marshall_config');
-      if (scopedMarshall) setMarshallConfig(JSON.parse(scopedMarshall));
-    } catch {
-      // keep existing state on parse failure
-    }
+    // Do not restore wallet balances, addresses, or key claims from browser storage; authoritative state must come from live providers.
 
     const scopedKyc = read('cb_kyc_level');
     if (scopedKyc && Number.isFinite(Number(scopedKyc))) {
@@ -3334,9 +3327,7 @@ export default function App() {
                 setSovereignTokens(newTokens);
               }}
               wallets={[
-                { walletId: 'sovereign-hub-cash', name: 'Sovereign Hub USD Deposit Account (Marcel laframboise)', address: '176576596814061', chainType: 'Wise Domestic ACH/Wire (Routing: 084009519)' },
-                { walletId: 'marshall-main', name: 'Marshall Sovereign Treasury', address: marshallConfig?.address || '0x58B178F7EEe92fe888c0A1684D5FE6b78C0Ff99f', chainType: 'Ethereum Enclave' },
-                { walletId: 'yield-vault', name: 'High-Yield Multi-Sig Enclave', address: '0x438aE245D8a3C58B178F7EEe92fe888c0A1684D5FE', chainType: 'Multi-Sig Enclave' }
+                { walletId: 'sovereign-hub-cash', name: 'Sovereign Hub USD Deposit Account', address: '', chainType: 'Wise live account (provider connection required)' },                { walletId: 'marshall-main', name: 'Marshall Sovereign Treasury', address: marshallConfig?.address || '', chainType: 'Ethereum provider connection required' },                { walletId: 'yield-vault', name: 'High-Yield Destination', address: '', chainType: 'Live yield provider destination required' }
               ]}
               marshallConfig={marshallConfig}
               onCreateYieldWallet={handleCreateYieldWallet}

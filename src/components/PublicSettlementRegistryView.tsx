@@ -41,7 +41,7 @@ export const PublicSettlementRegistryView: React.FC<PublicSettlementRegistryView
   settlementAnchor
 }) => {
   const [activeAddress, setActiveAddress] = useState(
-    marshallConfig?.address || '0x58B178F7EEe92fe888c0A1684D5FE6b78C0Ff99f'
+    marshallConfig?.address || ''
   );
   const [customSearchAddress, setCustomSearchAddress] = useState('');
   const [onChainBalance, setOnChainBalance] = useState<string>('0.0000');

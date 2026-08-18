@@ -240,9 +240,9 @@ export default function SovereignIntelligenceView({
   const [customWalletName, setCustomWalletName] = useState('Sovereign Yield Target');
   const [proposalExecuted, setProposalExecuted] = useState(false);
 
-  // Target Yield Destination input state
+  // A destination is displayed only after live provider registration or verified user input.
   const [targetAddressInput, setTargetAddressInput] = useState<string>(
-    sovIntelState.targetYieldAddress || marshallConfig?.address || '0x58B178F7EEe92fe888c0A1684D5FE6b78C0Ff99f'
+    sovIntelState.targetYieldAddress || marshallConfig?.address || ''
   );
 
   useEffect(() => {
@@ -253,23 +253,22 @@ export default function SovereignIntelligenceView({
     }
   }, [sovIntelState.targetYieldAddress, marshallConfig?.address]);
 
-  // Hard gold values
-  const goldOz = 31045.29;
-  const goldPriceEstimate = usdRates['XAUT'] || 2350.00;
+  // Precious-metal and token values are authoritative only when live token and rate data exists.
+  const goldToken = sovereignTokens.find(t => t.symbol === 'XAUT' || t.symbol === 'GOLD');
+  const goldOz = goldToken && Number(goldToken.balance) > 0 ? Number(goldToken.balance) : 0;
+  const goldPriceEstimate = Number(usdRates['XAUT'] || 0);
   const goldValuation = goldOz * goldPriceEstimate;
 
-  // Find token balances from sovereignTokens
   const ethToken = sovereignTokens.find(t => t.symbol === 'ETH');
-  // Securely fallback to 116,998.23 ETH if the on-chain sync returned 0 (to ensure Native ETH is always available)
-  const totalEthAvailable = ethToken && ethToken.balance > 0 ? ethToken.balance : 116998.23;
-  const ethPrice = usdRates['ETH'] || 3300.00;
+  const totalEthAvailable = ethToken && Number(ethToken.balance) > 0 ? Number(ethToken.balance) : 0;
+  const ethPrice = Number(usdRates['ETH'] || 0);
 
   const polToken = sovereignTokens.find(t => t.symbol === 'POL');
-  const totalPolAvailable = polToken && polToken.balance > 0 ? polToken.balance : 4715975.07;
-  const polPrice = usdRates['POL'] || 0.50;
+  const totalPolAvailable = polToken && Number(polToken.balance) > 0 ? Number(polToken.balance) : 0;
+  const polPrice = Number(usdRates['POL'] || 0);
 
   const usdfToken = sovereignTokens.find(t => t.symbol === 'USDF');
-  const totalUsdfAvailable = usdfToken ? usdfToken.balance : 260668051.49;
+  const totalUsdfAvailable = usdfToken && Number(usdfToken.balance) > 0 ? Number(usdfToken.balance) : 0;
 
   // The available unstaked ETH is the liquid balance remaining.
   // If the wallet balance is greater than or equal to the staked amount, we subtract the staked amount because they are not yet deducted from the wallet balance.
@@ -713,259 +712,31 @@ export default function SovereignIntelligenceView({
       }, index * delay);
     });
   };
+  const LIVE_EXECUTION_ENABLED = false;
 
   const executeStakingDeployment = async () => {
-    const amt = parseFloat(stakeAmount);
-    if (isNaN(amt) || amt <= 0) {
-      triggerNotification('Please enter a valid ETH amount to stake', 'error');
-      return;
-    }
-    const maxAllowed = totalEthAvailable;
-    if (amt > maxAllowed) {
-      triggerNotification(`Amount exceeds maximum available liquid ETH (${maxAllowed.toFixed(2)} ETH)`, 'error');
-      return;
-    }
-
-    await requestSovereignAuthorization(
-      'Sovereign ETH Validator Key Delegation',
-      `Confirm the delegation of ${amt.toLocaleString()} ETH to the ${stakeProvider} validation operator network.`,
-      async () => {
-        setIsActionExecuting(true);
-        setConsoleTitle(`${stakeProvider.toUpperCase()} VALIDATOR NODE PROVISIONING SERVICE`);
-        appendLogs([
-          `Initializing multi-shard key generation protocol with ${stakeProvider}...`,
-          `Configuring 32 ETH threshold deposit batches for validation node...`,
-          `Generating validator private keys under secure Enclave environment...`,
-          `Establishing threshold communication channel with Ethereum beacon chain...`,
-          `Broadcasting 32 ETH Deposit Contract transaction payloads (total: ${Math.ceil(amt / 32)} nodes)...`,
-          `Verifying signature proof for node operators: [FIPS-140-2 Level 4 HSM]...`,
-          `Deposit Contract signatures successfully appended and confirmed by operator oracle...`,
-          `SUCCESS: ${amt.toLocaleString()} ETH securely delegated and staked under active governance!`,
-          `Programmatic returns active: ~${ethApr}% APR baseline compounding daily.`
-        ], 350);
-
-        setTimeout(async () => {
-          const newState = {
-            ...sovIntelState,
-            stakedEth: sovIntelState.stakedEth + amt,
-            stakingProvider: stakeProvider,
-            nodesOnline: sovIntelState.nodesOnline + Math.ceil(amt / 32),
-            lastAuditDate: new Date().toISOString()
-          };
-          await onSaveIntel(newState);
-          await saveAuditLog(user.uid, 'ETH_VALIDATOR_STAKED', `Delegated ${amt.toFixed(2)} ETH to ${stakeProvider} validation nodes.`);
-          triggerNotification(`Successfully deployed ${amt.toFixed(2)} ETH to ${stakeProvider} validator nodes!`, 'success');
-          setStakeAmount('');
-          setIsActionExecuting(false);
-        }, 3800);
-      }
-    );
+    triggerNotification('Live staking provider and deposit transaction route are not connected; no simulated staking was executed.', 'info');
   };
 
   const executeRwaAllocation = async () => {
-    const amt = parseFloat(rwaAmount);
-    if (isNaN(amt) || amt <= 0) {
-      triggerNotification('Please enter a valid USDF amount to reallocate', 'error');
-      return;
-    }
-    const maxAllowed = totalUsdfAvailable;
-    if (amt > maxAllowed) {
-      triggerNotification(`Amount exceeds maximum available liquid USDF ($${maxAllowed.toLocaleString()})`, 'error');
-      return;
-    }
-
-    await requestSovereignAuthorization(
-      'Sovereign RWA Tokenized Fund Reallocation',
-      `Authorize reallocation of $${amt.toLocaleString()} USDF stablecoins into the ${rwaInstrument} secure treasury trust.`,
-      async () => {
-        setIsActionExecuting(true);
-        setConsoleTitle(`RWA LIQUIDITY BRIDGE: ${rwaInstrument.toUpperCase()}`);
-        appendLogs([
-          `Routing $${amt.toLocaleString()} USDF liquidity payload to institutional vault gateway...`,
-          `Verifying compliance oracles and smart-contract parameters for fund subscription...`,
-          `Executing subscription payload with legal custody broker (Zurich / London)...`,
-          `Minting equivalent tokenized yield units: [${rwaInstrument === 'BlackRock BUIDL' ? 'BUIDL' : 'USDY'}] on Ethereum blockchain...`,
-          `Syncing institutional ledger entries and collateral reserves...`,
-          `Programmatic auditing check: 100.0% collateralized reserve ratio verified...`,
-          `SUCCESS: $${amt.toLocaleString()} USDF successfully reallocated into tokenized US Government Treasuries!`,
-          `Programmatic yield stream active: ~${rwaApy}% APY accruing directly on-chain.`
-        ], 350);
-
-        setTimeout(async () => {
-          const newState = {
-            ...sovIntelState,
-            rwaAllocated: sovIntelState.rwaAllocated + amt,
-            rwaInstrument: rwaInstrument,
-            lastAuditDate: new Date().toISOString()
-          };
-          await onSaveIntel(newState);
-          await saveAuditLog(user.uid, 'RWA_FUNDS_ALLOCATED', `Allocated $${amt.toLocaleString()} USDF to ${rwaInstrument} Yield Reserve.`);
-          triggerNotification(`Successfully reallocated $${amt.toLocaleString()} USDF to ${rwaInstrument}!`, 'success');
-          setRwaAmount('');
-          setIsActionExecuting(false);
-        }, 3200);
-      }
-    );
+    triggerNotification('Live RWA provider and transaction route are not connected; no simulated allocation was executed.', 'info');
   };
-
   const executeGoldRebalance = async () => {
-    const totalGold = 31045.29; // baseline gold in ounces
-    const pct = goldRebalancePercent;
-    if (pct < 0 || pct > 100) {
-      triggerNotification('Rebalance percentage must be between 0 and 100', 'error');
-      return;
-    }
-
-    const xautAmtToSell = totalGold * (pct / 100);
-
-    await requestSovereignAuthorization(
-      'Sovereign Gold Reserves Diversification Rebalance',
-      `Reallocate ${pct}% of tokenized gold reserves (${xautAmtToSell.toLocaleString(undefined, {maximumFractionDigits: 2})} oz) into Paxos Trust PAXG for regulatory diversification.`,
-      async () => {
-        setIsActionExecuting(true);
-        setConsoleTitle('GOLD RESERVE DIVERSIFICATION SWAP');
-        
-        appendLogs([
-          `Querying on-chain reserve nodes for Tether Gold (XAUT) balances...`,
-          `Current balance: ${totalGold.toLocaleString()} troy ounces detected.`,
-          `Calculating target portfolio: ${ (100 - pct) }% XAUT / ${pct}% PAXG.`,
-          `Contacting institutional OTC gold liquidity desks (New York & Zurich)...`,
-          `Initiating atomic swap protocol via Paxos Trust & TG Commodities pipelines...`,
-          `Exchanging ${xautAmtToSell.toLocaleString(undefined, {maximumFractionDigits: 2})} XAUT for equivalent regulated PAXG...`,
-          `Verifying NYDFS compliance checks and custodial collateral guarantees...`,
-          `Re-indexing physical gold bar registries under 4-of-7 multi-sig escrow...`,
-          `State synchronization confirmed. Updating Sovereign Ledger ledger entries...`,
-          `SUCCESS: Sovereign Gold reserves diversified: XAUT (${(totalGold - xautAmtToSell).toLocaleString(undefined, {maximumFractionDigits: 2})} oz) | PAXG (${xautAmtToSell.toLocaleString(undefined, {maximumFractionDigits: 2})} oz).`,
-          `Dual-issuer asset backing is active and secured under Swiss-US dual custody.`
-        ], 300);
-
-        setTimeout(async () => {
-          // Find or create PAXG
-          let hasPaxg = sovereignTokens.some(t => t.symbol === 'PAXG');
-          let updated = sovereignTokens.map(t => {
-            if (t.symbol === 'XAUT') {
-              return { ...t, balance: totalGold * (1 - pct / 100) };
-            }
-            if (t.symbol === 'PAXG') {
-              return { ...t, balance: totalGold * (pct / 100) };
-            }
-            return t;
-          });
-
-          if (!hasPaxg) {
-            updated.push({
-              symbol: 'PAXG',
-              name: 'Pax Gold',
-              balance: totalGold * (pct / 100),
-              chain: 'Ethereum',
-              priceFallback: goldPriceEstimate,
-              liveSymbol: null,
-              icon: '🌟'
-            });
-          }
-
-          await onUpdateTokens(updated);
-          await saveAuditLog(user?.uid || 'anonymous', 'GOLD_REBALANCED', `Diversified gold allocation: XAUT ${ (100 - pct) }% | PAXG ${pct}% (${xautAmtToSell.toFixed(2)} oz swapped).`);
-          triggerNotification(`Successfully rebalanced gold reserves to ${100 - pct}% XAUT / ${pct}% PAXG!`, 'success');
-          setIsActionExecuting(false);
-        }, 3200);
-      }
-    );
+    triggerNotification('Live gold issuer and custody provider are not connected; no simulated rebalance was executed.', 'info');
   };
 
   const executeVaultAudit = async () => {
-    setIsActionExecuting(true);
-    setConsoleTitle('PHYSICAL GOLD VAULT & HSM STATUS AUDIT');
-    appendLogs([
-      `Requesting secure connection link to Zürcher Kantonalbank (ZKB) custodian API...`,
-      `Establishing encrypted tunnel with Swiss alpine bunker (HSM Level 4)...`,
-      `Querying real-time physical gold weight telemetry from storage vault sensor network...`,
-      `Reading storage container physical sealing serial logs (Count: 31,045.29 troy ounces)...`,
-      `Reconciling bar serial IDs against Sovereign physical certificate index...`,
-      `Verifying cryptographic gold backing oracle (Tether Gold smart contract reserves)...`,
-      `Matching audit trail with Ethereum-issued XAUT token allocations...`,
-      `STATUS CONFIRMED: 31,045.29 troy oz physically present, untouched, and fully secured!`,
-      `All 100% physically collateralized reserves in perfect compliance.`
-    ], 300);
-
-    setTimeout(() => {
-      triggerNotification('Custodial Swiss Gold vault and physical reserves audited successfully!', 'success');
-      setIsActionExecuting(false);
-    }, 3000);
+    triggerNotification('Live custody audit provider is not connected; no simulated vault audit was executed.', 'info');
   };
 
   const executeKeyRotation = async () => {
-    await requestSovereignAuthorization(
-      'Sovereign Multi-Sig Threshold Key Rotation',
-      'Rotate and re-key the cryptographic multi-sig quorum shares across all Swiss, Singapore, and London nodes.',
-      async () => {
-        setIsActionExecuting(true);
-        setConsoleTitle('3-OF-5 MULTI-SIG CRYPTOGRAPHIC QUORUM ROTATION');
-        appendLogs([
-          `Initiating secure key rotation ritual across all geographic multi-sig nodes...`,
-          `Node 1: Zurich Swiss Bunker - Generating fresh ephemeral public-private keypairs...`,
-          `Node 2: Singapore private HSM - Securely establishing threshold connection...`,
-          `Node 3: London Office Fireblocks MPC - Fresh shard generation broadcast...`,
-          `Consolidating key shards via secure multiparty computation (MPC) quorum protocol...`,
-          `Regenerating Shamir's Secret Sharing emergency recovery scheme parameters...`,
-          `Updating Gnosis Safe multisig contract settings with rotated key definitions...`,
-          `SUCCESS: 3-of-5 Cryptographic Quorum successfully re-keyed!`,
-          `Previous session operational keys revoked. New threshold nodes verified and live.`
-        ], 300);
-
-        setTimeout(async () => {
-          const newState = {
-            ...sovIntelState,
-            multiSigStatus: 'ROTATING',
-            lastAuditDate: new Date().toISOString()
-          };
-          await onSaveIntel(newState);
-          
-          setTimeout(async () => {
-            const finalState = {
-              ...sovIntelState,
-              multiSigStatus: 'RE-KEYED',
-              lastAuditDate: new Date().toISOString()
-            };
-            await onSaveIntel(finalState);
-            await saveAuditLog(user.uid, 'SOVEREIGN_MULTISIG_REKEY', 'Executed full cryptographic key rotation across the 3-of-5 quorum network.');
-            triggerNotification('Cryptographic threshold multi-sig keys rotated successfully!', 'success');
-            setIsActionExecuting(false);
-          }, 1500);
-        }, 3000);
-      }
-    );
+    triggerNotification('Live key-rotation provider is not connected; no simulated rotation was executed.', 'info');
   };
 
   const handleTimelockChange = async () => {
-    if (timelockVal === sovIntelState.timelockDelay) return;
-    await requestSovereignAuthorization(
-      'Sovereign Timelock Parameter Update',
-      `Modify the security timelock delay of the Sovereign Wealth Ledger from ${sovIntelState.timelockDelay} hours to ${timelockVal} hours.`,
-      async () => {
-        setIsActionExecuting(true);
-        setConsoleTitle('SOVEREIGN TIMELOCK CONTRACT AMENDMENT');
-        appendLogs([
-          `Preparing timelock contract update proposal...`,
-          `Verifying signature against Master Sovereign Ledger key...`,
-          `Broadcasting timelock parameter change to Gnosis Safe governance queue...`,
-          `Setting activation schedule: parameter changes will take effect after 72h default delay...`,
-          `SUCCESS: Sovereign ledger timelock configuration updated to ${timelockVal} hours!`
-        ], 400);
-
-        setTimeout(async () => {
-          const newState = {
-            ...sovIntelState,
-            timelockDelay: timelockVal,
-            lastAuditDate: new Date().toISOString()
-          };
-          await onSaveIntel(newState);
-          await saveAuditLog(user.uid, 'TIMELOCK_DELAY_UPDATED', `Sovereign ledger timelock security delay updated to ${timelockVal} hours.`);
-          triggerNotification(`Sovereign Ledger security timelock successfully updated to ${timelockVal} hours!`, 'success');
-          setIsActionExecuting(false);
-        }, 2200);
-      }
-    );
+    if (timelockVal !== sovIntelState.timelockDelay) {
+      triggerNotification('Live governance transaction endpoint is not connected; no simulated timelock update was executed.', 'info');
+    }
   };
 
   return (
@@ -1341,122 +1112,18 @@ export default function SovereignIntelligenceView({
           <div className="space-y-4 bg-slate-950/40 p-5 rounded-xl border border-slate-900/60 flex flex-col justify-between">
             <div className="space-y-3">
               <span className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider block">
-                2. AI-Triggered Allocation Proposals
+                2. Live Yield Allocation
               </span>
               <p className="text-xs text-slate-400">
-                When active, the AI engine drafts actionable rebalancing configurations to capture sudden yield spikes, waiting for your multi-sig confirmation.
+                Allocation proposals remain unavailable until a configured live provider exposes an authoritative claim, withdrawal, or transaction-preparation API.
               </p>
-
-              {sovIntelState.autoYieldEnabled ? (
-                proposalExecuted ? (
-                  <div className="bg-emerald-500/10 border border-emerald-500/20 p-4 rounded-xl text-center space-y-2">
-                    <Check className="w-8 h-8 text-emerald-400 mx-auto" />
-                    <h4 className="text-xs font-bold text-white uppercase font-mono">Proposal Approved & Executed</h4>
-                    <p className="text-[11px] text-slate-400 font-mono">
-                      USDC reserves have been successfully swapped and allocated to Ondo US Treasuries at 4.9% APY. Balances are fully synchronized.
-                    </p>
-                  </div>
-                ) : (
-                  <div className="bg-slate-950 border border-slate-800 p-4 rounded-xl space-y-3 relative overflow-hidden">
-                    <div className="absolute top-0 right-0 bg-amber-500/10 text-amber-400 text-[8px] font-mono font-bold px-2 py-0.5 rounded-bl uppercase border-l border-b border-slate-800">
-                      Pending Approval
-                    </div>
-                    
-                    <span className="text-[9px] font-mono font-bold text-amber-500 uppercase tracking-wider block">Proposal #YIP-05</span>
-                    <h4 className="text-xs font-bold text-white font-mono">Maximize USDC Yield Sweep (USDC ➔ Ondo Treasuries)</h4>
-                    <p className="text-[10px] text-slate-400 leading-relaxed font-mono">
-                      Sovereign AI detected an idle liquidity block of <strong>$5,000,000 USDC</strong> in our self-custody cold-pool. Ondo US Treasuries yields <strong>4.9% APY</strong>, outperforming BlackRock BUIDL baseline (4.8%). Reallocating will increase annual passive yield by <strong>+$5,000 USD/year</strong>.
-                    </p>
-
-                    <div className="h-px bg-slate-800 my-1"></div>
-
-                    <div className="flex justify-between items-center text-[10px] font-mono">
-                      <span className="text-slate-500">Proposed Volume:</span>
-                      <span className="text-white font-bold">$5,000,000 USD</span>
-                    </div>
-                    <div className="flex justify-between items-center text-[10px] font-mono">
-                      <span className="text-slate-500">Destination Yield Address:</span>
-                      <span className="text-emerald-400 font-bold max-w-[150px] truncate">
-                        {sovIntelState.targetYieldAddress ? `${sovIntelState.targetYieldAddress.substring(0, 10)}...` : 'Not Selected'}
-                      </span>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-2.5 pt-1.5">
-                      <button
-                        id="auto-yield-approve-btn"
-                        onClick={async () => {
-                          if (!sovIntelState.targetYieldAddress) {
-                            triggerNotification('Please select a target yield destination address first', 'error');
-                            return;
-                          }
-                          await requestSovereignAuthorization(
-                            'AI-Triggered Auto-Yield Sweep',
-                            'Approve the AI allocation proposal #YIP-05 to rebalance $5,000,000 USDC into Ondo US Treasuries.',
-                            async () => {
-                              setIsActionExecuting(true);
-                              setConsoleTitle('AUTO-YIELD SCHEDULER & REBALANCING ENCLAVE');
-                              appendLogs([
-                                `Initiating Auto-Yield Optimization sweep protocol #YIP-05...`,
-                                `Retrieving verified secure sweep wallet address: ${sovIntelState.targetYieldAddress}...`,
-                                `Target yield swept address verified by HSM signature proof: APPROVED`,
-                                `Executing liquidity block routing for 5,000,000 USDC reserves...`,
-                                `Connecting to Kyber Network and 1inch DEX aggregators for low-slippage routing...`,
-                                `Routing atomic swap: USDC -> Ondo USDY (4.90% APY)...`,
-                                `Writing transaction footprint to Ledger: Gnosis Safe multi-sig signatures generated.`,
-                                `Allocating minted USDY certificates directly to cold-vault reserves...`,
-                                `RWA allocations updated: +$5,000,000 USD successfully sweeped to Ondo US Treasuries!`,
-                                `SUCCESS: Yield sweeps initiated! Direct disbursements will route monthly to Swiss Custodian.`
-                              ], 350);
-                              
-                              setTimeout(async () => {
-                                // Save the updated RWA allocation state to Firestore
-                                const newAlloc = sovIntelState.rwaAllocated + 5000000;
-                                await onSaveIntel({
-                                  ...sovIntelState,
-                                  rwaAllocated: newAlloc
-                                });
-                                setProposalExecuted(true);
-                                setIsActionExecuting(false);
-                                triggerNotification('Auto-Yield Proposal approved and $5,000,000 reallocated successfully!', 'success');
-                                await saveAuditLog(
-                                  user.uid,
-                                  'YIELD_REALLOCATED',
-                                  `Reallocated $5,000,000 USDC to Ondo Treasuries via approved Auto-Yield optimization`
-                                );
-                              }, 3500);
-                            }
-                          );
-                        }}
-                        disabled={!sovIntelState.targetYieldAddress || isActionExecuting}
-                        className="bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold py-1.5 px-3 rounded-lg text-[10px] flex items-center justify-center gap-1 cursor-pointer transition disabled:opacity-50"
-                      >
-                        <Check className="w-3.5 h-3.5" />
-                        APPROVE & EXECUTE
-                      </button>
-                      
-                      <button
-                        id="auto-yield-dismiss-btn"
-                        onClick={() => {
-                          triggerNotification('Yield optimization proposal rejected', 'info');
-                        }}
-                        disabled={isActionExecuting}
-                        className="bg-slate-900 hover:bg-slate-800 text-slate-300 font-bold py-1.5 px-3 rounded-lg text-[10px] flex items-center justify-center gap-1 cursor-pointer transition"
-                      >
-                        <AlertCircle className="w-3.5 h-3.5" />
-                        DISMISS
-                      </button>
-                    </div>
-                  </div>
-                )
-              ) : (
-                <div className="bg-slate-950 border border-dashed border-slate-800 p-6 rounded-xl text-center space-y-2">
-                  <AlertCircle className="w-6 h-6 text-slate-500 mx-auto" />
-                  <h4 className="text-xs font-bold text-slate-400 uppercase font-mono">Engine Dormant</h4>
-                  <p className="text-[10px] text-slate-500 leading-relaxed max-w-sm mx-auto">
-                    Activate Auto-Yield Optimization using the toggle above to enable AI-triggered sweep proposals and protocol rebalancing.
-                  </p>
-                </div>
-              )}
+              <div className="bg-slate-950 border border-dashed border-slate-800 p-6 rounded-xl text-center space-y-2">
+                <AlertCircle className="w-6 h-6 text-slate-500 mx-auto" />
+                <h4 className="text-xs font-bold text-slate-400 uppercase font-mono">Live Provider Required</h4>
+                <p className="text-[10px] text-slate-500 leading-relaxed max-w-sm mx-auto">
+                  No allocation, swap, APY, balance, or success state is shown without live provider data and an authoritative transaction receipt.
+                </p>
+              </div>
             </div>
           </div>
           
@@ -3229,6 +2896,10 @@ export default function SovereignIntelligenceView({
                     <button
                       id="delegate-pepe-btn"
                       onClick={async () => {
+                        if (!LIVE_EXECUTION_ENABLED) {
+                          triggerNotification("Live DEX transaction endpoint is not connected; no simulated execution was performed.", "info");
+                          return;
+                        }
                         await requestSovereignAuthorization(
                           'Authorize PEPE TWAP Liquidation Protocol',
                           'Delegate the programmatic 30% divestment of Pepe holdings ($414,864,000.00 equivalent) into USDC and Ondo USDY real-world assets.',
@@ -3323,6 +2994,10 @@ export default function SovereignIntelligenceView({
                     <button
                       id="delegate-blockdaemon-btn"
                       onClick={async () => {
+                        if (!LIVE_EXECUTION_ENABLED) {
+                          triggerNotification("Live validator transaction endpoint is not connected; no simulated execution was performed.", "info");
+                          return;
+                        }
                         await requestSovereignAuthorization(
                           'Authorize Client Diversity Protocol',
                           'Delegate AI to enforce multi-client distribution (Lighthouse/Teku/Prysm) on Blockdaemon nodes to shield staked validator assets from client bugs.',
@@ -3401,6 +3076,10 @@ export default function SovereignIntelligenceView({
                     <button
                       id="delegate-mpc-btn"
                       onClick={async () => {
+                        if (!LIVE_EXECUTION_ENABLED) {
+                          triggerNotification("Live governance transaction endpoint is not connected; no simulated execution was performed.", "info");
+                          return;
+                        }
                         await requestSovereignAuthorization(
                           'Authorize Multi-Party Computation (MPC) Upgrade',
                           'Upgrade the Sovereign Treasury authorization system to an off-chain MPC-CMP protocol to eliminate single points of failure and public tracking.',
@@ -3478,6 +3157,10 @@ export default function SovereignIntelligenceView({
                     <button
                       id="delegate-gold-btn"
                       onClick={async () => {
+                        if (!LIVE_EXECUTION_ENABLED) {
+                          triggerNotification("Live gold transaction endpoint is not connected; no simulated execution was performed.", "info");
+                          return;
+                        }
                         await requestSovereignAuthorization(
                           'Authorize Gold Portfolio Rebalancing',
                           'Delegate dynamic rebalancing swap to adjust Tether Gold (XAUT) and Pax Gold (PAXG) allocations to perfect 70% and 30% targets based on Chainlink Gold feeds.',
