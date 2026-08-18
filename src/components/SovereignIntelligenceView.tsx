@@ -211,77 +211,13 @@ export default function SovereignIntelligenceView({
     try {
       setConsoleLogs([]);
       setIsConsoleActive(true);
-      setConsoleTitle('SECURE DELEGATED YIELD RECONCILIATION ENGINE');
-      
-      const logs = [
-        'Initializing dual-signed Swiss Alpine RPC node connection...',
-        'Connecting to Coinbase Prime Custody API Oracle feed...',
-        'Validating Kraken Proof-of-Reserves Merkle Leaf signature...',
-        'Pulling current accumulated Ethereum Beacon Chain staking rewards...',
-        `Yield Source: Kiln (ETH) & Figment (ETH) validators`,
-        `RWA Source: BlackRock BUIDL Treasury`,
-        'Mapping target payout yield destination: ' + (sovIntelState.targetYieldAddress || '0x438aE...09C'),
-        'Initiating cryptographic block sweep under threshold quorum (4-of-7)...',
-        'Quorum validated! Signature payload: 0x9e8a7...f32',
-        'Reconciling Ledger database state with Firebase Firestore...',
-        'Sync complete! Yield disbursed and ledger finalized.'
-      ];
-
-      for (let i = 0; i < logs.length; i++) {
-        await new Promise(resolve => setTimeout(resolve, 200));
-        setConsoleLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] ${logs[i]}`]);
-      }
-
-      const randomTxHash = '0x' + Array.from({ length: 40 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
-      const randomBlock = 20185000 + Math.floor(Math.random() * 5000);
-      const totalAnnualYield = ((sovIntelState.stakedEth > 0 ? sovIntelState.stakedEth : totalEthAvailable) * ethPrice * 0.036) + (sovIntelState.rwaAllocated * 0.052);
-      const currentPayoutUsd = totalAnnualYield / 365;
-      
-      const newPayout = {
-        txHash: randomTxHash,
-        blockNumber: randomBlock,
-        amount: currentPayoutUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
-        asset: 'USD / USDF / ETH',
-        timestamp: new Date().toISOString(),
-        status: 'SUCCESS'
-      };
-
-      const existingHistory = sovIntelState.yieldHistory || [
-        {
-          txHash: '0x3a9f0e1d2c3b4a5e6f7a8b9c0d1e2f3a4b5c6d7e',
-          blockNumber: 20184102,
-          amount: '11,532.40',
-          asset: 'ETH Staking Reward (Kiln)',
-          timestamp: '2026-06-26T08:00:00.000Z',
-          status: 'SUCCESS'
-        },
-        {
-          txHash: '0xb2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1',
-          blockNumber: 20181590,
-          amount: '195,000.00',
-          asset: 'BUIDL Monthly Div (BlackRock)',
-          timestamp: '2026-06-01T12:00:00.000Z',
-          status: 'SUCCESS'
-        },
-        {
-          txHash: '0xf5e4d3c2b1a0f9e8d7c6b5a4f3e2d1c0b9a8f7e6',
-          blockNumber: 20172400,
-          amount: '10,950.15',
-          asset: 'Coinbase Prime Staking Reward',
-          timestamp: '2026-05-28T08:00:00.000Z',
-          status: 'SUCCESS'
-        }
-      ];
-
-      const updatedHistory = [newPayout, ...existingHistory].slice(0, 10);
-      
-      await onSaveIntel({
-        ...sovIntelState,
-        yieldHistory: updatedHistory
-      });
-
-      await saveAuditLog(user?.uid || 'anonymous', 'YIELD_SWEEP_EXECUTED', `Executed and verified real-time yield sweep of $${currentPayoutUsd.toFixed(2)} USD to Target Address ${sovIntelState.targetYieldAddress || '0x438aE...09C'}`);
-      triggerNotification(`Yield Sweep of $${currentPayoutUsd.toLocaleString(undefined, { maximumFractionDigits: 2 })} Successful! Tx Hash: ${randomTxHash.substring(0, 16)}...`, 'success');
+      setConsoleTitle('LIVE-ONLY YIELD ROUTING STATUS');
+      setConsoleLogs([
+        `[${new Date().toLocaleTimeString()}] Legacy client-side yield sweep is disabled.`,
+        `[${new Date().toLocaleTimeString()}] No transaction, address creation, ledger credit, or provider claim was performed.`,
+        `[${new Date().toLocaleTimeString()}] Use the Live-Only Yield Routing view to reconcile a configured provider and prepare a verified claim.`
+      ]);
+      triggerNotification('Legacy local yield sweep is disabled. No transaction was broadcast.', 'info');
     } catch (e) {
       console.error(e);
       triggerNotification('Error executing yield sweep', 'error');
@@ -1281,40 +1217,26 @@ export default function SovereignIntelligenceView({
               <h3 className="text-base font-display font-bold text-white">Auto-Yield Programmatic Optimization</h3>
             </div>
             <p className="text-xs text-slate-400 max-w-2xl">
-              Enable the Sovereign AI Agent to continuously scan liquid staking (Lido, Kiln), RWA protocols (BlackRock BUIDL, Ondo Finance), and Aave money markets. Idle reserve balances will be reallocated into the highest-yielding verified protocols upon your authorization.
+              Legacy local routing controls are disabled. Live yield routing is available only through the authenticated provider workflow, permanent address verification, and explicit collection approval.
             </p>
           </div>
           
           {/* TOGGLE */}
           <div className="flex items-center gap-3 bg-slate-950 px-4 py-2.5 rounded-xl border border-slate-800 shrink-0">
             <span className="text-xs font-mono text-slate-400 uppercase tracking-wider font-bold">
-              {sovIntelState.autoYieldEnabled ? 'Active' : 'Inactive'}
+              Legacy control disabled
             </span>
             <button
               id="auto-yield-toggle-btn"
-              onClick={async () => {
-                const newState = !sovIntelState.autoYieldEnabled;
-                await onSaveIntel({
-                  ...sovIntelState,
-                  autoYieldEnabled: newState
-                });
-                triggerNotification(
-                  newState ? 'Auto-Yield Optimization activated' : 'Auto-Yield Optimization deactivated',
-                  'info'
-                );
-                await saveAuditLog(
-                  user.uid,
-                  'AUTO_YIELD_TOGGLED',
-                  `Auto-Yield Optimization toggled to ${newState ? 'ENABLED' : 'DISABLED'}`
-                );
-              }}
+              onClick={() => triggerNotification('Legacy auto-yield is disabled. Configure a verified provider route in Live-Only Yield Routing.', 'info')}
+              disabled={true}
               className={`w-12 h-6 flex items-center rounded-full p-1 cursor-pointer transition-colors duration-300 focus:outline-none ${
-                sovIntelState.autoYieldEnabled ? 'bg-emerald-500' : 'bg-slate-800'
+                'bg-slate-800 opacity-50 cursor-not-allowed'
               }`}
             >
               <div
                 className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform duration-300 ${
-                  sovIntelState.autoYieldEnabled ? 'translate-x-6' : 'translate-x-0'
+                'translate-x-0'
                 }`}
               />
             </button>
@@ -1330,7 +1252,7 @@ export default function SovereignIntelligenceView({
                 1. Select Target Yield Destination Wallet
               </span>
               <p className="text-xs text-slate-400">
-                All accrued programmatic staking rewards and real-world asset yields will be automatically swept and deposited directly to this address.
+                    This legacy address field cannot verify ownership or issue a permanent custody address, so it cannot activate a routing destination.
               </p>
 
               <div className="space-y-4">
@@ -1350,27 +1272,12 @@ export default function SovereignIntelligenceView({
                     />
                     <button
                       id="save-target-address-btn"
-                      onClick={async () => {
-                        if (!targetAddressInput || targetAddressInput.length < 8) {
-                          triggerNotification('Please enter a valid target yield address', 'error');
-                          return;
-                        }
-                        await onSaveIntel({
-                          ...sovIntelState,
-                          targetYieldAddress: targetAddressInput,
-                          autoYieldEnabled: true
-                        });
-                        triggerNotification('Real yield target address locked and auto-yield activated!', 'success');
-                        await saveAuditLog(
-                          user?.uid || 'anonymous',
-                          'YIELD_TARGET_UPDATED',
-                          `Set real yield target address to ${targetAddressInput}`
-                        );
-                      }}
-                      className="bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold py-2 px-4 rounded-lg text-xs flex items-center justify-center gap-1.5 transition cursor-pointer font-mono uppercase shrink-0"
+                      onClick={() => triggerNotification('Legacy address registration is disabled. Use the verified Live-Only Yield Routing workflow.', 'info')}
+                      disabled={true}
+                      className="bg-slate-700 text-slate-300 font-bold py-2 px-4 rounded-lg text-xs flex items-center justify-center gap-1.5 transition cursor-not-allowed font-mono uppercase shrink-0 opacity-60"
                     >
                       <Check className="w-3.5 h-3.5" />
-                      SET & LOCK ADDRESS
+                      LEGACY DISABLED
                     </button>
                   </div>
                 </div>
@@ -1384,23 +1291,8 @@ export default function SovereignIntelligenceView({
                     <select
                       id="auto-yield-address-select"
                       value={sovIntelState.targetYieldAddress || targetAddressInput || ''}
-                      onChange={async (e) => {
-                        const addr = e.target.value;
-                        if (addr) {
-                          setTargetAddressInput(addr);
-                          await onSaveIntel({
-                            ...sovIntelState,
-                            targetYieldAddress: addr,
-                            autoYieldEnabled: true
-                          });
-                          triggerNotification('Accrual destination address updated to selected account', 'success');
-                          await saveAuditLog(
-                            user?.uid || 'anonymous',
-                            'YIELD_TARGET_UPDATED',
-                            `Accrual destination address updated to ${addr}`
-                          );
-                        }
-                      }}
+                      onChange={(e) => setTargetAddressInput(e.target.value)}
+                      disabled={true}
                       className="flex-1 bg-slate-950 border border-slate-800 rounded-lg py-2 px-3 text-xs text-white focus:outline-none focus:ring-1 focus:ring-amber-500 font-mono"
                     >
                       <option value="">-- Choose destination account --</option>
@@ -1413,35 +1305,12 @@ export default function SovereignIntelligenceView({
 
                     <button
                       id="auto-yield-create-wallet-btn"
-                      onClick={async () => {
-                        if (!onCreateYieldWallet) {
-                          triggerNotification('Wallet creation service is unavailable', 'error');
-                          return;
-                        }
-                        setIsCreatingWallet(true);
-                        try {
-                          const name = customWalletName || 'Sovereign Yield Target';
-                          const createdAddress = await onCreateYieldWallet(name, 'Ethereum');
-                          if (createdAddress) {
-                            setTargetAddressInput(createdAddress);
-                            await onSaveIntel({
-                              ...sovIntelState,
-                              targetYieldAddress: createdAddress,
-                              autoYieldEnabled: true
-                            });
-                            triggerNotification(`Created & designated yield target wallet: ${name}`, 'success');
-                          }
-                        } catch (err) {
-                          console.error(err);
-                        } finally {
-                          setIsCreatingWallet(false);
-                        }
-                      }}
-                      disabled={isCreatingWallet}
-                      className="bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold py-2 px-4 rounded-lg text-xs flex items-center justify-center gap-1.5 transition disabled:opacity-50 cursor-pointer whitespace-nowrap"
+                      onClick={() => triggerNotification('Legacy address creation is disabled. A real custody issuer must create the permanent address.', 'info')}
+                      disabled={true}
+                      className="bg-slate-700 text-slate-300 font-bold py-2 px-4 rounded-lg text-xs flex items-center justify-center gap-1.5 transition disabled:opacity-50 cursor-not-allowed whitespace-nowrap"
                     >
                       <RefreshCw className={`w-3.5 h-3.5 ${isCreatingWallet ? 'animate-spin' : ''}`} />
-                      AUTO-CREATE NEW WALLET
+                      LEGACY DISABLED
                     </button>
                   </div>
                 </div>
@@ -2571,7 +2440,7 @@ export default function SovereignIntelligenceView({
                 </div>
               </div>
 
-              {/* INTERACTIVE SWEEP & LIVE DISBURSEMENT MODULE */}
+              {/* Legacy sweep status: real collection now lives in the live-only routing workflow. */}
               <div className="bg-slate-950 p-5 rounded-xl border border-amber-500/20 space-y-4 relative overflow-hidden">
                 <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/5 rounded-full blur-2xl"></div>
                 
@@ -2579,29 +2448,29 @@ export default function SovereignIntelligenceView({
                   <div className="space-y-1">
                     <h5 className="text-xs font-mono font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
                       <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
-                      Active Yield Sweep Engine
+                      Legacy Local Sweep Disabled
                     </h5>
                     <p className="text-xs text-slate-300 font-display font-semibold">
-                      Trigger Immediate Multi-Sig On-Chain Yield Re-Route & Disburse
+                      Live collection requires provider reconciliation and explicit approval
                     </p>
                     <p className="text-[11px] text-slate-500 leading-normal">
-                      Initiate a dual-signed structural reconciliation. Our systems will sweep accumulated liquid staking and corporate RWA yield directly to your configured targets.
+                      This legacy dashboard cannot create addresses, report rewards, or claim funds. Use the Live-Only Yield Routing view for authenticated provider data and verified destination registration.
                     </p>
                   </div>
                   <button
                     onClick={handleSweepYield}
-                    disabled={isSweeping}
+                    disabled={true}
                     className="shrink-0 bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-slate-950 font-bold text-xs py-2.5 px-5 rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-amber-500/10 cursor-pointer transition"
                   >
                     {isSweeping ? (
                       <>
                         <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                        Sweeping...
+                        Disabled
                       </>
                     ) : (
                       <>
                         <Coins className="w-4 h-4" />
-                        Execute Live Yield Sweep
+                        Legacy sweep disabled
                       </>
                     )}
                   </button>
@@ -2611,37 +2480,37 @@ export default function SovereignIntelligenceView({
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4 border-t border-slate-900 font-mono text-[10px]">
                   <div className="bg-slate-900/30 p-3 rounded-lg space-y-1.5">
                     <span className="text-slate-500 block">DESTINATION ACCOUNT</span>
-                    <span className="text-white font-bold block truncate" title={sovIntelState.targetYieldAddress || '0x438aE...09C'}>
-                      {sovIntelState.targetYieldAddress || '0x438aE...09C'}
+                    <span className="text-white font-bold block truncate" title={sovIntelState.targetYieldAddress || 'No verified destination registered'}>
+                      {sovIntelState.targetYieldAddress || 'No verified destination registered'}
                     </span>
                     <span className="text-[9px] text-amber-500 bg-amber-500/10 px-1.5 py-0.5 rounded inline-block">
-                      {sovIntelState.autoYieldEnabled ? 'AUTO-YIELD REDIRECT ACTIVE' : 'MANUAL REDIRECT'}
+                      {sovIntelState.autoYieldEnabled ? 'UNVERIFIED LEGACY FLAG' : 'NO LIVE ROUTE'}
                     </span>
                   </div>
 
                   <div className="bg-slate-900/30 p-3 rounded-lg space-y-1.5">
                     <span className="text-slate-500 block">ETH STAKING TIMELINE</span>
-                    <span className="text-white font-bold block">Daily Accrual / Monthly Sweep</span>
-                    <span className="text-slate-400 block text-[9px]">Next Sweep: June 28, 2026 (Every 24h on Beacon)</span>
+                    <span className="text-white font-bold block">Provider schedule unverified</span>
+                    <span className="text-slate-400 block text-[9px]">No sweep schedule is asserted by this dashboard.</span>
                   </div>
 
                   <div className="bg-slate-900/30 p-3 rounded-lg space-y-1.5">
                     <span className="text-slate-500 block">RWA TREASURY TIMELINE</span>
-                    <span className="text-white font-bold block">Monthly Dividend Credit</span>
-                    <span className="text-slate-400 block text-[9px]">Next Payout: July 1, 2026 (1st Business Day)</span>
+                    <span className="text-white font-bold block">Provider schedule unverified</span>
+                    <span className="text-slate-400 block text-[9px]">No payout date is asserted by this dashboard.</span>
                   </div>
                 </div>
               </div>
 
-              {/* LIVE FIREBASE ACCRUAL PROOF LEDGER */}
+              {/* Authoritative claim history must originate from a reconciled provider or chain. */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <h5 className="text-xs font-mono font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
                     <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                    On-Chain Accrual Proof Ledger (Synced with Firestore)
+                    Reconciled Claim History
                   </h5>
                   <span className="text-[9px] font-mono text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded font-bold uppercase">
-                    100% Cryptographically Verified
+                    Provider verification required
                   </span>
                 </div>
 
@@ -2654,32 +2523,7 @@ export default function SovereignIntelligenceView({
                   </div>
 
                   <div className="divide-y divide-slate-900 max-h-[250px] overflow-y-auto">
-                    {(sovIntelState.yieldHistory || [
-                      {
-                        txHash: '0x3a9f0e1d2c3b4a5e6f7a8b9c0d1e2f3a4b5c6d7e',
-                        blockNumber: 20184102,
-                        amount: '11,532.40',
-                        asset: 'ETH Staking Reward (Kiln)',
-                        timestamp: '2026-06-26T08:00:00.000Z',
-                        status: 'SUCCESS'
-                      },
-                      {
-                        txHash: '0xb2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1',
-                        blockNumber: 20181590,
-                        amount: '195,000.00',
-                        asset: 'BUIDL Monthly Div (BlackRock)',
-                        timestamp: '2026-06-01T12:00:00.000Z',
-                        status: 'SUCCESS'
-                      },
-                      {
-                        txHash: '0xf5e4d3c2b1a0f9e8d7c6b5a4f3e2d1c0b9a8f7e6',
-                        blockNumber: 20172400,
-                        amount: '10,950.15',
-                        asset: 'Coinbase Prime Staking Reward',
-                        timestamp: '2026-05-28T08:00:00.000Z',
-                        status: 'SUCCESS'
-                      }
-                    ]).map((row: any, idx: number) => (
+                    {(sovIntelState.yieldHistory || []).map((row: any, idx: number) => (
                       <div key={idx} className="grid grid-cols-4 px-4 py-3 text-[10px] font-mono text-slate-300 hover:bg-slate-900/30 transition">
                         <div className="flex flex-col">
                           <span>{new Date(row.timestamp).toLocaleString()}</span>

@@ -22,6 +22,7 @@
     "test:transaction-security": "tsx scripts/test-transaction-security.ts",
     "test:wise-live": "tsx test-wise-live.ts",
     "test:wise-outbound-e2e": "tsx test-wise-outbound-e2e.ts",
+    "test:yield-routing": "vitest run server/yield-routing.test.ts",
     "test:wise-readiness": "tsx test-wise-readiness.ts",
     "test:wise-live-readiness-diagnostics": "tsx scripts/wise-live-readiness-diagnostics.ts",
     "test:wise-direct-debit-accounts": "tsx scripts/wise-direct-debit-accounts-diagnostics.ts",
@@ -105,6 +106,7 @@
     "tailwindcss": "^4.1.14",
     "tsx": "^4.21.0",
     "typescript": "~5.8.2",
-    "vite": "^6.2.3"
+    "vite": "^6.2.3",
+    "vitest": "^4.1.10"
   }
 }

@@ -38,6 +38,13 @@ import { recordLoginAttempt, isAccountLocked, getAccountLockStatus, clearLoginAt
 import { initializeLogger, getLogger, logSecurityEvent, logTransactionEvent, logSystemEvent, logProviderEvent, logDatabaseEvent } from './src/lib/logger.js';
 import * as ValidationSchemas from './src/lib/validation-schemas.js';
 import { createRateLimiter, PerUserWithdrawalLimiter, PerUserTradeLimiter, PerUserApiCallLimiter } from './src/lib/distributed-rate-limiter.js';
+import {
+  fetchKilnRewardSummary,
+  getConfiguredLiveYieldSources,
+  getLiveYieldSource,
+  validateDestinationAddress,
+  verifyEvmDestinationOwnership
+} from './src/lib/yield-routing.js';
 
 dotenv.config();
 
@@ -7211,6 +7218,160 @@ app.get('/api/coinbase/config', async (req: any, res) => {
     stripeConfigured: !!process.env.STRIPE_SECRET_KEY,
     enforcement: getCriticalOperationsEnforcementState()
   });
+});
+
+/**
+ * Live-only yield routing API. The routes deliberately return empty or
+ * unavailable states when a provider is not configured; they never provide
+ * default balances, fabricated addresses, or synthetic transaction hashes.
+ */
+app.get('/api/yield/sources', requireAuth, requireMfa, async (_req: any, res: any) => {
+  try {
+    const sources = getConfiguredLiveYieldSources(process.env).map((source) => ({
+      id: source.id,
+      provider: source.provider,
+      network: source.network,
+      assetSymbol: source.assetSymbol,
+      addressType: source.addressType,
+      collectionModes: source.automaticClaimsPermitted ? ['manual', 'automatic'] : ['manual'],
+      addressIssuanceAvailable: Boolean(source.addressIssuerUrl),
+      claimPreparationAvailable: Boolean(source.claimPreparationUrl) || source.provider === 'kiln'
+    }));
+    return res.json({ mode: 'live-only', sources });
+  } catch (error: any) {
+    return res.status(503).json({ error: 'YIELD_SOURCE_CONFIGURATION_INVALID', message: error?.message || 'Yield source configuration is unavailable.' });
+  }
+});
+
+app.get('/api/yield/destinations', requireAuth, requireMfa, async (req: any, res: any) => {
+  return res.json({
+    mode: 'live-only',
+    destinations: db.listYieldDestinations(req.user.id)
+  });
+});
+
+app.get('/api/yield/sources/:sourceId/rewards', requireAuth, requireMfa, async (req: any, res: any) => {
+  const source = getLiveYieldSource(String(req.params.sourceId || ''), process.env);
+  if (!source) {
+    return res.status(404).json({ error: 'YIELD_SOURCE_NOT_CONFIGURED', message: 'This yield source is not configured for live reconciliation.' });
+  }
+
+  try {
+    if (source.provider === 'kiln' && source.network === 'ethereum') {
+      const rewards = await fetchKilnRewardSummary(source, process.env);
+      return res.json({ mode: 'live-only', source: { id: source.id, provider: source.provider, network: source.network, assetSymbol: source.assetSymbol }, rewards });
+    }
+    return res.status(501).json({
+      error: 'LIVE_REWARD_RECONCILIATION_NOT_IMPLEMENTED',
+      message: `No verified live reconciliation adapter is installed for ${source.provider} on ${source.network}.`
+    });
+  } catch (error: any) {
+    return res.status(503).json({ error: 'LIVE_REWARD_RECONCILIATION_FAILED', message: error?.message || 'Live yield reconciliation failed.' });
+  }
+});
+
+app.post('/api/yield/destinations/register', requireAuth, requireMfa, requireKyc(2), async (req: any, res: any) => {
+  const sourceId = String(req.body?.sourceId || '').trim();
+  const address = String(req.body?.address || '').trim();
+  const signature = String(req.body?.signature || '').trim();
+  const recoveryReference = String(req.body?.recoveryReference || '').trim();
+  const collectionMode = String(req.body?.collectionMode || 'manual') === 'automatic' ? 'automatic' : 'manual';
+  const source = getLiveYieldSource(sourceId, process.env);
+
+  if (!source) {
+    return res.status(404).json({ error: 'YIELD_SOURCE_NOT_CONFIGURED', message: 'No live provider source is configured for this routing request.' });
+  }
+  if (!validateDestinationAddress(address, source.addressType)) {
+    return res.status(400).json({ error: 'INVALID_DESTINATION_ADDRESS', message: `The destination is not a valid ${source.addressType} address.` });
+  }
+  if (!recoveryReference || recoveryReference.length < 8) {
+    return res.status(400).json({ error: 'RECOVERY_REFERENCE_REQUIRED', message: 'An approved custody or user-managed recovery reference is required.' });
+  }
+  if (collectionMode === 'automatic' && !source.automaticClaimsPermitted) {
+    return res.status(409).json({ error: 'AUTOMATIC_COLLECTION_UNSUPPORTED', message: 'This live source does not permit provider-verified automatic collection.' });
+  }
+  if (source.addressType !== 'evm') {
+    return res.status(501).json({
+      error: 'CHAIN_OWNERSHIP_VERIFICATION_REQUIRED',
+      message: `A verified ${source.addressType} ownership attestation adapter is required before permanent registration.`
+    });
+  }
+  if (!signature || !verifyEvmDestinationOwnership({ userId: req.user.id, sourceId, address, signature })) {
+    return res.status(403).json({ error: 'DESTINATION_OWNERSHIP_VERIFICATION_FAILED', message: 'The destination address signature does not prove ownership for this user and source.' });
+  }
+
+  const existing = db.listYieldDestinations(req.user.id).find((destination) => destination.sourceId === sourceId);
+  const now = new Date().toISOString();
+  const destination = db.upsertYieldDestination({
+    id: existing?.id || `yield_destination_${crypto.randomUUID()}`,
+    userId: req.user.id,
+    sourceId,
+    provider: source.provider,
+    network: source.network,
+    assetSymbol: source.assetSymbol,
+    address: ethers.getAddress(address),
+    addressType: source.addressType,
+    ownershipProofHash: crypto.createHash('sha256').update(signature).digest('hex'),
+    recoveryReference,
+    collectionMode,
+    status: process.env.APP_EMERGENCY_PAUSE === 'true' ? 'paused' : 'active',
+    automationMinimumAmount: String(req.body?.automationMinimumAmount || ''),
+    automationMaximumGasWei: String(req.body?.automationMaximumGasWei || ''),
+    createdAt: existing?.createdAt || now,
+    updatedAt: now,
+    lastClaimTxHash: existing?.lastClaimTxHash || '',
+    lastClaimAt: existing?.lastClaimAt || ''
+  });
+
+  db.appendAuditLog({
+    id: `audit_${crypto.randomUUID()}`,
+    userId: req.user.id,
+    action: 'YIELD_DESTINATION_REGISTERED',
+    timestamp: Date.now(),
+    ipAddress: String(req.ip || ''),
+    status: 'success',
+    details: `Registered a verified permanent ${source.network} yield destination for source ${sourceId}.`
+  });
+
+  return res.status(existing ? 200 : 201).json({ mode: 'live-only', destination });
+});
+
+app.post('/api/yield/claims/prepare', requireAuth, requireMfa, requireKyc(2), async (req: any, res: any) => {
+  if (process.env.APP_EMERGENCY_PAUSE === 'true') {
+    return res.status(423).json({ error: 'YIELD_COLLECTION_PAUSED', message: 'Yield collection is paused by the emergency circuit breaker.' });
+  }
+  const destinationId = String(req.body?.destinationId || '').trim();
+  const destination = db.getYieldDestination(req.user.id, destinationId);
+  if (!destination) {
+    return res.status(404).json({ error: 'YIELD_DESTINATION_NOT_FOUND', message: 'No yield destination is registered for this authenticated account.' });
+  }
+  if (destination.status !== 'active') {
+    return res.status(409).json({ error: 'YIELD_DESTINATION_INACTIVE', message: `The yield destination is ${destination.status}.` });
+  }
+  const source = getLiveYieldSource(destination.sourceId, process.env);
+  if (!source) {
+    return res.status(409).json({ error: 'YIELD_SOURCE_NOT_CONFIGURED', message: 'The configured source no longer exists in the live provider registry.' });
+  }
+
+  try {
+    if (source.provider === 'kiln' && source.network === 'ethereum') {
+      const rewards = await fetchKilnRewardSummary(source, process.env);
+      return res.json({
+        mode: 'live-only',
+        executable: false,
+        requiresProviderApproval: true,
+        message: 'Kiln reward reporting was reconciled. Native validator withdrawal destinations are protocol credentials and cannot be changed or claimed by a generic application request.',
+        destination,
+        rewards
+      });
+    }
+    return res.status(501).json({
+      error: 'CLAIM_PREPARATION_NOT_IMPLEMENTED',
+      message: `No verified claim-preparation adapter is installed for ${source.provider} on ${source.network}.`
+    });
+  } catch (error: any) {
+    return res.status(503).json({ error: 'CLAIM_PREPARATION_FAILED', message: error?.message || 'Live claim preparation failed.' });
+  }
 });
 
 app.post('/api/coinbase/config', requireAuth, requireMfa, async (req, res) => {

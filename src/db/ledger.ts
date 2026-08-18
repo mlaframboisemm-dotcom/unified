@@ -88,12 +88,41 @@ export interface DBBankAccount {
   balance: number;
 }
 
+export type YieldDestinationStatus = 'pending_verification' | 'active' | 'paused' | 'revoked';
+export type YieldCollectionMode = 'manual' | 'automatic';
+
+/**
+ * Permanent, user-controlled destination for one authenticated live yield source.
+ * Private keys, seed phrases, mnemonics, and recovery secrets are never stored here.
+ */
+export interface DBYieldDestination {
+  id: string;
+  userId: string;
+  sourceId: string;
+  provider: string;
+  network: string;
+  assetSymbol: string;
+  address: string;
+  addressType: 'evm' | 'bitcoin' | 'solana' | 'provider-managed' | 'other';
+  ownershipProofHash: string;
+  recoveryReference: string;
+  collectionMode: YieldCollectionMode;
+  status: YieldDestinationStatus;
+  automationMinimumAmount?: string;
+  automationMaximumGasWei?: string;
+  createdAt: string;
+  updatedAt: string;
+  lastClaimTxHash?: string;
+  lastClaimAt?: string;
+}
+
 export interface DatabaseState {
   users: DBUser[];
   wallets: DBWallet[];
   transactions: DBTransaction[];
   auditLogs: DBAuditLog[];
   bankAccounts?: DBBankAccount[];
+  yieldDestinations?: DBYieldDestination[];
 }
 
 export interface LedgerIntegrityFinding {
@@ -110,6 +139,7 @@ export interface LedgerIntegrityReport {
     wallets: number;
     transactions: number;
     auditLogs: number;
+    yieldDestinations: number;
   };
   errors: LedgerIntegrityFinding[];
   warnings: LedgerIntegrityFinding[];
@@ -148,7 +178,8 @@ class RelationalLedgerDatabase {
       users: [],
       wallets: [],
       transactions: [],
-      auditLogs: []
+      auditLogs: [],
+      yieldDestinations: []
     };
     this.load();
   }
@@ -241,13 +272,46 @@ class RelationalLedgerDatabase {
     };
   }
 
+  private normalizeYieldDestination(destination: any): DBYieldDestination {
+    const status = String(destination?.status || 'pending_verification');
+    const collectionMode = String(destination?.collectionMode || 'manual');
+    const addressType = String(destination?.addressType || 'other');
+    return {
+      id: String(destination?.id || ''),
+      userId: String(destination?.userId || ''),
+      sourceId: String(destination?.sourceId || ''),
+      provider: String(destination?.provider || ''),
+      network: String(destination?.network || ''),
+      assetSymbol: String(destination?.assetSymbol || '').toUpperCase(),
+      address: String(destination?.address || ''),
+      addressType: ['evm', 'bitcoin', 'solana', 'provider-managed', 'other'].includes(addressType)
+        ? addressType as DBYieldDestination['addressType']
+        : 'other',
+      ownershipProofHash: String(destination?.ownershipProofHash || ''),
+      recoveryReference: String(destination?.recoveryReference || ''),
+      collectionMode: collectionMode === 'automatic' ? 'automatic' : 'manual',
+      status: ['pending_verification', 'active', 'paused', 'revoked'].includes(status)
+        ? status as YieldDestinationStatus
+        : 'pending_verification',
+      automationMinimumAmount: String(destination?.automationMinimumAmount || ''),
+      automationMaximumGasWei: String(destination?.automationMaximumGasWei || ''),
+      createdAt: String(destination?.createdAt || new Date().toISOString()),
+      updatedAt: String(destination?.updatedAt || new Date().toISOString()),
+      lastClaimTxHash: String(destination?.lastClaimTxHash || ''),
+      lastClaimAt: String(destination?.lastClaimAt || '')
+    };
+  }
+
   private normalizeState(parsed: any): DatabaseState {
     return {
       users: Array.isArray(parsed?.users) ? parsed.users.map((user: any) => this.normalizeUser(user)) : [],
       wallets: Array.isArray(parsed?.wallets) ? parsed.wallets.map((wallet: any) => this.normalizeWallet(wallet)) : [],
       transactions: Array.isArray(parsed?.transactions) ? parsed.transactions : [],
       auditLogs: Array.isArray(parsed?.auditLogs) ? parsed.auditLogs : [],
-      bankAccounts: Array.isArray(parsed?.bankAccounts) ? parsed.bankAccounts : []
+      bankAccounts: Array.isArray(parsed?.bankAccounts) ? parsed.bankAccounts : [],
+      yieldDestinations: Array.isArray(parsed?.yieldDestinations)
+        ? parsed.yieldDestinations.map((destination: any) => this.normalizeYieldDestination(destination))
+        : []
     };
   }
 
@@ -257,7 +321,8 @@ class RelationalLedgerDatabase {
       wallets: [],
       transactions: [],
       auditLogs: [],
-      bankAccounts: []
+      bankAccounts: [],
+      yieldDestinations: []
     };
   }
 
@@ -532,6 +597,64 @@ class RelationalLedgerDatabase {
 
     if (!this.transactionSnapshot) this.save();
     return user;
+  }
+
+  public listYieldDestinations(userId: string): DBYieldDestination[] {
+    const targetState = this.transactionSnapshot || this.state;
+    return (targetState.yieldDestinations || [])
+      .filter((destination) => destination.userId === userId)
+      .map((destination) => ({ ...destination }));
+  }
+
+  public getYieldDestination(userId: string, destinationId: string): DBYieldDestination | null {
+    const targetState = this.transactionSnapshot || this.state;
+    const destination = (targetState.yieldDestinations || []).find(
+      (candidate) => candidate.userId === userId && candidate.id === destinationId
+    );
+    return destination ? { ...destination } : null;
+  }
+
+  public upsertYieldDestination(destination: DBYieldDestination): DBYieldDestination {
+    const targetState = this.transactionSnapshot || this.state;
+    const destinations = targetState.yieldDestinations || [];
+    const normalized = this.normalizeYieldDestination({
+      ...destination,
+      updatedAt: new Date().toISOString()
+    });
+
+    if (!normalized.id || !normalized.userId || !normalized.sourceId || !normalized.provider || !normalized.network || !normalized.assetSymbol || !normalized.address) {
+      throw new Error('Yield destination requires id, userId, sourceId, provider, network, assetSymbol, and address.');
+    }
+
+    const duplicate = destinations.find(
+      (candidate) => candidate.userId === normalized.userId
+        && candidate.sourceId === normalized.sourceId
+        && candidate.id !== normalized.id
+    );
+    if (duplicate) {
+      throw new Error('A yield destination is already registered for this user and source.');
+    }
+
+    const existingIndex = destinations.findIndex((candidate) => candidate.id === normalized.id && candidate.userId === normalized.userId);
+    if (existingIndex >= 0) {
+      const previous = destinations[existingIndex];
+      destinations[existingIndex] = {
+        ...normalized,
+        createdAt: previous.createdAt || normalized.createdAt
+      };
+    } else {
+      destinations.push(normalized);
+    }
+
+    targetState.yieldDestinations = destinations;
+    if (!this.transactionSnapshot) this.save();
+    return { ...normalized };
+  }
+
+  public appendAuditLog(log: DBAuditLog): void {
+    const targetState = this.transactionSnapshot || this.state;
+    targetState.auditLogs.push({ ...log });
+    if (!this.transactionSnapshot) this.save();
   }
 
   // TRANSACTION SUPPORT
@@ -1066,7 +1189,8 @@ class RelationalLedgerDatabase {
         users: targetState.users.length,
         wallets: targetState.wallets.length,
         transactions: targetState.transactions.length,
-        auditLogs: targetState.auditLogs.length
+        auditLogs: targetState.auditLogs.length,
+        yieldDestinations: (targetState.yieldDestinations || []).length
       },
       errors: findings,
       warnings: warningFindings

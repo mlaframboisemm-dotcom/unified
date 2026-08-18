@@ -388,7 +388,19 @@ export default function App() {
     yieldHistory?: any[];
   }>(() => {
     const saved = localStorage.getItem('cb_sov_intel_state');
-    if (saved) return JSON.parse(saved);
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        return {
+          ...parsed,
+          autoYieldEnabled: false,
+          targetYieldAddress: undefined,
+          yieldHistory: []
+        };
+      } catch {
+        // Fall through to the live-only empty state below.
+      }
+    }
     return {
       stakedEth: 0,
       stakingProvider: 'Kiln',
@@ -398,31 +410,14 @@ export default function App() {
       timelockDelay: 72,
       lastAuditDate: new Date().toISOString(),
       nodesOnline: 12,
-      autoYieldEnabled: true,
-      targetYieldAddress: (import.meta as any).env?.VITE_MARSHALL_ADDRESS || '0x742d35cc6634c0532925a3b844bc454e4438f44e',
+      autoYieldEnabled: false,
+      targetYieldAddress: undefined,
       delegationPepeStatus: 'PENDING',
       delegationBlockdaemonStatus: 'PENDING',
       delegationMpcStatus: 'PENDING',
       delegationGoldStatus: 'PENDING',
-      clientDiversityRatio: 'Prysm (100%)',
-      yieldHistory: [
-        {
-          txHash: '0x3a9f0e1d2c3b4a5e6f7a8b9c0d1e2f3a4b5c6d7e',
-          blockNumber: 20184102,
-          amount: '11,532.40',
-          asset: 'ETH Staking Reward (Kiln)',
-          timestamp: '2026-06-26T08:00:00.000Z',
-          status: 'SUCCESS'
-        },
-        {
-          txHash: '0xb2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1',
-          blockNumber: 20181590,
-          amount: '195,000.00',
-          asset: 'BUIDL Monthly Div (BlackRock)',
-          timestamp: '2026-06-27T08:00:00.000Z',
-          status: 'SUCCESS'
-        }
-      ]
+      clientDiversityRatio: 'Provider reconciliation required',
+      yieldHistory: []
     };
   });
 
@@ -659,14 +654,9 @@ export default function App() {
   };
 
   const handleCreateYieldWallet = async (name: string, chain: any) => {
-    try {
-      const randomAddr = '0x' + Array.from({ length: 40 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
-      showToast(`Created yield wallet ${name} on ${chain} under enclave custody!`, 'success');
-      return randomAddr;
-    } catch (e) {
-      console.error(e);
-      return null;
-    }
+    console.warn(`[YIELD] Permanent address issuance requested for ${name} on ${chain}, but no verified custody issuer has been connected to this legacy flow.`);
+    showToast('Address creation is disabled here. Register a provider-issued or user-controlled address in Live-Only Yield Routing.', 'info');
+    return null;
   };
 
   const requestSovereignAuthorization = async (title: string, description: string, callback: () => void) => {
