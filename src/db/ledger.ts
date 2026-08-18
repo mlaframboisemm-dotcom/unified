@@ -384,7 +384,7 @@ class RelationalLedgerDatabase {
         citizenship,
         identityLocked: true,
         productionMode: 'live',
-        blockchainLinked: true,
+        blockchainLinked: false,
         lockedToEmail: email,
         lockedAt: new Date().toISOString()
       };
@@ -398,7 +398,7 @@ class RelationalLedgerDatabase {
         publicAddressBitcoin: '',
         identityLocked: true,
         productionMode: 'live',
-        blockchainLinked: true,
+        blockchainLinked: false,
         lockedToEmail: email,
         lockedAt: new Date().toISOString()
       });
@@ -423,153 +423,56 @@ class RelationalLedgerDatabase {
   }
 
   private maybeBootstrapUserMlaframboise() {
-    const targetEmail = 'mlaframboisemm@gmail.com';
-    const userId = 'user_mlaframboisemm';
-
-    const userExists = this.state.users.some(u => u.id === userId || u.email.toLowerCase() === targetEmail);
-    const hasReferencingData = this.state.wallets.some(w => w.userId === userId || w.lockedToEmail === targetEmail) ||
-                               this.state.transactions.some(t => t.userId === userId);
-    const isCustomTestDbPath = Boolean(String(process.env.SOVEREIGN_DB_FILE_PATH || '').trim());
-
-    if (!userExists && isCustomTestDbPath && !hasReferencingData) {
+    const configuredOwnerId = String(process.env.OWNER_OPEN_ID || '').trim();
+    const configuredOwnerEmail = String(process.env.OWNER_EMAIL || process.env.BOOTSTRAP_ADMIN_EMAIL || '').trim().toLowerCase();
+    if (!configuredOwnerId && !configuredOwnerEmail) {
+      console.warn('[LEDGER DATABASE] Owner identity is not configured; no user, wallet, balance, or address was seeded.');
       return;
     }
-    
-    let user = this.state.users.find(u => u.email.toLowerCase() === targetEmail);
+
+    const user = this.state.users.find(candidate =>
+      (configuredOwnerId && candidate.id === configuredOwnerId) ||
+      (configuredOwnerEmail && candidate.email.toLowerCase() === configuredOwnerEmail)
+    );
     if (!user) {
-      user = {
-        id: userId,
-        name: 'Marcel Laframboise',
-        email: targetEmail,
-        passwordHash: 'da86f565013c3e01e3870ff06947804a234182ad70916b6d59236e3d17a4189ac20b79e769d1040b9ffac3210eef9e1d0e2ca55f3025f975b112876fa99b6de0',
-        salt: '5b079b9b7a3d0bd8ae87266498b51d38',
-        twoFactorSecret: 'W5UGWC7OEGZ44N4Q6APIAPLI',
-        twoFactorEnabled: false,
-        kycLevel: 3,
-        citizenship: 'CA',
-        identityLocked: true,
-        productionMode: 'live',
-        blockchainLinked: true,
-        lockedToEmail: targetEmail,
-        lockedAt: new Date().toISOString(),
-        kycFullName: 'marcel laframbosie',
-        kycAddress: '475 albert st',
-        kycCity: 'oshawa',
-        kycState: '',
-        kycProvince: 'ON',
-        kycPostalCode: 'l1h4s7',
-        kycTaxId: '0512',
-        kycPhone: '9057184275',
-        kycVerifiedAt: new Date().toISOString()
-      };
-      this.state.users.push(user);
-    } else {
-      if (user.id !== userId) {
-        const oldUserId = user.id;
-        user.id = userId;
-        this.state.wallets.forEach(w => {
-          if (w.userId === oldUserId) w.userId = userId;
-        });
-        this.state.transactions.forEach(t => {
-          if (t.userId === oldUserId) t.userId = userId;
-        });
-        this.state.auditLogs.forEach(l => {
-          if (l.userId === oldUserId) l.userId = userId;
-        });
-      }
-      // Ensure they have kycLevel 3
-      user.kycLevel = 3;
-      user.citizenship = 'CA';
-      user.kycFullName = 'marcel laframbosie';
-      user.kycAddress = '475 albert st';
-      user.kycCity = 'oshawa';
-      user.kycProvince = 'ON';
-      user.kycPostalCode = 'l1h4s7';
-      user.kycTaxId = '0512';
-      user.kycPhone = '9057184275';
-      user.kycVerifiedAt = new Date().toISOString();
+      console.warn('[LEDGER DATABASE] Configured owner is not present in the durable ledger; no user, wallet, balance, or address was seeded.');
+      return;
     }
 
-    // Ensure USD wallet exists with balance
-    let usdWallet = this.state.wallets.find(w => w.userId === userId && w.assetSymbol === 'USD');
-    if (!usdWallet) {
+    const userId = user.id;
+    const targetEmail = user.email.toLowerCase();
+
+    // Existing authoritative records are preserved. Missing wallets are created empty
+    // and unlinked until live provider or chain reconciliation supplies real data.
+    const walletDefaults = [
+      ['USD', '', ''],
+      ['USDC', '', ''],
+      ['ETH', '', ''],
+      ['BTC', '', '']
+    ] as const;
+
+    for (const [assetSymbol, publicAddressEthereum, publicAddressBitcoin] of walletDefaults) {
+      const wallet = this.state.wallets.find(candidate => candidate.userId === userId && candidate.assetSymbol === assetSymbol);
+      if (wallet) continue;
       this.state.wallets.push({
-        id: `wallet-${userId}-usd`,
+        id: `wallet-${userId}-${assetSymbol.toLowerCase()}`,
         userId,
-        assetSymbol: 'USD',
-        balance: 1791272.82,
-        publicAddressEthereum: '',
-        publicAddressBitcoin: '',
-        identityLocked: true,
-        productionMode: 'live',
-        blockchainLinked: true,
+        assetSymbol,
+        balance: 0,
+        publicAddressEthereum,
+        publicAddressBitcoin,
+        identityLocked: user.identityLocked,
+        productionMode: user.productionMode,
+        blockchainLinked: false,
         lockedToEmail: targetEmail,
         lockedAt: new Date().toISOString()
       });
-    } else if (usdWallet.balance === 0) {
-      usdWallet.balance = 1791272.82;
-    }
-
-    // Ensure USDC wallet exists with balance
-    let usdcWallet = this.state.wallets.find(w => w.userId === userId && w.assetSymbol === 'USDC');
-    if (!usdcWallet) {
-      this.state.wallets.push({
-        id: `wallet-${userId}-usdc`,
-        userId,
-        assetSymbol: 'USDC',
-        balance: 422611769.18,
-        publicAddressEthereum: '0x2345678901234567890abcdef1234567890abcd',
-        publicAddressBitcoin: '',
-        identityLocked: true,
-        productionMode: 'live',
-        blockchainLinked: true,
-        lockedToEmail: targetEmail,
-        lockedAt: new Date().toISOString()
-      });
-    }
-
-    // Ensure ETH wallet exists with balance
-    let ethWallet = this.state.wallets.find(w => w.userId === userId && w.assetSymbol === 'ETH');
-    if (!ethWallet) {
-      this.state.wallets.push({
-        id: `wallet-${userId}-eth`,
-        userId,
-        assetSymbol: 'ETH',
-        balance: 116998.23,
-        publicAddressEthereum: '0xabcdef1234567890abcdef1234567890abcdef12',
-        publicAddressBitcoin: '',
-        identityLocked: true,
-        productionMode: 'live',
-        blockchainLinked: true,
-        lockedToEmail: targetEmail,
-        lockedAt: new Date().toISOString()
-      });
-    }
-
-    // Ensure BTC wallet exists with balance and Native SegWit address
-    let btcWallet = this.state.wallets.find(w => w.userId === userId && w.assetSymbol === 'BTC');
-    if (!btcWallet) {
-      this.state.wallets.push({
-        id: `wallet-${userId}-btc`,
-        userId,
-        assetSymbol: 'BTC',
-        balance: 1280.50,
-        publicAddressEthereum: '',
-        publicAddressBitcoin: 'bc1qz8w9j7k6m5n4p3r2t1v0x9y8z7w6v5u',
-        identityLocked: true,
-        productionMode: 'live',
-        blockchainLinked: true,
-        lockedToEmail: targetEmail,
-        lockedAt: new Date().toISOString()
-      });
-    } else {
-      btcWallet.balance = 1280.50;
-      btcWallet.publicAddressBitcoin = 'bc1qz8w9j7k6m5n4p3r2t1v0x9y8z7w6v5u';
     }
 
     this.save();
-    console.warn(`[BOOTSTRAP] Successfully provisioned/verified complete live profile for ${targetEmail}`);
+    console.warn(`[LEDGER DATABASE] Initialized owner profile without seeded balances or addresses for ${targetEmail}`);
   }
+
 
   public protectUserIdentity(userId: string, email: string): DBUser | null {
     const targetState = this.transactionSnapshot || this.state;
@@ -589,7 +492,7 @@ class RelationalLedgerDatabase {
         ...wallet,
         identityLocked: true,
         productionMode: 'live',
-        blockchainLinked: true,
+        blockchainLinked: Boolean(wallet.publicAddressEthereum || wallet.publicAddressBitcoin),
         lockedToEmail: normalizedEmail,
         lockedAt: user.lockedAt
       };
@@ -804,7 +707,7 @@ class RelationalLedgerDatabase {
           publicAddressBitcoin: '',
           identityLocked: true,
           productionMode: 'live',
-          blockchainLinked: true,
+          blockchainLinked: false,
           lockedToEmail: '',
           lockedAt: new Date().toISOString()
         });

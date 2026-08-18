@@ -320,12 +320,12 @@ export function generateMonthlyPortfolioPdf(params: MonthlyReportParams): jsPDF 
   doc.setFontSize(6.5);
   doc.setTextColor(textGray[0], textGray[1], textGray[2]);
   doc.text(
-    'This statement is cryptographically generated and certified against the double-entry SQL Ledger. All valuation feeds reflect real-time market snapshots.',
+    'This report does not assert cryptographic certification or live valuation unless supported by an attached provider or chain reconciliation record.',
     margin + 4,
     currentY + 11
   );
   doc.text(
-    `Ledger Hash Verification: 0x${Math.random().toString(16).substring(2, 10)}${Math.random().toString(16).substring(2, 10)} | Verified Ledger Engine v4.2`,
+    'Ledger Hash Verification: unavailable without an authoritative ledger reconciliation',
     margin + 4,
     currentY + 16
   );
