@@ -30,3 +30,6 @@ COPY --from=builder /app/etransfers.json ./etransfers.json
 RUN python3 -m venv /app/sovereigns-banking-hub/backend/venv && \
     /app/sovereigns-banking-hub/backend/venv/bin/pip install --upgrade pip && \
     /app/sovereigns-banking-hub/backend/venv/bin/pip install --retries 15 --timeout 120 -r /app/sovereigns-banking-hub/backend/requirements.txt
+
+EXPOSE 10000
+CMD ["node", "dist/server.cjs"]
