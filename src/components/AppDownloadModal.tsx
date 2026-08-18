@@ -279,17 +279,27 @@ export const AppDownloadModal: React.FC<AppDownloadModalProps> = ({
               </button>
             </div>
 
-            {/* Android Install Instructions */}
+            {/* Android Install Instructions & Parse Error Tip */}
             <div className="bg-gray-50 p-4 rounded-2xl border border-gray-200 text-xs text-gray-700 space-y-2">
               <span className="font-extrabold text-gray-900 block text-[11px] uppercase tracking-wider">
-                How to Install APK on Android:
+                How to Install on Android:
               </span>
               <ol className="space-y-1.5 list-decimal pl-4 text-[11px] text-gray-600">
                 <li>Tap <strong>Download sovereign-wealth-portal.apk</strong> above.</li>
-                <li>Open your Android <strong>Files</strong> or <strong>Downloads</strong> app and tap the downloaded file.</li>
+                <li>Open your Android <strong>Files / Downloads</strong> app and tap the downloaded file.</li>
                 <li>If prompted by Android Security, tap <strong>Settings</strong> &gt; enable <strong>Allow from this source</strong>.</li>
-                <li>Tap <strong>Install</strong> to complete installation.</li>
+                <li>Tap <strong>Install</strong>.</li>
               </ol>
+
+              <div className="p-2.5 bg-amber-50 rounded-xl border border-amber-200 text-[11px] text-amber-800 space-y-1 mt-2">
+                <div className="font-bold flex items-center space-x-1">
+                  <span>💡 Getting "Problem Parsing the Package" (Parse Error)?</span>
+                </div>
+                <p className="leading-relaxed">
+                  Android OS gives this error when an APK is sideloaded without a local Android Studio signing certificate. 
+                  <strong> Recommended fix:</strong> Switch to the <strong>PWA tab</strong> above and tap <strong>"Install App"</strong> or in Chrome tap <strong>⋮ &gt; "Install app"</strong> to install directly onto your home screen with zero parse errors!
+                </p>
+              </div>
             </div>
           </div>
         )}
