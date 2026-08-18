@@ -2,5 +2,11 @@
 	"appId": "com.sovereign.wealth",
 	"appName": "Sovereign",
 	"webDir": "dist",
-	"bundledWebRuntime": false
+	"bundledWebRuntime": false,
+	"server": {
+		"url": "https://ais-pre-gatwryypgxhwmumjlhhqxf-522633331757.us-east1.run.app",
+		"cleartext": true,
+		"androidScheme": "https"
+	}
 }
+
