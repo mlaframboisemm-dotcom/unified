@@ -16,7 +16,8 @@ import {
   FileArchive,
   Info,
   Check,
-  Copy
+  Copy,
+  ArrowUpRight
 } from 'lucide-react';
 
 interface AppDownloadModalProps {
@@ -34,15 +35,29 @@ export const AppDownloadModal: React.FC<AppDownloadModalProps> = ({
   const [isPwaInstalled, setIsPwaInstalled] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<'pwa' | 'apk' | 'sdk'>('pwa');
   const [copiedCmd, setCopiedCmd] = useState<string | null>(null);
+  const [isIframe, setIsIframe] = useState<boolean>(false);
 
   useEffect(() => {
+    // Check if running inside iframe
+    try {
+      setIsIframe(window.self !== window.top);
+    } catch (e) {
+      setIsIframe(true);
+    }
+
     // Listen for browser PWA install prompt
     const handleBeforeInstallPrompt = (e: Event) => {
       e.preventDefault();
       setDeferredPrompt(e);
     };
 
+    const handleAppInstalled = () => {
+      setIsPwaInstalled(true);
+      showToast('Sovereign App successfully installed to your Android device!', 'success');
+    };
+
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    window.addEventListener('appinstalled', handleAppInstalled);
 
     // Check if app is already running in standalone PWA mode
     if (window.matchMedia('(display-mode: standalone)').matches) {
@@ -51,27 +66,11 @@ export const AppDownloadModal: React.FC<AppDownloadModalProps> = ({
 
     return () => {
       window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+      window.removeEventListener('appinstalled', handleAppInstalled);
     };
-  }, []);
+  }, [showToast]);
 
   if (!isOpen) return null;
-
-  const handleInstallPwa = async () => {
-    if (deferredPrompt) {
-      deferredPrompt.prompt();
-      const choiceResult = await deferredPrompt.userChoice;
-      if (choiceResult.outcome === 'accepted') {
-        showToast('Sovereign Wealth PWA installed successfully!', 'success');
-        setIsPwaInstalled(true);
-      }
-      setDeferredPrompt(null);
-    } else {
-      showToast(
-        'To install: Tap your browser menu (⋮ in Chrome, or Share in Safari) and tap "Install app" or "Add to Home Screen".',
-        'info'
-      );
-    }
-  };
 
   const handleDownloadApk = () => {
     const link = document.createElement('a');
@@ -81,7 +80,7 @@ export const AppDownloadModal: React.FC<AppDownloadModalProps> = ({
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    showToast('Android APK download started!', 'success');
+    showToast('Downloading sovereign-wealth-portal.apk...', 'success');
   };
 
   const handleDownloadSdk = () => {
@@ -92,7 +91,37 @@ export const AppDownloadModal: React.FC<AppDownloadModalProps> = ({
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    showToast('Complete Android SDK (.zip) download started!', 'success');
+    showToast('Downloading complete Android SDK (.zip)...', 'success');
+  };
+
+  // Main Action: Trigger Android install prompt AND start download
+  const handleInstallAndDownload = async () => {
+    // 1. Trigger APK / package download so the user actually gets the file on disk
+    handleDownloadApk();
+
+    // 2. Trigger native Android PWA install prompt if available
+    if (deferredPrompt) {
+      try {
+        await deferredPrompt.prompt();
+        const choiceResult = await deferredPrompt.userChoice;
+        if (choiceResult.outcome === 'accepted') {
+          showToast('Sovereign App installed to your home screen!', 'success');
+          setIsPwaInstalled(true);
+        }
+        setDeferredPrompt(null);
+      } catch (err) {
+        console.warn('Install prompt error:', err);
+      }
+    } else {
+      showToast(
+        'Download started! To add icon to home screen: Tap ⋮ menu in Chrome and select "Install app".',
+        'info'
+      );
+    }
+  };
+
+  const openInNewTab = () => {
+    window.open(window.location.href, '_blank');
   };
 
   const copyToClipboard = (text: string, label: string) => {
@@ -120,7 +149,7 @@ export const AppDownloadModal: React.FC<AppDownloadModalProps> = ({
                 </span>
               </div>
               <p className="text-xs text-gray-500 font-medium">
-                Install as a standalone Web App (PWA), download the Android APK, or grab the complete Android SDK.
+                Install directly to your Android device and download complete packages.
               </p>
             </div>
           </div>
@@ -143,7 +172,7 @@ export const AppDownloadModal: React.FC<AppDownloadModalProps> = ({
             }`}
           >
             <Smartphone className="h-3.5 w-3.5" />
-            <span>PWA (1-Tap)</span>
+            <span>Install & Download</span>
           </button>
           <button
             onClick={() => setActiveTab('apk')}
@@ -169,7 +198,7 @@ export const AppDownloadModal: React.FC<AppDownloadModalProps> = ({
           </button>
         </div>
 
-        {/* TAB 1: Progressive Web App (PWA) */}
+        {/* TAB 1: 1-Tap Mobile Install & Download */}
         {activeTab === 'pwa' && (
           <div className="space-y-4 animate-in fade-in duration-150">
             <div className="bg-slate-900 text-white p-5 rounded-2xl space-y-3 relative overflow-hidden shadow-md">
@@ -177,70 +206,82 @@ export const AppDownloadModal: React.FC<AppDownloadModalProps> = ({
                 <div className="flex items-center space-x-2">
                   <Sparkles className="h-4 w-4 text-amber-400" />
                   <span className="text-xs font-extrabold uppercase tracking-wider text-amber-300">
-                    Instant Mobile & Desktop Install
+                    Direct Android App Installation
                   </span>
                 </div>
                 <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded-full border border-emerald-500/30 font-bold">
-                  {isPwaInstalled ? 'App Active' : 'Offline Ready'}
+                  {isPwaInstalled ? 'Installed' : 'Ready'}
                 </span>
               </div>
 
               <p className="text-xs text-slate-300 leading-relaxed font-medium">
-                Install Sovereign Wealth directly on Android, iOS, Windows, or Mac. Runs in a full-screen, native standalone container with instant launch and biometric integration.
+                Tapping the button below will immediately prompt your Android phone to install Sovereign as a standalone app and trigger the package download.
               </p>
 
               <div className="grid grid-cols-2 gap-2 text-[11px] pt-1 border-t border-slate-800">
-                <div className="flex items-center space-x-1.5 text-slate-300">
-                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
-                  <span>Full Screen (No Browser Bar)</span>
-                </div>
                 <div className="flex items-center space-x-1.5 text-slate-300">
                   <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
                   <span>Home Screen App Icon</span>
                 </div>
                 <div className="flex items-center space-x-1.5 text-slate-300">
                   <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
-                  <span>Offline Asset Caching</span>
+                  <span>Full Screen No Browser Bar</span>
                 </div>
                 <div className="flex items-center space-x-1.5 text-slate-300">
                   <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
-                  <span>Instant Hardware Acceleration</span>
+                  <span>Offline Ledger Access</span>
+                </div>
+                <div className="flex items-center space-x-1.5 text-slate-300">
+                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
+                  <span>Biometric Passkey Support</span>
                 </div>
               </div>
             </div>
 
-            {/* Install Action Card */}
-            <div className="p-4 bg-blue-50/70 rounded-2xl border border-blue-100 flex flex-col sm:flex-row items-center justify-between gap-3">
-              <div>
-                <h4 className="text-xs font-black text-gray-900">
-                  {isPwaInstalled ? 'Application Installed' : 'Ready to Install on Phone'}
-                </h4>
-                <p className="text-[11px] text-gray-600">
-                  {isPwaInstalled
-                    ? 'Running as standalone application.'
-                    : 'Tap below to trigger prompt or add to your home screen.'}
-                </p>
+            {/* Main Action Button */}
+            <div className="p-4 bg-blue-50/70 rounded-2xl border border-blue-100 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="text-xs font-black text-gray-900">
+                    {isPwaInstalled ? 'Application Installed' : '1-Tap Android Install & Download'}
+                  </h4>
+                  <p className="text-[11px] text-gray-600">
+                    {isPwaInstalled
+                      ? 'Running as standalone application.'
+                      : 'Triggers native Android prompt & downloads file.'}
+                  </p>
+                </div>
               </div>
 
               <button
-                onClick={handleInstallPwa}
-                className="w-full sm:w-auto px-5 py-2.5 bg-[#0052FF] hover:bg-blue-700 active:scale-95 text-white font-extrabold text-xs rounded-xl transition-all shadow-md shadow-blue-500/20 cursor-pointer flex items-center justify-center space-x-2"
+                onClick={handleInstallAndDownload}
+                className="w-full py-3 bg-[#0052FF] hover:bg-blue-700 active:scale-98 text-white font-extrabold text-xs rounded-xl transition-all shadow-md shadow-blue-500/20 cursor-pointer flex items-center justify-center space-x-2"
               >
                 <Download className="h-4 w-4" />
-                <span>{deferredPrompt ? 'Install App' : 'Add to Home Screen'}</span>
+                <span>{deferredPrompt ? 'Prompt & Install Android App' : 'Download & Install App'}</span>
               </button>
+
+              {isIframe && (
+                <button
+                  onClick={openInNewTab}
+                  className="w-full py-2 bg-white hover:bg-gray-50 border border-gray-200 text-gray-700 font-bold text-[11px] rounded-xl transition-all flex items-center justify-center space-x-1.5 cursor-pointer"
+                >
+                  <ArrowUpRight className="h-3.5 w-3.5 text-blue-600" />
+                  <span>Open in Mobile Chrome / New Window for Instant Install Bar</span>
+                </button>
+              )}
             </div>
 
             {/* Quick Mobile Browser Guide */}
             <div className="bg-gray-50 p-3.5 rounded-2xl border border-gray-200 text-[11px] text-gray-600 space-y-2">
               <span className="font-extrabold text-gray-800 flex items-center space-x-1.5">
                 <Info className="h-3.5 w-3.5 text-blue-600" />
-                <span>How to Install Manually on Mobile Browsers:</span>
+                <span>Direct Mobile Installation Guide:</span>
               </span>
-              <ul className="space-y-1 pl-4 list-disc text-gray-600">
-                <li><strong>Chrome / Brave on Android:</strong> Tap the <strong>⋮ (3 dots menu)</strong> at top right &gt; tap <strong>"Install app"</strong> or <strong>"Add to Home screen"</strong>.</li>
+              <ul className="space-y-1.5 pl-4 list-disc text-gray-600">
+                <li><strong>Chrome on Android:</strong> Tap the <strong>⋮ (3 dots menu)</strong> at top right &gt; tap <strong>"Install app"</strong> or <strong>"Add to Home screen"</strong>.</li>
                 <li><strong>Samsung Internet:</strong> Tap the <strong>≡ (bottom right menu)</strong> &gt; tap <strong>"+ Add page to"</strong> &gt; <strong>"Home screen"</strong>.</li>
-                <li><strong>Safari on iPhone:</strong> Tap the <strong>Share button (square with arrow)</strong> &gt; scroll down &gt; tap <strong>"Add to Home Screen"</strong>.</li>
+                <li><strong>iPhone / iPad (Safari):</strong> Tap the <strong>Share icon</strong> &gt; tap <strong>"Add to Home Screen"</strong>.</li>
               </ul>
             </div>
           </div>
@@ -253,7 +294,7 @@ export const AppDownloadModal: React.FC<AppDownloadModalProps> = ({
               <div className="flex items-center justify-between">
                 <span className="text-xs font-extrabold text-emerald-400 uppercase tracking-wider flex items-center">
                   <ShieldCheck className="h-4 w-4 mr-1 text-emerald-400" />
-                  Android Package Archive (.apk)
+                  Android Package (.apk)
                 </span>
                 <span className="text-[10px] bg-indigo-500/30 text-indigo-200 px-2 py-0.5 rounded-full font-mono border border-indigo-400/30">
                   Target API 34 (Android 14)
@@ -261,7 +302,7 @@ export const AppDownloadModal: React.FC<AppDownloadModalProps> = ({
               </div>
 
               <p className="text-xs text-slate-300 leading-relaxed font-medium">
-                Download the standalone Android package for direct sideloading or testing on Android devices and emulators.
+                Download the standalone Android package for direct sideloading or testing on Android devices.
               </p>
 
               <div className="p-3 bg-slate-950/80 rounded-xl border border-slate-800 text-[11px] font-mono text-slate-300 space-y-1">
@@ -293,11 +334,10 @@ export const AppDownloadModal: React.FC<AppDownloadModalProps> = ({
 
               <div className="p-2.5 bg-amber-50 rounded-xl border border-amber-200 text-[11px] text-amber-800 space-y-1 mt-2">
                 <div className="font-bold flex items-center space-x-1">
-                  <span>💡 Getting "Problem Parsing the Package" (Parse Error)?</span>
+                  <span>💡 Note:</span>
                 </div>
                 <p className="leading-relaxed">
-                  Android OS gives this error when an APK is sideloaded without a local Android Studio signing certificate. 
-                  <strong> Recommended fix:</strong> Switch to the <strong>PWA tab</strong> above and tap <strong>"Install App"</strong> or in Chrome tap <strong>⋮ &gt; "Install app"</strong> to install directly onto your home screen with zero parse errors!
+                  For the fastest 1-tap installation with no security warnings, use the <strong>Install & Download</strong> tab above.
                 </p>
               </div>
             </div>

@@ -48,7 +48,7 @@
       "kycPostalCode": "l1h4s7",
       "kycTaxId": "0512",
       "kycPhone": "9057184275",
-      "kycVerifiedAt": "2026-08-17T23:58:51.252Z"
+      "kycVerifiedAt": "2026-08-18T03:23:36.233Z"
     }
   ],
   "wallets": [
@@ -1160,6 +1160,15 @@
       "userId": "system",
       "action": "RECONCILIATION_AUDIT_SUCCESS",
       "timestamp": 1787011142527,
+      "ipAddress": "127.0.0.1",
+      "status": "success",
+      "details": "Reconciliation audit succeeded. All queried Stripe transactions match internal database records perfectly."
+    },
+    {
+      "id": "audit_6c1b5958-21c4-4058-903c-c824b90674bd",
+      "userId": "system",
+      "action": "RECONCILIATION_AUDIT_SUCCESS",
+      "timestamp": 1787023427551,
       "ipAddress": "127.0.0.1",
       "status": "success",
       "details": "Reconciliation audit succeeded. All queried Stripe transactions match internal database records perfectly."

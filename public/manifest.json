@@ -2,14 +2,16 @@
   "short_name": "Sovereign",
   "name": "Sovereign Wealth Portal",
   "description": "Sovereign Wealth & Contactless Tap-to-Pay Portal with Google Pay, Samsung Pay, and Wise API integration.",
-  "id": "sovereign-wealth-portal",
+  "id": "com.sovereign.wealth.portal",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "orientation": "portrait",
+  "orientation": "portrait-primary",
   "theme_color": "#0052FF",
   "background_color": "#0F172A",
-  "categories": ["finance", "utilities"],
+  "lang": "en-US",
+  "dir": "ltr",
+  "categories": ["finance", "business", "utilities"],
   "icons": [
     {
       "src": "/icon-192.png",
@@ -18,10 +20,22 @@
       "purpose": "any"
     },
     {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
       "src": "/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     },
     {
       "src": "/icon.svg",
@@ -29,5 +43,22 @@
       "type": "image/svg+xml",
       "purpose": "any maskable"
     }
-  ]
+  ],
+  "shortcuts": [
+    {
+      "name": "View Ledger",
+      "short_name": "Ledger",
+      "description": "Open sovereign balance and ledger records",
+      "url": "/",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Tap to Pay",
+      "short_name": "Pay",
+      "description": "Initiate Contactless Tap-to-Pay",
+      "url": "/",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    }
+  ],
+  "prefer_related_applications": false
 }

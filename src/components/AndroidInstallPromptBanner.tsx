@@ -29,24 +29,35 @@ export const AndroidInstallPromptBanner: React.FC<AndroidInstallPromptBannerProp
       setDeferredPrompt(e);
     };
 
+    const handleAppInstalled = () => {
+      setIsPwaInstalled(true);
+      showToast('Sovereign App successfully installed to your Android device!', 'success');
+    };
+
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    window.addEventListener('appinstalled', handleAppInstalled);
 
     return () => {
       window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+      window.removeEventListener('appinstalled', handleAppInstalled);
     };
-  }, []);
+  }, [showToast]);
 
   if (isDismissed || isPwaInstalled) return null;
 
   const handleInstallClick = async () => {
     if (deferredPrompt) {
-      deferredPrompt.prompt();
-      const choiceResult = await deferredPrompt.userChoice;
-      if (choiceResult.outcome === 'accepted') {
-        showToast('App installed to your home screen!', 'success');
-        setIsPwaInstalled(true);
+      try {
+        await deferredPrompt.prompt();
+        const choiceResult = await deferredPrompt.userChoice;
+        if (choiceResult.outcome === 'accepted') {
+          showToast('Installing Sovereign App to your home screen...', 'success');
+          setIsPwaInstalled(true);
+        }
+        setDeferredPrompt(null);
+      } catch (err) {
+        onOpenAppDownloadModal();
       }
-      setDeferredPrompt(null);
     } else {
       onOpenAppDownloadModal();
     }
@@ -69,13 +80,13 @@ export const AndroidInstallPromptBanner: React.FC<AndroidInstallPromptBannerProp
           </div>
           <div className="min-w-0">
             <div className="flex items-center space-x-1.5">
-              <span className="text-xs font-bold text-white truncate">Install Sovereign App</span>
+              <span className="text-xs font-bold text-white truncate">Install Android App</span>
               <span className="text-[9px] bg-emerald-500/20 text-emerald-300 font-extrabold px-1.5 py-0.2 rounded border border-emerald-500/40 shrink-0">
-                Android & iOS
+                1-Tap Install
               </span>
             </div>
             <p className="text-[10px] text-slate-300 truncate">
-              Tap-to-Pay, Biometrics & ATM Hub Offline
+              Install to Home Screen & Download Package
             </p>
           </div>
         </div>
@@ -100,3 +111,5 @@ export const AndroidInstallPromptBanner: React.FC<AndroidInstallPromptBannerProp
     </div>
   );
 };
+
+export default AndroidInstallPromptBanner;
