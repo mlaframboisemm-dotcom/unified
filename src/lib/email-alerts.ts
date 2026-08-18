@@ -80,7 +80,6 @@ export async function sendSovereignAlert(options: AlertNotificationOptions): Pro
     }
   }
 
-  // 3. Fallback simulation/logging mode when external SMTP/MailerSend credentials are not yet injected
-  console.log(`[EmailAlerts] Simulated alert sent to ${recipient}: ${fullSubject} | ${options.message}`);
-  return { success: true, channel: 'simulated-logged' };
+  // 3. Strict live-only error reporting when no external provider credentials are configured
+  return { success: false, channel: 'unconfigured', error: 'EMAIL_PROVIDER_NOT_CONFIGURED: Set MAILERSEND_API_KEY or SMTP credentials to dispatch live alerts.' };
 }
