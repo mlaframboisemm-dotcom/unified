@@ -300,7 +300,8 @@ export const StripePaymentElementModal: React.FC<StripePaymentElementModalProps>
         }
 
         if (!publishableKey) {
-          publishableKey = 'pk_live_51TYDUPI8MQ7TKrX3Example';
+          if (isMounted) setInitError('Live Stripe publishable key is not configured; payment setup is unavailable.');
+          return;
         }
 
         const stripeObjPromise = loadStripe(publishableKey);

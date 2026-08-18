@@ -10021,7 +10021,7 @@ app.post('/api/stripe/finalize-session', requireAuth, async (req: any, res) => {
 
 // Read-only Stripe configuration endpoint (No MFA required as per Eager GET guidelines)
 app.get('/api/stripe/config', async (req, res) => {
-  const publishableKey = process.env.STRIPE_PUBLISHABLE_KEY || process.env.VITE_STRIPE_PUBLISHABLE_KEY || 'pk_live_51TYDUPI8MQ7TKrX3Example';
+  const publishableKey = process.env.STRIPE_PUBLISHABLE_KEY || process.env.VITE_STRIPE_PUBLISHABLE_KEY;
   res.json({
     publishableKey,
     configured: !!(process.env.STRIPE_SECRET_KEY && process.env.STRIPE_SECRET_KEY.trim() !== '')
@@ -10040,19 +10040,10 @@ app.post('/api/stripe/create-payment-intent', requireAuth, async (req: any, res)
   const activeRate = parseFloat(fxRate) || DEFAULT_USD_CAD_RATE;
   const amountUsd = convertCadToUsd(amountCad, activeRate);
   const amountCents = Math.round(amountCad * 100);
-  const publishableKey = process.env.STRIPE_PUBLISHABLE_KEY || process.env.VITE_STRIPE_PUBLISHABLE_KEY || 'pk_live_51TYDUPI8MQ7TKrX3Example';
+  const publishableKey = process.env.STRIPE_PUBLISHABLE_KEY || process.env.VITE_STRIPE_PUBLISHABLE_KEY;
 
-  if (!stripeKey) {
-    // Sandbox / fallback simulation for test environment
-    const mockPiId = `pi_elem_${Date.now()}`;
-    return res.json({
-      clientSecret: `${mockPiId}_secret_test_${Date.now()}`,
-      paymentIntentId: mockPiId,
-      amountCad,
-      amountUsd,
-      currency: currency.toLowerCase(),
-      publishableKey
-    });
+  if (!stripeKey || !publishableKey) {
+    return res.status(503).json({ error: 'STRIPE_NOT_CONFIGURED', message: 'Live Stripe credentials are required; no simulated PaymentIntent is created.' });
   }
 
   try {
@@ -10105,23 +10096,7 @@ app.post('/api/stripe/confirm-payment-intent', requireAuth, async (req: any, res
 
   const stripeKey = process.env.STRIPE_SECRET_KEY;
   if (!stripeKey) {
-    // Sandbox / dev execution mode
-    const fakeJson = {
-      status: 'succeeded',
-      metadata: {
-        userId: req.user.id,
-        amountCad: '100',
-        amountUsd: '73.41',
-        fxRate: '1.3622'
-      }
-    };
-    const mockResult = await finalizeStripePaymentIntent({
-      paymentIntentId: payment_intent_id,
-      stripeKey: 'mock',
-      paymentIntentJson: fakeJson,
-      expectedUserId: req.user.id
-    });
-    return res.json(mockResult);
+    return res.status(503).json({ error: 'STRIPE_NOT_CONFIGURED', message: 'Live Stripe credentials are required; no simulated confirmation is returned.' });
   }
 
   try {
