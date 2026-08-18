@@ -232,37 +232,37 @@ export default function WiseAccountOverview({
         headers: {
           'Content-Type': 'application/json',
           ...(token ? { Authorization: `Bearer ${token}` } : {})
-        }
+        },
+        signal: AbortSignal.timeout(6000)
       });
-      const data = await res.json();
-      if (data.success) {
-        setOverviewData(prev => ({
-          ...prev,
-          profileName: data.profileName || prev.profileName,
-          businessName: data.businessName || prev.businessName,
-          profileId: data.profileId || prev.profileId,
-          accountNumber: data.accountNumber || prev.accountNumber,
-          routingNumber: data.routingNumber || prev.routingNumber,
-          bankName: data.bankName || prev.bankName,
-          cadBalance: typeof data.cadBalance === 'number' ? data.cadBalance : prev.cadBalance,
-          usdBalance: typeof data.usdBalance === 'number' ? data.usdBalance : prev.usdBalance,
-          totalUSD: typeof data.totalUSD === 'number' ? data.totalUSD : prev.totalUSD,
-          cadToUsdRate: data.cadToUsdRate || prev.cadToUsdRate,
-          balances: Array.isArray(data.balances) && data.balances.length > 0 ? data.balances : prev.balances,
-          fetchedAt: data.fetchedAt || new Date().toISOString(),
-          source: data.source || prev.source
-        }));
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.success) {
+          setOverviewData(prev => ({
+            ...prev,
+            profileName: data.profileName || prev.profileName,
+            businessName: data.businessName || prev.businessName,
+            profileId: data.profileId || prev.profileId,
+            accountNumber: data.accountNumber || prev.accountNumber,
+            routingNumber: data.routingNumber || prev.routingNumber,
+            bankName: data.bankName || prev.bankName,
+            cadBalance: typeof data.cadBalance === 'number' ? data.cadBalance : prev.cadBalance,
+            usdBalance: typeof data.usdBalance === 'number' ? data.usdBalance : prev.usdBalance,
+            totalUSD: typeof data.totalUSD === 'number' ? data.totalUSD : prev.totalUSD,
+            cadToUsdRate: data.cadToUsdRate || prev.cadToUsdRate,
+            balances: Array.isArray(data.balances) && data.balances.length > 0 ? data.balances : prev.balances,
+            fetchedAt: data.fetchedAt || new Date().toISOString(),
+            source: data.source || prev.source
+          }));
 
-        if (isManual) {
-          showToast?.('Wise multi-currency balances updated live via API token!', 'success');
+          if (isManual) {
+            showToast?.('Wise balances synchronized.', 'success');
+          }
         }
       }
     } catch (err: any) {
-      if ((import.meta as any).env?.DEV) {
-        console.error('[WiseAccountOverview] Failed to load live balances:', err);
-      }
       if (isManual) {
-        showToast?.('Failed to sync live balances: ' + err.message, 'error');
+        showToast?.('Wise live gateway currently unavailable.', 'info');
       }
     } finally {
       setIsLoading(false);

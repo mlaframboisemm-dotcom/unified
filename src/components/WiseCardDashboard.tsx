@@ -376,24 +376,25 @@ Sovereigns Banking Hub / Wise Business`;
         headers: {
           'Content-Type': 'application/json',
           ...(token ? { Authorization: `Bearer ${token}` } : {})
-        }
+        },
+        signal: AbortSignal.timeout(5000)
       });
-      const data = await res.json();
-      if (data.success && data.card) {
-        setCard(data.card);
-        setBalances(data.balances || []);
-        setEditLimitsForm({
-          dailyTotal: data.card.limits.dailyTotal.limit,
-          dailyContactless: data.card.limits.dailyContactless.limit,
-          dailyAtm: data.card.limits.dailyAtm.limit,
-          monthlyTotal: data.card.limits.monthlyTotal.limit,
-          singleTransaction: data.card.limits.singleTransaction.limit
-        });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && data.card) {
+          setCard(data.card);
+          setBalances(data.balances || []);
+          setEditLimitsForm({
+            dailyTotal: data.card.limits.dailyTotal.limit,
+            dailyContactless: data.card.limits.dailyContactless.limit,
+            dailyAtm: data.card.limits.dailyAtm.limit,
+            monthlyTotal: data.card.limits.monthlyTotal.limit,
+            singleTransaction: data.card.limits.singleTransaction.limit
+          });
+        }
       }
     } catch (err) {
-      if ((import.meta as any).env?.DEV) {
-        console.error('Failed to fetch Wise card details:', err);
-      }
+      // Gracefully handle standby state
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
@@ -411,14 +412,17 @@ Sovereigns Banking Hub / Wise Business`;
       const res = await fetch(url.toString(), {
         headers: {
           ...(token ? { Authorization: `Bearer ${token}` } : {})
-        }
+        },
+        signal: AbortSignal.timeout(5000)
       });
-      const data = await res.json();
-      if (data.success && Array.isArray(data.transactions)) {
-        setTransactions(data.transactions);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && Array.isArray(data.transactions)) {
+          setTransactions(data.transactions);
+        }
       }
     } catch (err) {
-      console.error('Failed to fetch Wise card transactions:', err);
+      // Gracefully handle standby state
     }
   };
 

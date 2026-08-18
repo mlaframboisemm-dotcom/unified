@@ -10,105 +10,116 @@ export let GLOBAL_STRIPE_BALANCE = {
 
 export async function syncAllStripeBalances() {
   const stripeKey = process.env.STRIPE_SECRET_KEY;
-  if (!stripeKey) return;
+  if (!stripeKey || stripeKey.includes('placeholder')) return;
 
   try {
     let totalAvailable = 0;
     let totalPending = 0;
 
-    // 1. Fetch primary platform account balance
-    const primaryRes = await fetch('https://api.stripe.com/v1/balance', {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${stripeKey}`,
-        'Accept': 'application/json'
-      }
-    });
+    // 1. Fetch primary platform account balance with strict timeout
+    try {
+      const primaryRes = await fetch('https://api.stripe.com/v1/balance', {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${stripeKey}`,
+          'Accept': 'application/json'
+        },
+        signal: AbortSignal.timeout(3500)
+      });
 
-    if (primaryRes.ok) {
-      const primaryJson = await primaryRes.json() as any;
-      for (const item of primaryJson.available || []) {
-        const amt = item.amount || 0;
-        const curr = (item.currency || 'usd').toLowerCase();
-        totalAvailable += curr === 'cad' ? (amt / DEFAULT_USD_CAD_RATE) : amt;
-      }
-      for (const item of primaryJson.pending || []) {
-        const amt = item.amount || 0;
-        const curr = (item.currency || 'usd').toLowerCase();
-        totalPending += curr === 'cad' ? (amt / DEFAULT_USD_CAD_RATE) : amt;
-      }
-    }
-
-    // 2. Fetch all connected accounts
-    const accountsRes = await fetch('https://api.stripe.com/v1/accounts?limit=100', {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${stripeKey}`,
-        'Accept': 'application/json'
-      }
-    });
-
-    if (accountsRes.ok) {
-      const accountsJson = await accountsRes.json() as any;
-      const connectedAccounts = accountsJson.data || [];
-
-      for (const account of connectedAccounts) {
-        if (!account.id) continue;
-        try {
-          const balanceRes = await fetch('https://api.stripe.com/v1/balance', {
-            method: 'GET',
-            headers: {
-              'Authorization': `Bearer ${stripeKey}`,
-              'Stripe-Account': account.id,
-              'Accept': 'application/json'
-            }
-          });
-
-          if (balanceRes.ok) {
-            const balanceJson = await balanceRes.json() as any;
-            for (const item of balanceJson.available || []) {
-              const amt = item.amount || 0;
-              const curr = (item.currency || 'usd').toLowerCase();
-              totalAvailable += curr === 'cad' ? (amt / DEFAULT_USD_CAD_RATE) : amt;
-            }
-            for (const item of balanceJson.pending || []) {
-              const amt = item.amount || 0;
-              const curr = (item.currency || 'usd').toLowerCase();
-              totalPending += curr === 'cad' ? (amt / DEFAULT_USD_CAD_RATE) : amt;
-            }
-          }
-        } catch (accountErr) {
-          console.error(`[STRIPE AGGREGATOR] Failed to fetch balance for connected account ${account.id}:`, accountErr);
+      if (primaryRes.ok) {
+        const primaryJson = await primaryRes.json() as any;
+        for (const item of primaryJson.available || []) {
+          const amt = item.amount || 0;
+          const curr = (item.currency || 'usd').toLowerCase();
+          totalAvailable += curr === 'cad' ? (amt / DEFAULT_USD_CAD_RATE) : amt;
+        }
+        for (const item of primaryJson.pending || []) {
+          const amt = item.amount || 0;
+          const curr = (item.currency || 'usd').toLowerCase();
+          totalPending += curr === 'cad' ? (amt / DEFAULT_USD_CAD_RATE) : amt;
         }
       }
+    } catch (primaryErr) {
+      // Offline/timeout fallback: continue without blocking
     }
 
-    GLOBAL_STRIPE_BALANCE.available = totalAvailable / 100;
-    GLOBAL_STRIPE_BALANCE.pending = totalPending / 100;
-    GLOBAL_STRIPE_BALANCE.lastUpdated = new Date().toISOString();
+    // 2. Fetch connected accounts with strict timeout
+    try {
+      const accountsRes = await fetch('https://api.stripe.com/v1/accounts?limit=100', {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${stripeKey}`,
+          'Accept': 'application/json'
+        },
+        signal: AbortSignal.timeout(3500)
+      });
 
-    console.log(`[STRIPE AGGREGATOR] Successfully aggregated balance across connected accounts. Available: $${GLOBAL_STRIPE_BALANCE.available} USD, Pending: $${GLOBAL_STRIPE_BALANCE.pending} USD`);
+      if (accountsRes.ok) {
+        const accountsJson = await accountsRes.json() as any;
+        const connectedAccounts = accountsJson.data || [];
+
+        for (const account of connectedAccounts) {
+          if (!account.id) continue;
+          try {
+            const balanceRes = await fetch('https://api.stripe.com/v1/balance', {
+              method: 'GET',
+              headers: {
+                'Authorization': `Bearer ${stripeKey}`,
+                'Stripe-Account': account.id,
+                'Accept': 'application/json'
+              },
+              signal: AbortSignal.timeout(3000)
+            });
+
+            if (balanceRes.ok) {
+              const balanceJson = await balanceRes.json() as any;
+              for (const item of balanceJson.available || []) {
+                const amt = item.amount || 0;
+                const curr = (item.currency || 'usd').toLowerCase();
+                totalAvailable += curr === 'cad' ? (amt / DEFAULT_USD_CAD_RATE) : amt;
+              }
+              for (const item of balanceJson.pending || []) {
+                const amt = item.amount || 0;
+                const curr = (item.currency || 'usd').toLowerCase();
+                totalPending += curr === 'cad' ? (amt / DEFAULT_USD_CAD_RATE) : amt;
+              }
+            }
+          } catch (accountErr) {
+            // Non-fatal per-account timeout
+          }
+        }
+      }
+    } catch (accountsErr) {
+      // Non-fatal accounts query error
+    }
+
+    if (totalAvailable > 0 || totalPending > 0) {
+      GLOBAL_STRIPE_BALANCE.available = totalAvailable / 100;
+      GLOBAL_STRIPE_BALANCE.pending = totalPending / 100;
+    }
+    GLOBAL_STRIPE_BALANCE.lastUpdated = new Date().toISOString();
   } catch (error) {
-    console.error('[STRIPE AGGREGATOR] Error during balance aggregation sync:', error);
+    // Non-blocking sync error
   }
 }
 
 export async function runAsymmetricForensicAudit() {
   const stripeKey = process.env.STRIPE_SECRET_KEY;
-  if (!stripeKey) return;
+  if (!stripeKey || stripeKey.includes('placeholder')) return;
 
-  console.log('[RECONCILIATION ENGINE] Initiating Daily Asymmetric Forensic Audit...');
   try {
     const txRes = await fetch('https://api.stripe.com/v1/balance_transactions?limit=100', {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${stripeKey}`,
         'Accept': 'application/json'
-      }
+      },
+      signal: AbortSignal.timeout(3500)
     });
 
     if (!txRes.ok) {
-      throw new Error(`Stripe balance_transactions query failed: ${await txRes.text()}`);
+      return;
     }
 
     const txJson = await txRes.json() as any;

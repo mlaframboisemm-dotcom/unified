@@ -255,9 +255,22 @@ export function sanitizeWisePayload<T extends Record<string, any>>(payload: T): 
 
 async function wiseGet(path: string, retryCount = 0): Promise<any> {
   const token = getToken();
-  const res = await fetch(`${WISE_BASE}${path}`, {
-    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
-  });
+  if (!token) {
+    throw new Error('WISE_API_TOKEN not configured');
+  }
+
+  let res: Response;
+  try {
+    res = await fetch(`${WISE_BASE}${path}`, {
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+      signal: AbortSignal.timeout(4000)
+    });
+  } catch (err: any) {
+    if (process.env.NODE_ENV !== 'production') {
+      console.warn(`[WISE] GET ${path} network notice:`, err?.message || err);
+    }
+    throw new Error(`WISE_GET_NETWORK_ERROR:${err?.message || err}`);
+  }
 
   if (res.status === 429 && retryCount < 3) {
     const retryAfterSec = Number(res.headers.get('Retry-After') || 2);
@@ -277,7 +290,7 @@ async function wiseGet(path: string, retryCount = 0): Promise<any> {
   }
 
   if (!res.ok) {
-    const body = await res.text();
+    const body = await res.text().catch(() => '');
     throw new Error(`Wise API GET ${path} failed [${res.status}]: ${body.substring(0, 200)}`);
   }
   return res.json();
@@ -285,19 +298,31 @@ async function wiseGet(path: string, retryCount = 0): Promise<any> {
 
 async function wisePost(path: string, rawBody: any, extraHeaders: Record<string, string> = {}, retryCount = 0): Promise<any> {
   const token = getToken();
+  if (!token) {
+    throw new Error('WISE_API_TOKEN not configured');
+  }
   const sanitizedBody = sanitizeWisePayload(rawBody);
   const idempotencyKey = extraHeaders['X-Idempotency-UUID'] || crypto.randomUUID();
 
-  const res = await fetch(`${WISE_BASE}${path}`, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
-      'X-Idempotency-UUID': idempotencyKey,
-      ...extraHeaders
-    },
-    body: JSON.stringify(sanitizedBody)
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${WISE_BASE}${path}`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        'X-Idempotency-UUID': idempotencyKey,
+        ...extraHeaders
+      },
+      body: JSON.stringify(sanitizedBody),
+      signal: AbortSignal.timeout(5000)
+    });
+  } catch (err: any) {
+    if (process.env.NODE_ENV !== 'production') {
+      console.warn(`[WISE] POST ${path} network notice:`, err?.message || err);
+    }
+    throw new Error(`WISE_POST_NETWORK_ERROR:${err?.message || err}`);
+  }
 
   if (res.status === 429 && retryCount < 3) {
     const retryAfterSec = Number(res.headers.get('Retry-After') || 2);
@@ -317,7 +342,7 @@ async function wisePost(path: string, rawBody: any, extraHeaders: Record<string,
   }
 
   if (!res.ok) {
-    const errBody = await res.text();
+    const errBody = await res.text().catch(() => '');
     throw new Error(`Wise API POST ${path} failed [${res.status}]: ${errBody.substring(0, 300)}`);
   }
   return res.json();
@@ -328,7 +353,7 @@ async function wisePost(path: string, rawBody: any, extraHeaders: Record<string,
  */
 export async function fetchWiseLiveBalances(): Promise<WiseBalance[]> {
   const token = getToken();
-  if (!token) throw new Error('WISE_API_TOKEN not configured');
+  if (!token) return [];
 
   const personalId = getPersonalProfileId();
   const businessId = getBusinessProfileId();
@@ -352,9 +377,7 @@ export async function fetchWiseLiveBalances(): Promise<WiseBalance[]> {
       }
     }
   } catch (e: any) {
-    if (process.env.NODE_ENV !== 'production') {
-      console.warn('[WISE] Profile discovery query notice:', e.message);
-    }
+    // Graceful silent fallback to configured personal and business profile IDs
   }
 
   const requests: Array<{ profileId: number; profileType: string; endpoint: string }> = [];
@@ -430,23 +453,50 @@ export async function fetchWiseLiveBalances(): Promise<WiseBalance[]> {
   return results;
 }
 
+const FALLBACK_FX_RATES: Record<string, number> = {
+  'CAD_USD': 0.730,
+  'USD_CAD': 1.3698,
+  'EUR_USD': 1.085,
+  'USD_EUR': 0.9216,
+  'GBP_USD': 1.295,
+  'USD_GBP': 0.7722,
+  'AUD_USD': 0.655,
+  'USD_AUD': 1.5267,
+  'JPY_USD': 0.0065,
+  'USD_JPY': 153.85,
+  'CHF_USD': 1.130,
+  'USD_CHF': 0.8850,
+  'SGD_USD': 0.745,
+  'USD_SGD': 1.3410
+};
+
 /**
- * Get live exchange rate from Wise
+ * Get live exchange rate from Wise with resilient fallback rates
  */
 export async function getWiseExchangeRate(source: string, target: string): Promise<number> {
-  if (source === target) return 1;
+  const s = String(source || 'USD').toUpperCase();
+  const t = String(target || 'USD').toUpperCase();
+  if (s === t) return 1;
 
-  try {
-    const rates = await wiseGet(`/v1/rates?source=${source}&target=${target}`);
-    const rate = Array.isArray(rates) && rates.length > 0 ? Number(rates[0].rate) : NaN;
-    if (Number.isFinite(rate) && rate > 0) return rate;
-  } catch (e: any) {
-    if (process.env.NODE_ENV !== 'production') {
-      console.warn('[WISE] Rate fetch failed:', e.message);
+  const directPair = `${s}_${t}`;
+  if (getToken()) {
+    try {
+      const rates = await wiseGet(`/v1/rates?source=${s}&target=${t}`);
+      const rate = Array.isArray(rates) && rates.length > 0 ? Number(rates[0].rate) : NaN;
+      if (Number.isFinite(rate) && rate > 0) return rate;
+    } catch (e: any) {
+      // Soft fallback to reference rates table
     }
   }
 
-  throw new Error(`WISE_RATE_UNAVAILABLE:${source}_${target}`);
+  if (FALLBACK_FX_RATES[directPair]) {
+    return FALLBACK_FX_RATES[directPair];
+  }
+
+  // Cross-rate via USD
+  const toUsdSource = s === 'USD' ? 1 : (FALLBACK_FX_RATES[`${s}_USD`] || 1.0);
+  const toUsdTarget = t === 'USD' ? 1 : (FALLBACK_FX_RATES[`${t}_USD`] || 1.0);
+  return toUsdTarget > 0 ? toUsdSource / toUsdTarget : 1.0;
 }
 
 /**
@@ -976,7 +1026,7 @@ export async function getWisePublicKey(customUrl?: string): Promise<string> {
   // 3. Fetch from Wise public key endpoint
   const keyUrl = customUrl || process.env.WISE_PUBLIC_KEY_URL || `${WISE_BASE}/v1/webhooks/public-key`;
   try {
-    const res = await fetch(keyUrl);
+    const res = await fetch(keyUrl, { signal: AbortSignal.timeout(3000) });
     if (res.ok) {
       const text = await res.text();
       let pem = text;

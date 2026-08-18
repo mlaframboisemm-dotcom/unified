@@ -936,7 +936,8 @@ export default function App() {
       const res = await fetch(buildApiUrl(endpoint), {
         method,
         headers: buildAuthHeaders({ 'Content-Type': 'application/json' }),
-        credentials: 'include'
+        credentials: 'include',
+        signal: AbortSignal.timeout(5000)
       });
       if (res.ok) {
         const data = await res.json();
@@ -963,7 +964,7 @@ export default function App() {
         }
       }
     } catch (err) {
-      console.warn('Failed to fetch/sync Stripe balance:', err);
+      // Quiet background polling failure handling
     } finally {
       setIsFetchingStripeBalance(false);
     }
