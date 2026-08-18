@@ -717,24 +717,7 @@ export async function getWiseTotalCashUSD(): Promise<{
     bankName: 'Wise US Inc (Wilmington, DE, USA)',
     profileId: 101924589,
     businessName: 'sovereigns',
-    proofDocument: {
-      company: 'WISE PAYMENTS CANADA INC.',
-      address: '99 Bank Street, Suite 1420, Ottawa, ON, K1P 1H4, Canada',
-      documentRef: 'WISE-PROOF-176576596814061-2026',
-      verificationDate: '27 July 2026',
-      verificationStatus: '200 OK — Live API & Double-Entry Ledger Synchronized',
-      accountOwner: 'Marcel laframboise',
-      accountType: 'Deposit / Sovereign Settlement Account',
-      accountNumber: '176576596814061',
-      routingNumber: '084009519 (Wire / ACH)',
-      swiftBic: 'TRWIUS35XXX',
-      profileId: 'sovereigns (#101924589)',
-      servicingBank: 'Wise US Inc, 108 W 13th St, Wilmington, DE, 19801, USA',
-      settlementAnchorHash: '0xa3f2c5d1b7e901a8',
-      treasuryWalletAddress: '0x71C7656EC7ab88b098defB751B7401B5f6d8976F',
-      etherscanPayloadHex: '0x6d617263656c206c616672616d626f69736520776973652070...',
-      doubleEntryLedger: '✓ RECONCILED & AUDITED (Zero Discrepancy)'
-    }
+    proofDocument: null
   };
 }
 
