@@ -11764,17 +11764,18 @@ async function startServer() {
   // GET /api/wise/balances — Fetch live CAD + USD balances from Marcel's real Wise account
   app.get('/api/wise/balances', requireAuth, async (req: any, res: any) => {
     try {
-      const { fetchWiseLiveBalances, getWiseTotalCashUSD } = await import('./src/lib/wise-live-integration.js');
+      const { getWiseTotalCashUSD } = await import('./src/lib/wise-live-integration.js');
       const result = await getWiseTotalCashUSD();
+      if (!result.balances.length) {
+        return res.status(503).json({
+          success: false,
+          error: 'WISE_BALANCE_UNAVAILABLE',
+          message: 'Wise returned no authoritative balances for the authenticated account.'
+        });
+      }
       return res.json({
         success: true,
         source: 'wise_live',
-        profileName: 'Marcel laframboise',
-        businessName: result.businessName || 'sovereigns',
-        profileId: result.profileId || 101924589,
-        accountNumber: result.accountNumber || '176576596814061',
-        routingNumber: result.routingNumber || '084009519',
-        bankName: result.bankName || 'Wise US Inc (Wilmington, DE, USA)',
         cadBalance: result.cadBalance,
         usdBalance: result.usdBalance,
         eurBalance: result.eurBalance,
@@ -11782,7 +11783,6 @@ async function startServer() {
         totalUSD: result.totalUSD,
         cadToUsdRate: result.cadRate,
         balances: result.balances,
-        proofDocument: result.proofDocument,
         fetchedAt: new Date().toISOString()
       });
     } catch (e: any) {
@@ -11791,127 +11791,48 @@ async function startServer() {
   });
 
   // GET /api/wise/ownership-proof — Fetch official Wise Proof of Account Ownership certificate
-  app.get(['/api/wise/ownership-proof', '/api/wise/proof'], async (req: any, res: any) => {
-    try {
-      const { getWiseTotalCashUSD } = await import('./src/lib/wise-live-integration.js');
-      const result = await getWiseTotalCashUSD();
-      return res.json({
-        success: true,
-        company: 'WISE PAYMENTS CANADA INC.',
-        address: '99 Bank Street, Suite 1420, Ottawa, ON, K1P 1H4, Canada',
-        documentRef: 'WISE-PROOF-176576596814061-2026',
-        verificationDate: '27 July 2026',
-        verificationStatus: '200 OK — Live API & Double-Entry Ledger Synchronized',
-        accountOwnerDetails: {
-          accountOwnerName: 'Marcel laframboise',
-          accountType: 'Deposit / Sovereign Settlement Account',
-          wiseAccountNumber: '176576596814061',
-          routingNumber: '084009519 (Wire / ACH)',
-          swiftBic: 'TRWIUS35XXX',
-          wiseProfileId: 'sovereigns (#101924589)',
-          servicingBank: 'Wise US Inc, 108 W 13th St, Wilmington, DE, 19801, USA'
-        },
-        portfolioBreakdown: [
-          { category: 'Primary Wise Deposit Account (USD)', description: 'Linked to ACH #084009519', amount: '$1,791,100.00 USD' },
-          { category: 'Wise Sovereign Cash Hub (USD)', description: 'Liquidity Buffer', amount: '$250,000.00 USD' },
-          { category: 'EUR Multi-Currency Vault', description: '€185,000.00 EUR @ 1.090', amount: '$201,650.00 USD' },
-          { category: 'GBP Multi-Currency Vault', description: '£120,000.00 GBP @ 1.300', amount: '$156,000.00 USD' },
-          { category: 'CAD Interac Settlement Buffer', description: 'CA$95,000.00 CAD @ 0.730', amount: '$69,350.00 USD' }
-        ],
-        totalReconciledPortfolio: '$2,478,350.00 USD',
-        cryptographicProof: {
-          settlementAnchorHash: '0xa3f2c5d1b7e901a8',
-          treasuryWalletAddress: '0x71C7656EC7ab88b098defB751B7401B5f6d8976F',
-          etherscanPayloadHex: '0x6d617263656c206c616672616d626f69736520776973652070...',
-          doubleEntryLedger: '✓ RECONCILED & AUDITED (Zero Discrepancy)'
-        },
-        attestation: 'This statement certifies that Marcel laframboise is the registered owner of Wise Account #176576596814061. The balances are reconciled across the Wise API engine and double-entry ledger, fully available for instant transfers, Interac e-Transfer settlements, and ACH/wire disbursements.',
-        liveWiseBalances: result,
-        timestamp: new Date().toISOString()
-      });
-    } catch (e: any) {
-      return res.status(500).json({ error: 'WISE_PROOF_ERROR', message: e.message });
-    }
+  app.get(['/api/wise/ownership-proof', '/api/wise/proof'], requireAuth, async (req: any, res: any) => {
+    return res.status(503).json({
+      success: false,
+      error: 'WISE_OWNERSHIP_PROOF_UNAVAILABLE',
+      message: 'No verified live Wise ownership-proof adapter is connected; no certificate or attestation was generated.'
+    });
   });
 
   // POST /api/wise/balances/create — Phase 2 Step 1: Instantiate multi-currency ledger account
   app.post('/api/wise/balances/create', requireAuth, async (req: any, res: any) => {
     try {
       const { createWiseBalanceNode } = await import('./src/lib/wise-live-integration.js');
-      const { profileId = 101924589, currency = 'USD', type = 'STANDARD' } = req.body || {};
-      const result = await createWiseBalanceNode(Number(profileId), currency, type);
-      return res.json(result);
+      const { profileId, currency = 'USD', type = 'STANDARD' } = req.body || {};
+      if (!profileId) {
+        return res.status(400).json({ success: false, error: 'WISE_BALANCE_NODE_PROFILE_REQUIRED' });
+      }
+      const result = await createWiseBalanceNode(profileId, currency, type);
+      return res.status(result.success === false ? 502 : 200).json(result);
     } catch (e: any) {
       return res.status(500).json({ error: 'WISE_BALANCE_CREATE_ERROR', message: e.message });
     }
   });
 
-  // POST /api/wise/convert — Intra-Wise currency conversion & simulation execution
+  // POST /api/wise/convert — conversion requires a verified live Wise conversion adapter
   app.post('/api/wise/convert', requireAuth, async (req: any, res: any) => {
-    try {
-      const { sourceCurrency = 'USD', targetCurrency = 'CAD', amount = 1000 } = req.body || {};
-      const numAmount = Number(amount);
-      if (isNaN(numAmount) || numAmount <= 0) {
-        return res.status(400).json({ success: false, error: 'INVALID_AMOUNT', message: 'Positive amount required' });
-      }
-
-      // Rates relative to USD
-      const usdRates: Record<string, number> = {
-        USD: 1.0,
-        CAD: 1.3514,
-        EUR: 0.9216,
-        GBP: 0.7843,
-        AUD: 1.5267,
-        JPY: 154.20,
-        CHF: 0.8850,
-        SGD: 1.3410
-      };
-
-      const fromRateUSD = usdRates[String(sourceCurrency).toUpperCase()] || 1.0;
-      const toRateUSD = usdRates[String(targetCurrency).toUpperCase()] || 1.0;
-
-      // Rate from sourceCurrency -> targetCurrency
-      const exchangeRate = (1 / fromRateUSD) * toRateUSD;
-      const feeRate = 0.0035; // 0.35% Wise fee
-      const grossTarget = numAmount * exchangeRate;
-      const feeAmount = grossTarget * feeRate;
-      const netReceived = grossTarget - feeAmount;
-
-      const conversionId = `wcv_${Math.random().toString(36).substring(2, 11)}`;
-
-      // Broadcast update via WebSocket
-      try {
-        const { broadcastWiseBalanceUpdate } = await import('./src/lib/wise-websocket-server.js');
-        broadcastWiseBalanceUpdate();
-      } catch (wsErr) {
-        // ws broadcast silent fallback
-      }
-
-      return res.json({
-        success: true,
-        conversionId,
-        sourceCurrency: String(sourceCurrency).toUpperCase(),
-        targetCurrency: String(targetCurrency).toUpperCase(),
-        sourceAmount: numAmount,
-        exchangeRate: Number(exchangeRate.toFixed(6)),
-        feeRatePercent: 0.35,
-        feeAmount: Number(feeAmount.toFixed(4)),
-        netReceived: Number(netReceived.toFixed(2)),
-        guaranteedRateSecs: 86400,
-        timestamp: new Date().toISOString()
-      });
-    } catch (e: any) {
-      return res.status(500).json({ success: false, error: 'CONVERSION_ERROR', message: e.message });
-    }
+    return res.status(501).json({
+      success: false,
+      error: 'WISE_CONVERSION_ADAPTER_NOT_CONNECTED',
+      message: 'No verified live Wise conversion adapter is connected; no conversion quote or transaction was created.'
+    });
   });
 
   // GET /api/wise/account-details — Phase 2 Step 2: Fetch account allocation & routing details
   app.get('/api/wise/account-details', requireAuth, async (req: any, res: any) => {
     try {
       const { getWiseAccountAllocationDetails } = await import('./src/lib/wise-live-integration.js');
-      const profileId = Number(req.query.profileId || 101924589);
-      const result = await getWiseAccountAllocationDetails(profileId);
-      return res.json(result);
+      const profileId = req.query.profileId;
+      if (!profileId) {
+        return res.status(400).json({ success: false, error: 'WISE_ACCOUNT_DETAILS_PROFILE_REQUIRED' });
+      }
+      const result = await getWiseAccountAllocationDetails(String(profileId));
+      return res.status(result.success === false ? 502 : 200).json(result);
     } catch (e: any) {
       return res.status(500).json({ error: 'WISE_ACCOUNT_DETAILS_ERROR', message: e.message });
     }
@@ -11921,9 +11842,12 @@ async function startServer() {
   app.post('/api/wise/verification-documents', requireAuth, async (req: any, res: any) => {
     try {
       const { submitWiseVerificationDocument } = await import('./src/lib/wise-live-integration.js');
-      const { profileId = 101924589, documentType = 'PASSPORT', fileData = '' } = req.body || {};
+      const { profileId, documentType, fileData } = req.body || {};
+      if (!profileId || !documentType || !fileData) {
+        return res.status(400).json({ error: 'WISE_VERIFICATION_INPUT_REQUIRED' });
+      }
       const result = await submitWiseVerificationDocument(Number(profileId), documentType, fileData);
-      return res.json(result);
+      return res.status(result.success === false ? 502 : 200).json(result);
     } catch (e: any) {
       return res.status(500).json({ error: 'WISE_VERIFICATION_ERROR', message: e.message });
     }
@@ -11933,12 +11857,12 @@ async function startServer() {
   app.post('/api/wise/cards/provision-sca', requireAuth, async (req: any, res: any) => {
     try {
       const { initiateWiseCardScaHandshake } = await import('./src/lib/wise-live-integration.js');
-      const { profileId = 101924589, cardId = '4111-9240' } = req.body || {};
+      const { profileId, cardId } = req.body || {};
+      if (!profileId || !cardId) {
+        return res.status(400).json({ error: 'WISE_SCA_INPUT_REQUIRED' });
+      }
       const scaPayload = await initiateWiseCardScaHandshake(Number(profileId), cardId);
-      return res.json({
-        success: true,
-        data: scaPayload
-      });
+      return res.status(scaPayload.success === false ? 503 : 200).json(scaPayload);
     } catch (e: any) {
       return res.status(500).json({ error: 'WISE_SCA_HANDSHAKE_ERROR', message: e.message });
     }
@@ -11948,9 +11872,12 @@ async function startServer() {
   app.post('/api/wise/card-orders', requireAuth, async (req: any, res: any) => {
     try {
       const { issueWiseVirtualCard } = await import('./src/lib/wise-live-integration.js');
-      const { profileId = 101924589, cardProgramId = 'DIGITAL_CARD_PROGRAM_01' } = req.body || {};
+      const { profileId, cardProgramId } = req.body || {};
+      if (!profileId || !cardProgramId) {
+        return res.status(400).json({ error: 'WISE_CARD_ORDER_INPUT_REQUIRED' });
+      }
       const result = await issueWiseVirtualCard(profileId, cardProgramId);
-      return res.json(result);
+      return res.status(result.success === false ? 502 : 200).json(result);
     } catch (e: any) {
       return res.status(500).json({ error: 'WISE_CARD_ORDER_ERROR', message: e.message });
     }
@@ -11962,8 +11889,11 @@ async function startServer() {
       const { createWiseDigitalWalletToken } = await import('./src/lib/wise-live-integration.js');
       const { cardToken } = req.params;
       const { walletProvider = 'GOOGLE_PAY', deviceType = 'ANDROID_PHONE' } = req.body || {};
+      if (!cardToken) {
+        return res.status(400).json({ error: 'WISE_DIGITAL_WALLET_CARD_TOKEN_REQUIRED' });
+      }
       const result = await createWiseDigitalWalletToken(cardToken, walletProvider, deviceType);
-      return res.json(result);
+      return res.status(result.success === false ? 502 : 200).json(result);
     } catch (e: any) {
       return res.status(500).json({ error: 'WISE_DIGITAL_WALLET_TOKEN_ERROR', message: e.message });
     }
@@ -12990,83 +12920,42 @@ async function startServer() {
 
   // Wise Withdrawal & Card Details Endpoints
   app.get('/api/withdrawal/wise/card/details', requireAuth, async (req: any, res: any) => {
-    return res.json({
-      success: true,
-      card: {
-        id: 'card_wise_live_01',
-        cardHolderName: 'Marcel Laframboise',
-        last4: '8842',
-        expMonth: '12',
-        expYear: '2028',
-        brand: 'Visa',
-        type: 'BUSINESS_DEBIT',
-        status: 'ACTIVE',
-        frozen: false,
-        profileId: '101924589',
-        limits: { daily: 10000, monthly: 50000, remainingDaily: 10000 },
-        digitalPassLinked: true,
-        googlePayStatus: 'LINKED',
-        userEmail: 'mlaframboisemm@gmail.com',
-        kycStatus: 'REGISTERED_TO_KYC_LIVE'
-      }
+    return res.status(503).json({
+      success: false,
+      error: 'WISE_CARD_ADAPTER_NOT_CONNECTED',
+      message: 'No verified live Wise card adapter is connected; no card details are available.'
     });
   });
 
   app.get('/api/withdrawal/wise/card/transactions', requireAuth, async (req: any, res: any) => {
-    return res.json({
-      success: true,
-      transactions: [
-        {
-          id: 'pos_tx_01',
-          merchantName: 'Google Pay POS Terminal',
-          amount: -45.00,
-          currency: 'USD',
-          type: 'CARD_PAYMENT',
-          status: 'COMPLETED',
-          timestamp: new Date().toISOString(),
-          location: 'Google Wallet NFC Tap'
-        },
-        {
-          id: 'pos_tx_02',
-          merchantName: 'Wise Multi-Currency Settlement',
-          amount: 2478350.00,
-          currency: 'USD',
-          type: 'CREDIT',
-          status: 'COMPLETED',
-          timestamp: new Date(Date.now() - 3600000).toISOString(),
-          location: 'Wise Live API'
-        }
-      ]
+    return res.status(503).json({
+      success: false,
+      error: 'WISE_CARD_ADAPTER_NOT_CONNECTED',
+      message: 'No verified live Wise card adapter is connected; no card transaction history is available.'
     });
   });
 
   app.post('/api/withdrawal/wise/card/freeze', requireAuth, async (req: any, res: any) => {
-    const { freeze } = req.body || {};
-    return res.json({
-      success: true,
-      frozen: !!freeze,
-      cardStatus: freeze ? 'FROZEN' : 'ACTIVE',
-      message: `Wise Business Card ${freeze ? 'frozen' : 'unfrozen'} successfully.`
+    return res.status(503).json({
+      success: false,
+      error: 'WISE_CARD_ADAPTER_NOT_CONNECTED',
+      message: 'No verified live Wise card control adapter is connected; the freeze state was not changed.'
     });
   });
 
   app.post('/api/withdrawal/wise/card/limits', requireAuth, async (req: any, res: any) => {
-    return res.json({
-      success: true,
-      limits: req.body,
-      message: 'Card spending limits updated.'
+    return res.status(503).json({
+      success: false,
+      error: 'WISE_CARD_ADAPTER_NOT_CONNECTED',
+      message: 'No verified live Wise card control adapter is connected; spending limits were not changed.'
     });
   });
 
   app.post('/api/withdrawal/wise/card/pos-transaction', requireAuth, async (req: any, res: any) => {
-    const { amount = 10, merchant = 'NFC Tap Terminal' } = req.body || {};
-    return res.json({
-      success: true,
-      status: 'COMPLETED',
-      txId: 'pos_tx_' + Date.now(),
-      amount,
-      merchant,
-      message: `POS Transaction of $${amount} completed via Wise Google Pay Pass.`
+    return res.status(501).json({
+      success: false,
+      error: 'WISE_CARD_ADAPTER_NOT_CONNECTED',
+      message: 'No verified live Wise POS authorization adapter is connected; no transaction was created.'
     });
   });
 

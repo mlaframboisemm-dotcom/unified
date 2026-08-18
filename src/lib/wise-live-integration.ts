@@ -434,17 +434,19 @@ export async function fetchWiseLiveBalances(): Promise<WiseBalance[]> {
  * Get live exchange rate from Wise
  */
 export async function getWiseExchangeRate(source: string, target: string): Promise<number> {
+  if (source === target) return 1;
+
   try {
     const rates = await wiseGet(`/v1/rates?source=${source}&target=${target}`);
-    if (Array.isArray(rates) && rates.length > 0) {
-      return Number(rates[0].rate || 1);
-    }
+    const rate = Array.isArray(rates) && rates.length > 0 ? Number(rates[0].rate) : NaN;
+    if (Number.isFinite(rate) && rate > 0) return rate;
   } catch (e: any) {
     if (process.env.NODE_ENV !== 'production') {
       console.warn('[WISE] Rate fetch failed:', e.message);
     }
   }
-  return source === 'USD' && target === 'CAD' ? 1.40895 : 1;
+
+  throw new Error(`WISE_RATE_UNAVAILABLE:${source}_${target}`);
 }
 
 /**
@@ -605,6 +607,8 @@ export async function getWiseTotalCashUSD(): Promise<{
 
   let cadBalance = 0;
   let usdBalance = 0;
+  let eurBalance = 0;
+  let gbpBalance = 0;
   let totalUSD = 0;
 
   if (isLiveFromApi && balances.length > 0) {
@@ -615,108 +619,37 @@ export async function getWiseTotalCashUSD(): Promise<{
       } else if (b.currency === 'USD') {
         usdBalance += b.amount;
         totalUSD += b.amount;
+      } else if (b.currency === 'EUR') {
+        eurBalance += b.amount;
+        const rate = await getWiseExchangeRate('EUR', 'USD');
+        totalUSD += b.amount * rate;
+      } else if (b.currency === 'GBP') {
+        gbpBalance += b.amount;
+        const rate = await getWiseExchangeRate('GBP', 'USD');
+        totalUSD += b.amount * rate;
       } else {
-        try {
-          const rate = await getWiseExchangeRate(b.currency, 'USD');
-          totalUSD += b.amount * rate;
-        } catch {
-          totalUSD += b.amount;
-        }
+        const rate = await getWiseExchangeRate(b.currency, 'USD');
+        totalUSD += b.amount * rate;
       }
     }
-  } else {
-    for (const b of balances) {
-      if (b.currency === 'CAD') cadBalance += b.amount;
-      if (b.currency === 'USD') usdBalance += b.amount;
-    }
-    totalUSD = usdBalance + (cadBalance * cadRate);
-
-    const PRIMARY_USD = 1791100.00;
-    const HUB_USD = 250000.00;
-    const EUR_AMOUNT = 185000.00; // €185,000.00 EUR @ 1.090 = $201,650.00 USD
-    const GBP_AMOUNT = 120000.00; // £120,000.00 GBP @ 1.300 = $156,000.00 USD
-    const CAD_AMOUNT = 95000.00;  // CA$95,000.00 CAD @ 0.730 = $69,350.00 USD
-    const TOTAL_RECONCILED_USD = 2478350.00;
-
-    usdBalance = PRIMARY_USD + HUB_USD; // $2,041,100.00 USD
-    cadBalance = CAD_AMOUNT;
-    totalUSD = TOTAL_RECONCILED_USD;
-
-    balances = [
-      {
-        balanceId: 176576596814061,
-        name: 'Primary Wise Deposit Account (USD)',
-        description: 'Linked to ACH #084009519',
-        currency: 'USD',
-        amount: PRIMARY_USD,
-        type: 'business',
-        profileId: 101924589
-      },
-      {
-        balanceId: 176576596814062,
-        name: 'Wise Sovereign Cash Hub (USD)',
-        description: 'Liquidity Buffer',
-        currency: 'USD',
-        amount: HUB_USD,
-        type: 'business',
-        profileId: 101924589
-      },
-      {
-        balanceId: 176576596814063,
-        name: 'EUR Multi-Currency Vault',
-        description: '€185,000.00 EUR @ 1.090',
-        currency: 'EUR',
-        amount: EUR_AMOUNT,
-        amountUsd: 201650.00,
-        type: 'business',
-        profileId: 101924589
-      },
-      {
-        balanceId: 176576596814064,
-        name: 'GBP Multi-Currency Vault',
-        description: '£120,000.00 GBP @ 1.300',
-        currency: 'GBP',
-        amount: GBP_AMOUNT,
-        amountUsd: 156000.00,
-        type: 'business',
-        profileId: 101924589
-      },
-      {
-        balanceId: 176576596814065,
-        name: 'CAD Interac Settlement Buffer',
-        description: 'CA$95,000.00 CAD @ 0.730',
-        currency: 'CAD',
-        amount: CAD_AMOUNT,
-        amountUsd: 69350.00,
-        type: 'business',
-        profileId: 101924589
-      }
-    ];
   }
 
   return {
     cadBalance,
     usdBalance,
-    eurBalance: 185000.00,
-    gbpBalance: 120000.00,
+    eurBalance,
+    gbpBalance,
     totalUSD,
     cadBalanceString: cadBalance.toFixed(2),
     usdBalanceString: usdBalance.toFixed(2),
     totalUSDString: totalUSD.toFixed(2),
-    cadRate: 0.730,
-    eurRate: 1.090,
-    gbpRate: 1.300,
+    cadRate: balances.length > 0 ? cadRate : 0,
+    eurRate: eurBalance > 0 ? await getWiseExchangeRate('EUR', 'USD') : 0,
+    gbpRate: gbpBalance > 0 ? await getWiseExchangeRate('GBP', 'USD') : 0,
     balances: balances.map(b => ({
       ...b,
       amountString: b.amount.toFixed(2)
     })),
-    accountOwner: 'Marcel laframboise',
-    accountNumber: '176576596814061',
-    routingNumber: '084009519',
-    swiftBic: 'TRWIUS35XXX',
-    bankName: 'Wise US Inc (Wilmington, DE, USA)',
-    profileId: 101924589,
-    businessName: 'sovereigns',
     proofDocument: null
   };
 }
@@ -724,33 +657,35 @@ export async function getWiseTotalCashUSD(): Promise<{
 /**
  * Phase 2 - Step 1: Instantiate Multi-Currency Ledger Account (POST /v4/profiles/{id}/balances)
  */
-export async function createWiseBalanceNode(profileId = 101924589, currency = 'USD', type = 'STANDARD'): Promise<any> {
+export async function createWiseBalanceNode(profileId: number | string, currency = 'USD', type = 'STANDARD'): Promise<any> {
+  if (!profileId || !currency) {
+    return { success: false, status: 'INVALID_INPUT', error: 'WISE_BALANCE_NODE_INPUT_REQUIRED' };
+  }
+
   const path = `/v4/profiles/${profileId}/balances`;
   try {
     const response = await wisePost(path, { currency, type });
-    return {
-      success: true,
-      profileId,
-      currency,
-      type,
-      balanceId: response.id || 176576596814061,
-      amount: response.amount?.value || '0.00',
-      amountString: String(response.amount?.value || '0.00'),
-      raw: response
-    };
-  } catch (e: any) {
-    if (process.env.NODE_ENV !== 'production') {
-      console.warn('[WISE] createWiseBalanceNode fallback:', e.message);
+    if (!response?.id) {
+      return { success: false, status: 'INVALID_PROVIDER_RESPONSE', error: 'WISE_BALANCE_ID_MISSING', raw: response };
     }
     return {
       success: true,
-      profileId,
+      profileId: String(profileId),
       currency,
       type,
-      balanceId: 176576596814061,
-      amount: '2478350.00',
-      amountString: '2478350.00',
-      note: 'Verified liquid USD node active on profile 101924589'
+      balanceId: response.id,
+      amount: response.amount?.value ?? null,
+      amountString: response.amount?.value == null ? null : String(response.amount.value),
+      raw: response
+    };
+  } catch (e: any) {
+    return {
+      success: false,
+      status: 'PROVIDER_ERROR',
+      profileId: String(profileId),
+      currency,
+      type,
+      error: e?.message || 'WISE_BALANCE_NODE_PROVIDER_ERROR'
     };
   }
 }
@@ -758,29 +693,34 @@ export async function createWiseBalanceNode(profileId = 101924589, currency = 'U
 /**
  * Phase 2 - Step 2: Fetch Routing & Account Allocation Details
  */
-export async function getWiseAccountAllocationDetails(profileId = 101924589): Promise<any> {
+export async function getWiseAccountAllocationDetails(profileId: number | string): Promise<any> {
+  if (!profileId) {
+    return { success: false, status: 'INVALID_INPUT', error: 'WISE_ACCOUNT_DETAILS_PROFILE_REQUIRED' };
+  }
+
   try {
     const details = await wiseGet(`/v1/profiles/${profileId}/account-details`);
+    if (!details || (!details.accountNumber && !details.routingNumber && !details.swiftBic)) {
+      return { success: false, status: 'INVALID_PROVIDER_RESPONSE', error: 'WISE_ACCOUNT_DETAILS_MISSING', profileId: String(profileId) };
+    }
     return {
-      profileId,
-      accountHolderName: 'Marcel laframboise',
-      currency: 'USD',
+      success: true,
+      profileId: String(profileId),
+      currency: details.currency || 'USD',
+      accountHolderName: details.accountHolderName || null,
       bankDetails: {
-        accountNumber: details.accountNumber || '176576596814061',
-        routingNumber: details.routingNumber || '084009519',
-        swiftBic: details.swiftBic || 'TRWIUS35XXX'
-      }
+        accountNumber: details.accountNumber || null,
+        routingNumber: details.routingNumber || null,
+        swiftBic: details.swiftBic || null
+      },
+      raw: details
     };
   } catch (e: any) {
     return {
-      profileId,
-      accountHolderName: 'Marcel laframboise',
-      currency: 'USD',
-      bankDetails: {
-        accountNumber: '176576596814061',
-        routingNumber: '084009519',
-        swiftBic: 'TRWIUS35XXX'
-      }
+      success: false,
+      status: 'PROVIDER_ERROR',
+      profileId: String(profileId),
+      error: e?.message || 'WISE_ACCOUNT_DETAILS_PROVIDER_ERROR'
     };
   }
 }
@@ -788,18 +728,22 @@ export async function getWiseAccountAllocationDetails(profileId = 101924589): Pr
 /**
  * Phase 1 - Step 2: Submit User Verification Document for KYC Compliance
  */
-export async function submitWiseVerificationDocument(profileId = 101924589, documentType = 'PASSPORT', fileData = ''): Promise<any> {
+export async function submitWiseVerificationDocument(profileId: number | string, documentType: string, fileData: string): Promise<any> {
+  if (!profileId || !documentType || !fileData) {
+    return { success: false, status: 'INVALID_INPUT', error: 'WISE_VERIFICATION_INPUT_REQUIRED' };
+  }
+
   const path = `/v1/user-verification-documents`;
   try {
     const res = await wisePost(path, { profileId, documentType, fileData });
-    return { success: true, status: 'SUBMITTED', response: res };
+    return { success: true, status: 'SUBMITTED', profileId, documentType, response: res };
   } catch (e: any) {
     return {
-      success: true,
-      status: 'VERIFIED',
+      success: false,
+      status: 'PROVIDER_ERROR',
       profileId,
       documentType,
-      message: 'KYC Verification auto-synchronized and active (Tier 3 Unlimited).'
+      error: e?.message || 'WISE_VERIFICATION_PROVIDER_ERROR'
     };
   }
 }
@@ -812,50 +756,19 @@ let tokenRefreshHaltedReason = '';
  * Initiates Native Strong Customer Authentication (SCA) handshake and Google Pay OPC payload for Google Wallet
  * Enforces OPC lifespan constraints (15 minutes validity window).
  */
-export async function initiateWiseCardScaHandshake(profileId = 101924589, cardId = '4111-9240'): Promise<any> {
-  const scaToken = `sca_token_${crypto.randomUUID()}`;
-  const now = Date.now();
-  const validityWindowMs = 15 * 60 * 1000; // 15 minutes validity constraint
-  const expiresAtMs = now + validityWindowMs;
+export async function initiateWiseCardScaHandshake(profileId: number | string, cardId: string): Promise<any> {
+  if (!profileId || !cardId) {
+    return { success: false, status: 'INVALID_INPUT', error: 'WISE_SCA_INPUT_REQUIRED' };
+  }
 
-  const opcPayload = Buffer.from(JSON.stringify({
-    cardId,
+  return {
+    success: false,
+    status: 'PROVIDER_NOT_CONNECTED',
+    error: 'WISE_CARD_SCA_PROVIDER_NOT_CONNECTED',
+    message: 'No verified live Wise SCA/card-tokenization adapter is connected; no SCA token or wallet payload was generated.',
     profileId,
-    accountNumber: '176576596814061',
-    holderName: 'Marcel laframboise',
-    nonce: crypto.randomBytes(16).toString('hex'),
-    issuedAt: now,
-    expiresAt: expiresAtMs
-  })).toString('base64');
-
-  const googleWalletPayload = {
-    profileId,
-    cardId,
-    accountNumber: '176576596814061',
-    holderName: 'Marcel laframboise',
-    issuer: 'Wise Payments Canada Inc. / Wise US Inc.',
-    opaquePaymentCard: opcPayload,
-    opcLifespanSeconds: 900,
-    opcExpiresAt: new Date(expiresAtMs).toISOString(),
-    scaHandshakeToken: scaToken,
-    handshakeStatus: 'SCA_CHALLENGE_VERIFIED',
-    googlePayBindingUrl: `https://pay.google.com/gp/v/bind/wise?token=${scaToken}`,
-    pushProvisioningConfig: {
-      userAddress: {
-        name: 'Marcel laframboise',
-        address1: '100 King St W',
-        locality: 'Toronto',
-        administrativeArea: 'ON',
-        countryCode: 'CA',
-        postalCode: 'M5X 1A1'
-      },
-      last4: '9240',
-      network: 'VISA',
-      tokenServiceProvider: 'WISE_TOKEN_SERVICE'
-    },
-    timestamp: new Date().toISOString()
+    cardId
   };
-  return googleWalletPayload;
 }
 
 /**
@@ -863,9 +776,13 @@ export async function initiateWiseCardScaHandshake(profileId = 101924589, cardId
  * Endpoint: POST /v1/card-orders
  */
 export async function issueWiseVirtualCard(
-  profileId: number | string = 101924589,
-  cardProgramId: string = 'DIGITAL_CARD_PROGRAM_01'
+  profileId: number | string,
+  cardProgramId: string
 ): Promise<any> {
+  if (!profileId || !cardProgramId) {
+    return { success: false, status: 'INVALID_INPUT', error: 'WISE_CARD_ORDER_INPUT_REQUIRED' };
+  }
+
   const path = `/v1/card-orders`;
   const payload = {
     profileId: String(profileId),
@@ -876,33 +793,31 @@ export async function issueWiseVirtualCard(
 
   try {
     const res = await wisePost(path, payload);
+    const cardToken = res?.cardToken || res?.id;
+    if (!cardToken) {
+      return { success: false, status: 'INVALID_PROVIDER_RESPONSE', error: 'WISE_CARD_TOKEN_MISSING', raw: res };
+    }
+
     return {
       success: true,
-      cardToken: res.cardToken || res.id || `card_tok_${crypto.randomUUID().substring(0, 8)}`,
-      cardId: res.cardId || '4111-9240',
-      status: res.status || 'CARD_DETAILS_CREATED',
-      type: 'DIGITAL',
-      profileId: Number(profileId),
+      cardToken,
+      cardId: res.cardId || null,
+      status: res.status || 'CREATED',
+      type: res.type || 'DIGITAL',
+      profileId: String(profileId),
       cardProgramId,
-      last4: res.last4 || '9240',
-      holderName: res.holderName || 'Marcel laframboise',
-      expiryDate: res.expiryDate || '2029-08-31',
+      last4: res.last4 || null,
+      holderName: res.holderName || null,
+      expiryDate: res.expiryDate || null,
       raw: res
     };
   } catch (e: any) {
-    const generatedToken = `card_tok_${crypto.randomUUID().substring(0, 12)}`;
     return {
-      success: true,
-      cardToken: generatedToken,
-      cardId: '4111-9240',
-      status: 'CARD_DETAILS_CREATED',
-      type: 'DIGITAL',
-      profileId: Number(profileId),
+      success: false,
+      status: 'PROVIDER_ERROR',
+      profileId: String(profileId),
       cardProgramId,
-      last4: '9240',
-      holderName: 'Marcel laframboise',
-      expiryDate: '2029-08-31',
-      note: 'Virtual card activated instantly via Wise Card Orders API.'
+      error: e?.message || 'WISE_CARD_ORDER_PROVIDER_ERROR'
     };
   }
 }
@@ -916,78 +831,40 @@ export async function createWiseDigitalWalletToken(
   walletProvider = 'GOOGLE_PAY',
   deviceType = 'ANDROID_PHONE'
 ): Promise<any> {
-  const path = `/v1/cards/${cardToken}/digital-wallet-tokens`;
-  const payload = {
-    walletProvider,
-    deviceType
-  };
+  if (!cardToken) {
+    return { success: false, status: 'INVALID_INPUT', error: 'WISE_DIGITAL_WALLET_CARD_TOKEN_REQUIRED' };
+  }
 
-  const now = Date.now();
-  const expiresAtMs = now + (15 * 60 * 1000); // 15-minute OPC validity
+  const path = `/v1/cards/${cardToken}/digital-wallet-tokens`;
+  const payload = { walletProvider, deviceType };
 
   try {
     const res = await wisePost(path, payload);
-    return {
-      success: true,
-      cardToken,
-      walletProvider,
-      deviceType,
-      opaquePaymentCard: res.opaquePaymentCard || res.opc || Buffer.from(JSON.stringify({ cardToken, now })).toString('base64'),
-      opcLifespanSeconds: 900,
-      opcExpiresAt: new Date(expiresAtMs).toISOString(),
-      tokenizationStatus: res.status || 'CARD_TOKENIZED_READY',
-      pushProvisioningConfig: res.pushProvisioningConfig || {
-        cardHolderName: 'Marcel laframboise',
-        last4: '9240',
-        network: 'VISA',
-        tokenServiceProvider: 'WISE_TOKEN_SERVICE',
-        userAddress: {
-          name: 'Marcel laframboise',
-          address1: '100 King St W',
-          locality: 'Toronto',
-          administrativeArea: 'ON',
-          countryCode: 'CA',
-          postalCode: 'M5X 1A1'
-        }
-      },
-      raw: res
-    };
-  } catch (e: any) {
-    const opcPayload = Buffer.from(JSON.stringify({
-      cardToken,
-      walletProvider,
-      deviceType,
-      accountNumber: '176576596814061',
-      holderName: 'Marcel laframboise',
-      nonce: crypto.randomBytes(16).toString('hex'),
-      issuedAt: now,
-      expiresAt: expiresAtMs
-    })).toString('base64');
+    const opaquePaymentCard = res?.opaquePaymentCard || res?.opc;
+    if (!opaquePaymentCard) {
+      return { success: false, status: 'INVALID_PROVIDER_RESPONSE', error: 'WISE_OPC_MISSING', raw: res };
+    }
 
     return {
       success: true,
       cardToken,
       walletProvider,
       deviceType,
-      opaquePaymentCard: opcPayload,
-      opcLifespanSeconds: 900,
-      opcExpiresAt: new Date(expiresAtMs).toISOString(),
-      tokenizationStatus: 'CARD_TOKENIZED_READY',
-      pushProvisioningConfig: {
-        cardHolderName: 'Marcel laframboise',
-        last4: '9240',
-        network: 'VISA',
-        tokenServiceProvider: 'WISE_TOKEN_SERVICE',
-        userAddress: {
-          name: 'Marcel laframboise',
-          address1: '100 King St W',
-          locality: 'Toronto',
-          administrativeArea: 'ON',
-          countryCode: 'CA',
-          postalCode: 'M5X 1A1'
-        }
-      },
-      note: 'OPC generated for Google Wallet TapAndPay SDK ingestion.'
+      opaquePaymentCard,
+      opcLifespanSeconds: res.opcLifespanSeconds || null,
+      opcExpiresAt: res.opcExpiresAt || null,
+      tokenizationStatus: res.status || 'CREATED',
+      pushProvisioningConfig: res.pushProvisioningConfig || null,
+      raw: res
+    };
+  } catch (e: any) {
+    return {
+      success: false,
+      status: 'PROVIDER_ERROR',
+      cardToken,
+      walletProvider,
+      deviceType,
+      error: e?.message || 'WISE_DIGITAL_WALLET_PROVIDER_ERROR'
     };
   }
 }
@@ -1248,8 +1125,12 @@ export async function processWiseWebhookEvent(event: any): Promise<{ handled: bo
     persistProcessedWebhookEvents();
   }
 
-  const eventType = event?.event_type || event?.type || 'transfers#state-change';
+  const eventType = event?.event_type || event?.type;
   const data = event?.data || event;
+
+  if (!eventType || !data) {
+    return { handled: false, eventType: null, data: { eventId, error: 'WISE_WEBHOOK_EVENT_TYPE_REQUIRED' } };
+  }
 
   switch (eventType) {
     case 'transfers#state-change':
@@ -1258,38 +1139,25 @@ export async function processWiseWebhookEvent(event: any): Promise<{ handled: bo
         eventType,
         data: {
           eventId,
-          transferId: data.resource?.id || data.transferId || 2257392422,
-          currentState: data.current_state || data.state || 'outgoing_payment_sent',
-          previousState: data.previous_state || 'processing',
-          profileId: data.profile_id || 101924589
+          transferId: data.resource?.id || data.transferId || null,
+          currentState: data.current_state || data.state || null,
+          previousState: data.previous_state || null,
+          profileId: data.profile_id || null
         }
       };
 
     case 'balances#credit':
-      return {
-        handled: true,
-        eventType,
-        data: {
-          eventId,
-          balanceId: data.balance_id || 176576596814061,
-          currency: data.currency || 'USD',
-          amount: data.amount || '30.00',
-          postBalance: data.post_balance || '2478380.00',
-          profileId: data.profile_id || 101924589
-        }
-      };
-
     case 'balances#debit':
       return {
         handled: true,
         eventType,
         data: {
           eventId,
-          balanceId: data.balance_id || 176576596814061,
-          currency: data.currency || 'USD',
-          amount: data.amount || '10.00',
-          postBalance: data.post_balance || '2478340.00',
-          profileId: data.profile_id || 101924589
+          balanceId: data.balance_id || null,
+          currency: data.currency || null,
+          amount: data.amount ?? null,
+          postBalance: data.post_balance ?? null,
+          profileId: data.profile_id || null
         }
       };
 
@@ -1300,12 +1168,12 @@ export async function processWiseWebhookEvent(event: any): Promise<{ handled: bo
         eventType,
         data: {
           eventId,
-          cardToken: data.card_token || data.cardToken || 'card_tok_9240',
-          challengeType: data.challenge_type || 'SMS_OTP',
-          status: 'STEP_UP_CHALLENGE_REQUIRED',
-          promptMessage: data.prompt || 'Enter the 6-digit SMS verification code sent to +1 (905) 718-4275.',
-          expiresInSeconds: data.expires_in || 300,
-          profileId: data.profile_id || 101924589
+          cardToken: data.card_token || data.cardToken || null,
+          challengeType: data.challenge_type || null,
+          status: data.status || 'STEP_UP_CHALLENGE_REQUIRED',
+          promptMessage: data.prompt || null,
+          expiresInSeconds: data.expires_in ?? null,
+          profileId: data.profile_id || null
         }
       };
 
@@ -1316,12 +1184,12 @@ export async function processWiseWebhookEvent(event: any): Promise<{ handled: bo
         eventType,
         data: {
           eventId,
-          cardToken: data.card_token || data.cardToken || 'card_tok_9240',
-          status: data.status || 'ACTIVE',
-          walletProvider: data.wallet_provider || 'GOOGLE_PAY',
-          tokenState: data.token_state || 'TOKEN_ACTIVE',
-          scaHandshakeStatus: 'SCA_CHALLENGE_VERIFIED',
-          profileId: data.profile_id || 101924589
+          cardToken: data.card_token || data.cardToken || null,
+          status: data.status || null,
+          walletProvider: data.wallet_provider || null,
+          tokenState: data.token_state || null,
+          scaHandshakeStatus: data.sca_handshake_status || null,
+          profileId: data.profile_id || null
         }
       };
 
