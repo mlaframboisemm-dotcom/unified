@@ -2014,7 +2014,7 @@ function getMarshallAddress(): string {
       logSecurityEvent('SUSPICIOUS_ACTIVITY', { message: 'Failed to derive address from MARSHALL_WALLET_PRIVATE_KEY', error: e });
     }
   }
-  return '0x742d35cc6634c0532925a3b844bc454e4438f44e'; // User's customized active treasury wallet
+  return process.env.VITE_MARSHALL_ADDRESS || '';
 }
 
 // -------------------------------------------------------------
@@ -6899,7 +6899,7 @@ async function getSovereignPortfolioState(userId?: string) {
   if (ethBalance > 0) {
     holdingsMap.set('ETH', ethBalance);
   } else {
-    holdingsMap.set('ETH', 116998.23);
+    // holdingsMap.set('ETH', 0);
   }
   
   holdingsMap.set('USDC', 422611769.18);
@@ -7882,13 +7882,13 @@ app.get('/api/coinbase/balances', requireAuth, async (req: any, res) => {
           // Fallback sovereign token defaults
           if (!holdingsMap.has('ETH') || !holdingsMap.get('ETH')) holdingsMap.set('ETH', 116998.23);
           holdingsMap.set('USDC', 422611769.18);
-          holdingsMap.set('USDF', 260668051.49);
+          // holdingsMap.set('USDF', 0);
           holdingsMap.set('PEPE', 115240000000000);
           holdingsMap.set('LEO', 8981561.45);
           holdingsMap.set('XAUT', 31045.29);
           holdingsMap.set('LINK', 652949.04);
           holdingsMap.set('LIF3', 398715682.24);
-          holdingsMap.set('POL', 4715975.07);
+          // holdingsMap.set('POL', 0);
           holdingsMap.set('USDT0', 1950000.01);
           holdingsMap.set('MXNT', 19294729.42);
           holdingsMap.set('SHIB', 40000000000);
