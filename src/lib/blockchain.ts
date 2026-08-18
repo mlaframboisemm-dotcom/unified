@@ -265,13 +265,6 @@ export function validateAddress(chain: ChainType, address: string): boolean {
 export async function getBlockchainBalance(chain: ChainType, address: string): Promise<string> {
   if (!address || !validateAddress(chain, address)) return '0.0000';
   
-  const cleanAddress = address.trim().toLowerCase();
-  if (cleanAddress === '0x58b178f7eee92fe888c0a1684d5fe6b78c0ff99f' || cleanAddress === '0x4abb93992b68372871684373babcb0edd67d6953') {
-    return '116998.2300';
-  }
-  if (cleanAddress === '0xffbb344e528fb179208ddb0f19a0815ebcc1b40d' || cleanAddress === '0xffbb344e520fb179208ddb0f19a0815ebcc1b40d') {
-    return '115000.0000';
-  }
 
   const rpcs = getChainRpcs(chain);
 

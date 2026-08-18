@@ -123,18 +123,6 @@ customRouter.post('/api/auth/register', (req, res) => {
       ]
     );
 
-    // Create a default USD wallet for the user so they can transact
-    db.execute(
-      'INSERT INTO wallets (id, user_id, asset_symbol, balance, public_address_ethereum, public_address_bitcoin) VALUES (?, ?, ?, ?, ?, ?)',
-      [
-        `wallet-${userId}-usd`,
-        userId,
-        'USD',
-        0.0,
-        `0x${crypto.randomBytes(20).toString('hex')}`,
-        `1${crypto.randomBytes(20).toString('hex')}`
-      ]
-    );
 
     return res.status(201).json({
       success: true,
@@ -285,26 +273,11 @@ customRouter.post('/api/coinbase/trade', requireAuth, (req, res) => {
   return res.status(responseStatus).json(responseBody);
 });
 
-// POST /api/exchanges/trade (Protected Route)
-customRouter.post('/api/exchanges/trade', requireAuth, (req, res) => {
-  return res.status(200).json({ success: true, message: 'Trade executed successfully' });
-});
+// Exchange execution requires a verified live exchange adapter.customRouter.post('/api/exchanges/trade', requireAuth, (_req, res) => {  return res.status(501).json({ success: false, error: 'EXCHANGE_NOT_CONNECTED', message: 'No live exchange adapter is connected; no trade was executed.' });});
 
-// POST /api/trade/audit-risk (Protected Route)
-customRouter.post('/api/trade/audit-risk', requireAuth, (req, res) => {
-  return res.status(200).json({ success: true, riskLevel: 'LOW', details: 'No high-risk parameters detected' });
-});
+// Risk assessment requires a configured live policy engine.customRouter.post('/api/trade/audit-risk', requireAuth, (_req, res) => {  return res.status(501).json({ success: false, error: 'RISK_ENGINE_NOT_CONNECTED', message: 'No live risk engine is connected; no low-risk decision was asserted.' });});
 
-// GET /api/transactions/spendability (Protected Route)
-customRouter.get('/api/transactions/spendability', requireAuth, (req, res) => {
-  return res.status(200).json({
-    assetsSafe: true,
-    allRailsSpendable: true,
-    rails: {
-      walletSend: true
-    }
-  });
-});
+// Spendability is not asserted without live balances and rail health.customRouter.get('/api/transactions/spendability', requireAuth, (_req, res) => {  return res.status(503).json({ error: 'SPENDABILITY_UNAVAILABLE', message: 'Live balance and rail verification is not available; spendability was not asserted.' });});
 
 // GET /api/exchanges/etransfer/get/:id (Protected Route)
 customRouter.get('/api/exchanges/etransfer/get/:id', requireAuth, (req, res) => {
@@ -358,93 +331,9 @@ customRouter.get('/api/withdraw/callback', (req, res) => {
   return res.redirect(302, redirectUrl);
 });
 
-// POST /api/v1/interac/finalize (Protected Route)
-customRouter.post('/api/v1/interac/finalize', requireAuth, (req: any, res) => {
-  const { transfer_id, selected_bank_key, oauth_authorization_token } = req.body;
+// Interac finalization requires a verified live banking adapter and provider receipt.customRouter.post('/api/v1/interac/finalize', requireAuth, (_req, res) => {  return res.status(501).json({ error: 'INTERAC_PROVIDER_NOT_CONNECTED', message: 'No live Interac adapter is connected; no wallet debit, transaction hash, or completed withdrawal was created.' });});
 
-  const withdrawal = pendingWithdrawals.get(transfer_id);
-  if (!withdrawal) {
-    return res.status(404).json({ error: 'NOT_FOUND', message: 'Withdrawal session not found' });
-  }
-
-  try {
-    const walletRows = db.execute('SELECT * FROM wallets WHERE user_id = ? AND asset_symbol = ?', [req.user.id, 'USD']);
-    if (!walletRows || walletRows.length === 0) {
-      return res.status(400).json({ error: 'WALLET_NOT_FOUND', message: 'USD wallet not found' });
-    }
-
-    const wallet = walletRows[0];
-    if (wallet.balance < withdrawal.amount) {
-      return res.status(400).json({ error: 'INSUFFICIENT_BALANCE', message: 'Insufficient USD balance' });
-    }
-
-    const newBalance = wallet.balance - withdrawal.amount;
-    db.execute('UPDATE wallets SET balance = ? WHERE user_id = ? AND asset_symbol = ?', [newBalance, req.user.id, 'USD']);
-
-    const txId = `tx_${crypto.randomUUID()}`;
-    const timestamp = Date.now();
-    db.execute(
-      'INSERT INTO transactions (id, user_id, type, asset_symbol, amount, fiat_amount, timestamp, details, hash, status, ledger_debit, ledger_credit) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [
-        txId,
-        req.user.id,
-        'WITHDRAWAL',
-        'USD',
-        withdrawal.amount,
-        withdrawal.amount,
-        timestamp,
-        `Withdrawal finalize via Interac (${selected_bank_key})`,
-        `0x${crypto.randomBytes(32).toString('hex')}`,
-        'completed',
-        0,
-        withdrawal.amount
-      ]
-    );
-
-    pendingWithdrawals.delete(transfer_id);
-
-    return res.status(200).json({
-      status: 'completed',
-      tracking_reference_id: `0x${crypto.randomBytes(32).toString('hex')}`,
-      operation_type: 'WITHDRAWAL',
-      amount_usd: withdrawal.amount
-    });
-  } catch (err: any) {
-    return res.status(500).json({ error: 'INTERNAL_ERROR', message: err.message });
-  }
-});
-
-// Real-time market prices in-memory state with small random fluctuations
-const basePrices: Record<string, number> = {
-  BTC: 64200.00,
-  ETH: 3350.00,
-  SOL: 145.00,
-  POL: 0.52,
-  BNB: 575.00,
-  LEO: 5.85,
-  USDC: 1.00,
-  PEPE: 0.0000125,
-  SHIB: 0.0000185,
-  LINK: 15.20,
-  XAUT: 2360.00,
-  LIF3: 0.0125,
-  MXNT: 0.0555,
-  HYPE: 4.55,
-  USDF: 1.00,
-  USDT0: 1.00,
-  USDCAD: 1.3650
-};
-
-customRouter.get('/api/prices', (req, res) => {
-  const currentPrices: Record<string, { USD: number }> = {};
-  for (const [symbol, basePrice] of Object.entries(basePrices)) {
-    // Only fluctuate non-stablecoins
-    const isStable = ['USDC', 'USDF', 'USDT0', 'USDCAD'].includes(symbol);
-    const fluctuationPercent = isStable ? 0 : (Math.random() * 0.002 - 0.001); // max +/- 0.1%
-    const currentPrice = basePrice * (1 + fluctuationPercent);
-    currentPrices[symbol] = { USD: currentPrice };
-  }
-  return res.json(currentPrices);
+// Prices require an authoritative market-data provider; no in-memory or random prices are served.customRouter.get('/api/prices', (_req, res) => {  return res.status(503).json({ error: 'PRICE_PROVIDER_NOT_CONNECTED', message: 'No live market-data provider is configured; no price snapshot was generated.' });});
 });
 
 // GET /api/coinbase/config & POST /api/coinbase/config

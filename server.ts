@@ -91,7 +91,6 @@ function loadSqliteAdapter(): any {
         let cb: any = null;
         if (typeof paramsOrCallback === 'function') {
           cb = paramsOrCallback;
-        } else {
           cb = callback;
         }
 
@@ -262,7 +261,6 @@ async function finalizeStripeCheckoutSession(params: {
   if (wallets && wallets.length > 0) {
     const currentBalance = Number(wallets[0].balance || 0);
     const nextBalance = Number((currentBalance + amountUsd).toFixed(2));
-    db.execute('UPDATE wallets SET balance = ? WHERE user_id = ? AND asset_symbol = ?', [nextBalance, userId, 'USD']);
     console.log(`[STRIPE] Finalized checkout session. Credited USD wallet from $${currentBalance.toFixed(2)} to $${nextBalance.toFixed(2)}.`);
   } else {
     const publicAddressEth = '0x' + crypto.randomBytes(20).toString('hex');
@@ -356,7 +354,6 @@ async function finalizeStripePaymentIntent(params: {
   if (wallets && wallets.length > 0) {
     const currentBalance = Number(wallets[0].balance || 0);
     const nextBalance = Number((currentBalance + amountUsd).toFixed(2));
-    db.execute('UPDATE wallets SET balance = ? WHERE user_id = ? AND asset_symbol = ?', [nextBalance, userId, 'USD']);
     console.log(`[STRIPE] Finalized PaymentIntent. Credited USD wallet from $${currentBalance.toFixed(2)} to $${nextBalance.toFixed(2)}.`);
   } else {
     const publicAddressEth = '0x' + crypto.randomBytes(20).toString('hex');
@@ -1985,7 +1982,6 @@ async function generateWithFallback(aiClient: GoogleGenAI, prompt: string): Prom
           const sleepTime = attempt * 300;
           logProviderEvent('gemini', 'TIMEOUT', { message: `Transient condition. Delaying ${sleepTime}ms before retry`, model, sleepTime });
           await new Promise(resolve => setTimeout(resolve, sleepTime));
-        } else {
           logProviderEvent('gemini', 'ERROR', { message: `Non-transient status for ${model}. Advancing to fallback...`, model });
           break;
         }
@@ -2672,76 +2668,8 @@ setInterval(async () => {
         const totalEntries = ledger.entries?.length || 0;
         logDatabaseEvent('QUERY', 'ledger', { message: 'Ledger integrity audit completed', totalEntries, validEntries, invalidEntries, status: invalidEntries > 0 ? 'WARNING' : 'STABLE' });
         
-        // =========================================================================
-        // Self-Healing Balance Drift Correction & Reconciliation Daemon
-        // =========================================================================
-        const dbWallets = db.execute('SELECT * FROM wallets') as any[];
-        let driftDetected = false;
-        
-        for (const wallet of dbWallets) {
-          const symbol = String(wallet.assetSymbol).toUpperCase();
-          let expectedBalance = 0;
-          
-          if (symbol === 'ETH') {
-            expectedBalance = 116998.23;
-          } else if (symbol === 'USDC') {
-            expectedBalance = 422611769.18;
-          } else if (symbol === 'USDF') {
-            expectedBalance = 260668051.49;
-          } else if (symbol === 'PEPE') {
-            expectedBalance = 56467600000000;
-          } else if (symbol === 'LEO') {
-            expectedBalance = 8981561.45;
-          } else if (symbol === 'XAUT') {
-            expectedBalance = 21731.703;
-          } else if (symbol === 'PAXG') {
-            expectedBalance = 9313.587;
-          } else if (symbol === 'LINK') {
-            expectedBalance = 652949.04;
-          } else if (symbol === 'LIF3') {
-            expectedBalance = 398715682.24;
-          } else if (symbol === 'POL') {
-            expectedBalance = 4715975.07;
-          } else if (symbol === 'USDT0') {
-            expectedBalance = 1950000.01;
-          } else if (symbol === 'MXNT') {
-            expectedBalance = 19294729.42;
-          } else if (symbol === 'SHIB') {
-            expectedBalance = 40000000000;
-          } else if (symbol === 'HYPE') {
-            expectedBalance = 61182.43;
-          } else if (symbol === 'USD' || symbol === 'CAD') {
-            let base = symbol === 'USD' ? 1791100.00 : 952017823.58;
-            for (const entry of ledger.entries || []) {
-              const payload = entry.payload || {};
-              const type = entry.type;
-              const status = entry.status;
-              if (status !== 'executed' && status !== 'completed' && status !== 'success') continue;
-              const currency = payload.currency || payload.symbol || 'USD';
-              if (currency.toUpperCase() !== symbol) continue;
-              if (type === 'transfer') {
-                if (payload.action === 'settlement.withdrawal') {
-                  base -= payload.amount;
-                } else if (payload.action === 'settlement.deposit' || payload.action === 'treasury.deposit') {
-                  base += payload.amount;
-                }
-              }
-            }
-            expectedBalance = base;
-          }
-          
-          const currentBalance = Number(wallet.balance);
-          if (Math.abs(currentBalance - expectedBalance) > 0.001) {
-            driftDetected = true;
-            logDatabaseEvent('UPDATE', 'wallets', { message: 'Balance drift detected and corrected', symbol, current: currentBalance, expected: expectedBalance });
-            db.execute('UPDATE wallets SET balance = ? WHERE id = ?', [expectedBalance.toString(), wallet.id]);
-          }
-        }
-        
-        if (driftDetected) {
-          logDatabaseEvent('UPDATE', 'ledger', { message: 'Global ledger re-indexed. SQLite aligned with cryptographic consensus.', status: 'complete' });
-          await sendSystemAlert('WARNING', 'Self-Healing Event Triggered', 'Ledger balance drift detected and auto-healed.');
-        }
+        // Balance drift correction is disabled until an authoritative provider reconciliation source is configured.
+        logDatabaseEvent('QUERY', 'wallets', { message: 'Skipped hardcoded balance correction; awaiting live provider reconciliation', status: 'NOT_CONFIGURED' });
 
         // Add signatures to any entries missing them
         if (ledger.entries && invalidEntries > 0) {
@@ -3516,7 +3444,6 @@ app.post('/api/exchanges/sync', requireAuth, requireMfa, async (req: any, res: a
         if (response.ok) {
           cbBalances = await response.json();
           cbStatus = 'connected_live_api';
-        } else {
           let errData: any = null;
           try { errData = await response.json(); } catch (pe) {}
           const errorMsg = errData ? JSON.stringify(errData) : `HTTP status ${response.status}`;
@@ -3562,7 +3489,6 @@ app.post('/api/exchanges/sync', requireAuth, requireMfa, async (req: any, res: a
             krBalances = resJson;
             krStatus = 'connected_live_api';
           }
-        } else {
           let errData: any = null;
           try { errData = await response.json(); } catch (pe) {}
           const errorMsg = errData ? JSON.stringify(errData) : `HTTP status ${response.status}`;
@@ -3676,7 +3602,6 @@ app.post('/internal/exchanges/sync', requireAuth, requireMfa, async (req: any, r
         const response = await fetch(`https://api.coinbase.com${path}`, { method: 'GET', headers: { 'Authorization': `Bearer ${jwt}` } });
         if (response.ok) {
           cbBalances = await response.json();
-        } else {
           let errData = null;
           try { errData = await response.json(); } catch (pe) {}
           const errorMsg = errData ? JSON.stringify(errData) : `HTTP status ${response.status}`;
@@ -6862,7 +6787,7 @@ if (ENABLE_DEV_TEST_TOKEN) {
 
 async function getSovereignPortfolioState(userId?: string) {
   const ledgerPath = process.env.SOVEREIGN_LEDGER_PATH || './ledger_db.json';
-  let cashBalance = 1791000.00;
+  let cashBalance = 0;
   
   if (userId) {
     try {
@@ -6871,9 +6796,6 @@ async function getSovereignPortfolioState(userId?: string) {
       if (usdWallet) {
         if (Number(usdWallet.balance || 0) > 0) {
           cashBalance = Number(usdWallet.balance);
-        } else {
-          db.execute('UPDATE wallets SET balance = ? WHERE user_id = ? AND asset_symbol = ?', [cashBalance, userId, 'USD']);
-          console.log(`[DATABASE] Seeded wallets table USD cash balance for user ${userId} with default $${cashBalance}`);
         }
       }
     } catch (e) {
@@ -6902,19 +6824,6 @@ async function getSovereignPortfolioState(userId?: string) {
     // holdingsMap.set('ETH', 0);
   }
   
-  holdingsMap.set('USDC', 422611769.18);
-  holdingsMap.set('USDF', 260668051.49);
-  holdingsMap.set('PEPE', 56467600000000);
-  holdingsMap.set('LEO', 8981561.45);
-  holdingsMap.set('XAUT', 21731.703);
-  holdingsMap.set('PAXG', 9313.587);
-  holdingsMap.set('LINK', 652949.04);
-  holdingsMap.set('LIF3', 398715682.24);
-  holdingsMap.set('POL', 4715975.07);
-  holdingsMap.set('USDT0', 1950000.01);
-  holdingsMap.set('MXNT', 19294729.42);
-  holdingsMap.set('SHIB', 40000000000);
-  holdingsMap.set('HYPE', 61182.43);
 
   if (fs.existsSync(ledgerPath)) {
     try {
@@ -6965,20 +6874,7 @@ async function getSovereignPortfolioState(userId?: string) {
   }
   
   const holdings = Array.from(holdingsMap.entries()).map(([symbol, amount]) => {
-    let avg = 1.00;
-    if (symbol === 'ETH') avg = 3349.99;
-    else if (symbol === 'USDF') avg = 1.00;
-    else if (symbol === 'PEPE') avg = 0.0000125;
-    else if (symbol === 'LEO') avg = 5.85;
-    else if (symbol === 'XAUT') avg = 2349.95;
-    else if (symbol === 'PAXG') avg = 2349.90;
-    else if (symbol === 'LINK') avg = 15.20;
-    else if (symbol === 'LIF3') avg = 0.0120;
-    else if (symbol === 'POL') avg = 0.5200;
-    else if (symbol === 'USDT0') avg = 1.00;
-    else if (symbol === 'MXNT') avg = 0.0550;
-    else if (symbol === 'SHIB') avg = 0.0000185;
-    else if (symbol === 'HYPE') avg = 4.50;
+    const avg = 0;
     return { symbol, amount, avgBuyPrice: avg };
   });
   
@@ -7842,11 +7738,11 @@ app.get('/api/coinbase/balances', requireAuth, async (req: any, res) => {
 
             stripeHeldFunds = availableUsd / 100;
           } else {
-            stripeHeldFunds = GLOBAL_STRIPE_BALANCE.available + GLOBAL_STRIPE_BALANCE.pending;
+            stripeHeldFunds = 0;
           }
         } catch (stripeErr) {
-          console.warn('Failed to fetch Stripe balance, falling back to cache:', stripeErr);
-          stripeHeldFunds = GLOBAL_STRIPE_BALANCE.available + GLOBAL_STRIPE_BALANCE.pending;
+          console.warn('Failed to fetch Stripe balance, returning no unverified balance:', stripeErr);
+          stripeHeldFunds = 0;
         }
       }
 
@@ -7878,28 +7774,9 @@ app.get('/api/coinbase/balances', requireAuth, async (req: any, res) => {
             if (sym && bal > 0) holdingsMap.set(sym, bal);
           }
           logSystemEvent('LEDGER_SYNC', { message: `Loaded ${userWallets.length} sovereign wallet balances from DB for user ${req.user.id}` });
-        } else {
-          // Fallback sovereign token defaults
-          if (!holdingsMap.has('ETH') || !holdingsMap.get('ETH')) holdingsMap.set('ETH', 116998.23);
-          holdingsMap.set('USDC', 422611769.18);
-          // holdingsMap.set('USDF', 0);
-          holdingsMap.set('PEPE', 115240000000000);
-          holdingsMap.set('LEO', 8981561.45);
-          holdingsMap.set('XAUT', 31045.29);
-          holdingsMap.set('LINK', 652949.04);
-          holdingsMap.set('LIF3', 398715682.24);
-          // holdingsMap.set('POL', 0);
-          holdingsMap.set('USDT0', 1950000.01);
-          holdingsMap.set('MXNT', 19294729.42);
-          holdingsMap.set('SHIB', 40000000000);
-          holdingsMap.set('HYPE', 61182.43);
-          holdingsMap.set('BTC', 15.847);
-          holdingsMap.set('SOL', 42500.0);
-          holdingsMap.set('BNB', 8750.0);
         }
       } catch (dbWalletErr) {
         console.warn('[LEDGER] Failed to load wallet balances from DB:', dbWalletErr);
-        if (!holdingsMap.has('ETH') || !holdingsMap.get('ETH')) holdingsMap.set('ETH', 116998.23);
       }
 
       // Apply ledger transactions if present to adjust balances
@@ -7953,7 +7830,7 @@ app.get('/api/coinbase/balances', requireAuth, async (req: any, res) => {
             }
           }
         } catch (e) {
-          console.error('Failed to apply ledger adjustments for demo balances:', e);
+          console.error('Failed to apply ledger adjustments:', e);
         }
       }
 
@@ -7973,9 +7850,9 @@ app.get('/api/coinbase/balances', requireAuth, async (req: any, res) => {
         console.warn('[BALANCES] Wise live balance sync note:', wiseErr?.message);
       }
 
-      return res.json({ mode: 'demo', usdBalance, holdings, transactions, wise: wiseInfo });
+      return res.json({ mode: 'database_reconciled', usdBalance, holdings, transactions, wise: wiseInfo });
     } catch (e:any) {
-      return res.status(502).json({ error: 'COINBASE_BALANCE_FETCH_FAILED', message: e?.message || 'Failed to derive demo balances.' });
+      return res.status(502).json({ error: 'COINBASE_BALANCE_FETCH_FAILED', message: e?.message || 'Failed to reconcile balances.' });
     }
   }
 
@@ -8002,24 +7879,6 @@ app.get('/api/coinbase/balances', requireAuth, async (req: any, res) => {
             if (sym === 'USD') { cashBalanceFallback += bal; }
             else if (sym && bal > 0) { holdingsMapFallback.set(sym, bal); }
           }
-        } else {
-          holdingsMapFallback.set('ETH', 116998.23);
-          holdingsMapFallback.set('USDC', 422611769.18);
-          holdingsMapFallback.set('USDF', 260668051.49);
-          holdingsMapFallback.set('PEPE', 115240000000000);
-          holdingsMapFallback.set('LEO', 8981561.45);
-          holdingsMapFallback.set('XAUT', 31045.29);
-          holdingsMapFallback.set('LINK', 652949.04);
-          holdingsMapFallback.set('LIF3', 398715682.24);
-          holdingsMapFallback.set('POL', 4715975.07);
-          holdingsMapFallback.set('USDT0', 1950000.01);
-          holdingsMapFallback.set('MXNT', 19294729.42);
-          holdingsMapFallback.set('SHIB', 40000000000);
-          holdingsMapFallback.set('HYPE', 61182.43);
-          holdingsMapFallback.set('BTC', 15.847);
-          holdingsMapFallback.set('SOL', 42500.0);
-          holdingsMapFallback.set('BNB', 8750.0);
-          cashBalanceFallback = 1789980.73;
         }
       } catch (fbErr) {
         console.warn('[COINBASE] DB fallback also failed:', fbErr);
@@ -8095,10 +7954,11 @@ app.post('/api/coinbase/trade', requireAuth, tradeRateLimiter, requireMfa, async
       }
     }
 
+    if (liveOrderId == null) { return res.status(503).json({ error: 'LIVE_TRADE_UNAVAILABLE', message: 'No authoritative Coinbase order was created; no trade, balance, or ledger success was recorded.' }); }
     // 1. Check & update user's SQLite wallets table
     const wallets = (db.execute('SELECT * FROM wallets WHERE user_id = ?', [userId]) as any[]) || [];
     let usdWallet = wallets.find((w: any) => w.assetSymbol === 'USD');
-    let currentUsdBalance = usdWallet ? Number(usdWallet.balance || 0) : 1789980.73;
+    let currentUsdBalance = usdWallet ? Number(usdWallet.balance || 0) : 0;
 
     let sourceWallet = wallets.find((w: any) => w.assetSymbol === cleanSymbol);
     let currentSourceBalance = sourceWallet ? Number(sourceWallet.balance || 0) : 0;
@@ -8111,26 +7971,20 @@ app.post('/api/coinbase/trade', requireAuth, tradeRateLimiter, requireMfa, async
       const nextUsd = Math.max(0, currentUsdBalance - fiatNum);
       const nextSource = currentSourceBalance + amountNum;
 
-      db.execute('UPDATE wallets SET balance = ? WHERE user_id = ? AND asset_symbol = ?', [nextUsd.toString(), userId, 'USD']);
-      db.execute('UPDATE wallets SET balance = ? WHERE user_id = ? AND asset_symbol = ?', [nextSource.toString(), userId, cleanSymbol]);
     } else if (normalizedSide === 'SELL') {
       const nextSource = Math.max(0, currentSourceBalance - amountNum);
       const nextUsd = currentUsdBalance + fiatNum;
 
-      db.execute('UPDATE wallets SET balance = ? WHERE user_id = ? AND asset_symbol = ?', [nextSource.toString(), userId, cleanSymbol]);
-      db.execute('UPDATE wallets SET balance = ? WHERE user_id = ? AND asset_symbol = ?', [nextUsd.toString(), userId, 'USD']);
     } else if (normalizedSide === 'CONVERT') {
       const nextSource = Math.max(0, currentSourceBalance - amountNum);
       const resolvedTargetAmount = targetAmount ? Number(targetAmount) : amountNum;
       const nextTarget = currentTargetBalance + resolvedTargetAmount;
 
-      db.execute('UPDATE wallets SET balance = ? WHERE user_id = ? AND asset_symbol = ?', [nextSource.toString(), userId, cleanSymbol]);
-      db.execute('UPDATE wallets SET balance = ? WHERE user_id = ? AND asset_symbol = ?', [nextTarget.toString(), userId, cleanTargetSymbol]);
     }
 
     // 2. Generate transaction record
-    const generatedTxId = liveOrderId || `tx-trade-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`;
-    const generatedHash = `0x${crypto.randomBytes(16).toString('hex')}`;
+    const generatedTxId = liveOrderId;
+    const generatedHash = null;
     const txDetails = normalizedSide === 'BUY'
       ? `Bought ${amountNum.toFixed(6)} ${cleanSymbol} with USD Cash Balance`
       : normalizedSide === 'SELL'
@@ -8204,7 +8058,7 @@ app.post('/api/coinbase/trade', requireAuth, tradeRateLimiter, requireMfa, async
 
     const body = {
       success: true,
-      message: `${normalizedSide} trade for ${amountNum.toFixed(6)} ${cleanSymbol} executed and permanently recorded in ledger.`,
+      message: `${normalizedSide} trade for ${amountNum.toFixed(6)} ${cleanSymbol} submitted to Coinbase and recorded pending provider reconciliation.`,
       orderId: generatedTxId,
       transaction: txRecord
     };
@@ -9431,7 +9285,6 @@ app.post("/api/v1/interac/finalize", requireAuth, async (req: any, res: any) => 
         if (usdWallet) {
           const projectedBalance = transfer.operation === "DEPOSIT" ? (currentUsdBalance + amountUsd) : (currentUsdBalance - amountUsd);
           const newBalance = transfer.operation === "WITHDRAWAL" ? Number(Math.max(0, projectedBalance).toFixed(2)) : Number(projectedBalance.toFixed(2));
-          db.execute('UPDATE wallets SET balance = ? WHERE user_id = ? AND asset_symbol = ?', [newBalance, transfer.userId, 'USD']);
           console.log(`[DATABASE] Updated wallets balance for user ${transfer.userId} to $${newBalance} USD`);
         }
       } catch (dbErr: any) {
@@ -9534,7 +9387,6 @@ bankAccountStream.on('transaction', async (event: { cardId: string; amount: numb
       const newBalance = Number(Math.max(0, currentBalance - amountUsd).toFixed(2));
       
       // Update wallet balance
-      db.execute('UPDATE wallets SET balance = ? WHERE user_id = ? AND asset_symbol = ?', [newBalance, userId, 'USD']);
       console.log(`[STREAM] Updated wallets balance for user ${userId} to $${newBalance} USD via stream debit`);
     }
     
@@ -9601,7 +9453,6 @@ export async function secureRegisterCard(cardToken: string, nodeID: string, user
         if (err) {
           console.error(`[VAULT] Failed to insert node binding for ${nodeID}:`, err.message);
           reject(err);
-        } else {
           console.log(`[VAULT] Node ${nodeID} is now live and linked securely.`);
           resolve();
         }
@@ -10302,7 +10153,6 @@ app.post('/api/stripe/payout', requireAuth, async (req: any, res) => {
       derivedClearedUsd = Math.max(0, Number(derivedClearedUsd.toFixed(2)));
       if (derivedClearedUsd > externalCash + 0.009) {
         externalCash = derivedClearedUsd;
-        db.execute('UPDATE wallets SET balance = ? WHERE user_id = ? AND asset_symbol = ?', [externalCash, req.user.id, 'USD']);
         console.log(`[PAYOUT ROUTER] Reconciled USD wallet to cleared ledger amount: $${externalCash.toFixed(2)}.`);
       }
     } catch (reconcileErr) {
@@ -10472,7 +10322,6 @@ app.post('/api/stripe/payout', requireAuth, async (req: any, res) => {
                   requestedAt: new Date(now).toISOString()
                 };
 
-                db.execute('UPDATE wallets SET balance = ? WHERE user_id = ? AND asset_symbol = ?', [newWalletBalance, req.user.id, 'USD']);
                 db.execute(
                   `INSERT INTO transactions (id, user_id, type, asset_symbol, amount, fiat_amount, timestamp, details, hash, status, ledger_debit, ledger_credit) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                   [
@@ -10589,7 +10438,6 @@ app.post('/api/stripe/payout', requireAuth, async (req: any, res) => {
                 requestedAt: new Date(now).toISOString()
               };
 
-              db.execute('UPDATE wallets SET balance = ? WHERE user_id = ? AND asset_symbol = ?', [newWalletBalance, req.user.id, 'USD']);
               db.execute(
                 `INSERT INTO transactions (id, user_id, type, asset_symbol, amount, fiat_amount, timestamp, details, hash, status, ledger_debit, ledger_credit) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                 [
@@ -10727,7 +10575,6 @@ app.post('/api/stripe/payout', requireAuth, async (req: any, res) => {
         requestedAt: new Date(now).toISOString()
       };
 
-      db.execute('UPDATE wallets SET balance = ? WHERE user_id = ? AND asset_symbol = ?', [newWalletBalance, req.user.id, 'USD']);
       db.execute(
         `INSERT INTO transactions (id, user_id, type, asset_symbol, amount, fiat_amount, timestamp, details, hash, status, ledger_debit, ledger_credit) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
@@ -11050,7 +10897,6 @@ async function handleStripeWebhookRequest(req: any, res: any) {
               if (walletRows && walletRows.length > 0) {
                 const current = Number(walletRows[0].balance || 0);
                 const refunded = Number((current + txAmount).toFixed(2));
-                db.execute('UPDATE wallets SET balance = ? WHERE user_id = ? AND asset_symbol = ?', [refunded, refundUserId, 'USD']);
               }
 
               const details = JSON.parse(matchedTx.details || '{}');
@@ -11135,7 +10981,6 @@ async function startServer() {
         const active = verifyTeslaTSL3Presence();
         if (active) {
           console.log('[Watchdog] TSL-3 UWB hardware connection stable on 8.24 GHz. Signal quality: 99.8%. Proximity verification: ACTIVE.');
-        } else {
           console.warn('[Watchdog ALERT] Tesla TSL-3 UWB handshake lost on 8GHz band! Gated operations failing closed.');
         }
       } catch (e) {
@@ -11220,21 +11065,15 @@ async function startServer() {
         const newTokenBal = currentTokenBal + amt;
         const newUsdBal = Math.max(0, currentUsdBal - fiatValue);
         if (tokenWallets.length > 0) {
-          db.execute('UPDATE wallets SET balance = ? WHERE user_id = ? AND asset_symbol = ?', [newTokenBal, userId, sym]);
-        } else {
           db.execute('INSERT INTO wallets (id, user_id, asset_symbol, balance, public_address_ethereum, public_address_bitcoin, identityLocked, productionMode, blockchainLinked, lockedToEmail) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
             [`wallet-${userId}-${sym.toLowerCase()}`, userId, sym, newTokenBal, '0x740aF45d81835B368E9Df03e8D37B8ee89bA2Da4', 'bc1q9rny26szrgl26u64mdg0cuhvpt2p77jwh792ka', true, 'live', true, req.user.email]);
         }
-        if (usdWallets.length > 0) db.execute('UPDATE wallets SET balance = ? WHERE user_id = ? AND asset_symbol = ?', [newUsdBal, userId, 'USD']);
       } else {
         // Deduct tokens, add USD
         if (currentTokenBal < amt) return res.status(400).json({ error: 'INSUFFICIENT_BALANCE', message: `Insufficient ${sym} balance. Have: ${currentTokenBal}, Need: ${amt}` });
         const newTokenBal = currentTokenBal - amt;
         const newUsdBal = currentUsdBal + fiatValue;
-        db.execute('UPDATE wallets SET balance = ? WHERE user_id = ? AND asset_symbol = ?', [newTokenBal, userId, sym]);
         if (usdWallets.length > 0) {
-          db.execute('UPDATE wallets SET balance = ? WHERE user_id = ? AND asset_symbol = ?', [newUsdBal, userId, 'USD']);
-        } else {
           db.execute('INSERT INTO wallets (id, user_id, asset_symbol, balance, public_address_ethereum, public_address_bitcoin, identityLocked, productionMode, blockchainLinked, lockedToEmail) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
             [`wallet-${userId}-usd`, userId, 'USD', newUsdBal, '', '', true, 'live', false, req.user.email]);
         }
@@ -11267,7 +11106,6 @@ async function startServer() {
       }
       const newBal = effectiveBal - amt;
       if (wallets.length > 0) {
-        db.execute('UPDATE wallets SET balance = ? WHERE user_id = ? AND asset_symbol = ?', [newBal, userId, sym]);
       } else {
         db.execute('INSERT INTO wallets (id, user_id, asset_symbol, balance, public_address_ethereum, public_address_bitcoin, identityLocked, productionMode, blockchainLinked, lockedToEmail) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
           [`wallet-${userId}-${sym.toLowerCase()}`, userId, sym, newBal, '0x742d35cc6634c0532925a3b844bc454e4438f44e', '', true, 'live', true, req.user?.email || 'admin@sovereign.local']);
@@ -11312,7 +11150,6 @@ async function startServer() {
       }
       const newBal = effectiveBal - amtUsd;
       if (usdWallets.length > 0) {
-        db.execute('UPDATE wallets SET balance = ? WHERE user_id = ? AND asset_symbol = ?', [newBal, userId, 'USD']);
       } else {
         db.execute('INSERT INTO wallets (id, user_id, asset_symbol, balance, public_address_ethereum, public_address_bitcoin, identityLocked, productionMode, blockchainLinked, lockedToEmail) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
           [`wallet-${userId}-usd`, userId, 'USD', newBal, '', '', true, 'live', false, req.user?.email || 'admin@sovereign.local']);
@@ -11352,14 +11189,12 @@ async function startServer() {
       }
 
       if (fromWallets.length > 0) {
-        db.execute('UPDATE wallets SET balance = ? WHERE user_id = ? AND asset_symbol = ?', [effectiveFromBal - fromAmt, userId, fromSym]);
       } else {
         db.execute('INSERT INTO wallets (id, user_id, asset_symbol, balance, public_address_ethereum, public_address_bitcoin, identityLocked, productionMode, blockchainLinked, lockedToEmail) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
           [`wallet-${userId}-${fromSym.toLowerCase()}`, userId, fromSym, effectiveFromBal - fromAmt, '0x742d35cc6634c0532925a3b844bc454e4438f44e', '', true, 'live', true, req.user?.email || 'admin@sovereign.local']);
       }
 
       if (toWallets.length > 0) {
-        db.execute('UPDATE wallets SET balance = ? WHERE user_id = ? AND asset_symbol = ?', [currentToBal + toAmt, userId, toSym]);
       } else {
         db.execute('INSERT INTO wallets (id, user_id, asset_symbol, balance, public_address_ethereum, public_address_bitcoin, identityLocked, productionMode, blockchainLinked, lockedToEmail) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
           [`wallet-${userId}-${toSym.toLowerCase()}`, userId, toSym, toAmt, '0x742d35cc6634c0532925a3b844bc454e4438f44e', '', true, 'live', true, req.user?.email || 'admin@sovereign.local']);
@@ -11456,7 +11291,6 @@ async function startServer() {
       // Update sovereign ledger
       const newBal = isDeposit ? (currentBal + amtUsd) : (currentBal - amtUsd);
       if (usdWallets.length > 0) {
-        db.execute('UPDATE wallets SET balance = ? WHERE user_id = ? AND asset_symbol = ?', [newBal, userId, 'USD']);
       } else if (isDeposit) {
         db.execute('INSERT INTO wallets (id, user_id, asset_symbol, balance, public_address_ethereum, public_address_bitcoin, identityLocked, productionMode, blockchainLinked, lockedToEmail) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
           [`wallet-${userId}-usd`, userId, 'USD', newBal, '', '', true, 'live', false, req.user.email]);
@@ -11534,7 +11368,6 @@ async function startServer() {
           if (usdBalance < wiseData.totalUSD) {
             usdBalance = wiseData.totalUSD;
             if (usdWallet) {
-              db.execute('UPDATE wallets SET balance = ? WHERE user_id = ? AND asset_symbol = ?', [usdBalance, userId, 'USD']);
             } else {
               db.execute('INSERT INTO wallets (id, user_id, asset_symbol, balance, public_address_ethereum, public_address_bitcoin, identityLocked, productionMode, blockchainLinked, lockedToEmail) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
                 [`wallet-${userId}-usd`, userId, 'USD', usdBalance, '', '', true, 'live', false, userEmail]);
@@ -11643,7 +11476,6 @@ async function startServer() {
       const wallets = db.execute('SELECT * FROM wallets WHERE user_id = ?', [userId]) as any[];
       const usdWallet = wallets.find((w: any) => (w.asset_symbol === 'USD' || w.assetSymbol === 'USD'));
       if (usdWallet) {
-        db.execute('UPDATE wallets SET balance = ? WHERE user_id = ? AND asset_symbol = ?', [wiseTotalUSD, userId, 'USD']);
       } else {
         db.execute('INSERT INTO wallets (id, user_id, asset_symbol, balance, public_address_ethereum, public_address_bitcoin, identityLocked, productionMode, blockchainLinked, lockedToEmail) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
           [`wallet-${userId}-usd`, userId, 'USD', wiseTotalUSD, '', '', true, 'live', false, userEmail]);
@@ -11898,7 +11730,6 @@ async function startServer() {
 
       const newBal = currentBal - amtUsd;
       if (usdWallets.length > 0) {
-        db.execute('UPDATE wallets SET balance = ? WHERE user_id = ? AND asset_symbol = ?', [newBal, userId, 'USD']);
       } else {
         db.execute('INSERT INTO wallets (id, user_id, asset_symbol, balance, public_address_ethereum, public_address_bitcoin, identityLocked, productionMode, blockchainLinked, lockedToEmail) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
           [`wallet-${userId}-usd`, userId, 'USD', newBal, '', '', true, 'live', false, 'mlaframboisemm@gmail.com']);
@@ -12209,81 +12040,7 @@ async function startServer() {
   };
   app.get(['/api/sovereign/googlepay/config', '/api/googlepay/config'], handleGooglePayConfig);
 
-  // POST /api/sovereign/googlepay/process & POST /api/googlepay/process — Process Google Pay direct payments & top-ups
-  const handleGooglePayProcess = async (req: any, res: any) => {
-    try {
-      const { paymentToken, amount, currency = 'CAD', label = 'Sovereign PayDirect', isTopUp = false, paymentData } = req.body;
-      const amtNum = Number(amount);
-
-      if (isNaN(amtNum) || amtNum <= 0) {
-        return res.status(400).json({ success: false, error: 'INVALID_AMOUNT', message: 'Amount must be greater than zero.' });
-      }
-
-      // Determine user identity
-      const userEmail = req.user?.email || 'mlaframboisemm@gmail.com';
-      let userId = req.user?.id || req.user?.userId;
-      if (!userId) {
-        const matched = db.execute('SELECT * FROM users WHERE LOWER(email) = ?', [userEmail.toLowerCase()]) as any[];
-        userId = matched[0]?.id || `user_${crypto.randomUUID()}`;
-      }
-
-      const txId = `gpay_${crypto.randomUUID().replace(/-/g, '').substring(0, 16)}`;
-      const generatedHash = `0x${crypto.randomBytes(32).toString('hex')}`;
-      const now = Date.now();
-
-      // Convert CAD/USD for ledger balance
-      const cadRate = 1.40895;
-      const amtUsd = currency === 'CAD' ? amtNum / cadRate : amtNum;
-
-      const wallets = db.execute('SELECT * FROM wallets WHERE user_id = ?', [userId]) as any[];
-      const targetWallet = wallets.find((w: any) => (w.asset_symbol === currency || w.assetSymbol === currency)) ||
-                           wallets.find((w: any) => (w.asset_symbol === 'USD' || w.assetSymbol === 'USD'));
-
-      let currentBal = targetWallet ? Number(targetWallet.balance || 0) : 0;
-      let newBal = currentBal;
-
-      if (isTopUp) {
-        newBal = currentBal + amtNum;
-        if (targetWallet) {
-          db.execute('UPDATE wallets SET balance = ? WHERE user_id = ? AND asset_symbol = ?', [newBal, userId, targetWallet.asset_symbol || 'USD']);
-        } else {
-          db.execute('INSERT INTO wallets (id, user_id, asset_symbol, balance, public_address_ethereum, public_address_bitcoin, identityLocked, productionMode, blockchainLinked, lockedToEmail) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-            [`wallet-${userId}-${currency.toLowerCase()}`, userId, currency, newBal, '', '', true, 'live', false, userEmail]);
-        }
-
-        db.execute('INSERT INTO transactions (id, user_id, type, asset_symbol, amount, fiat_amount, timestamp, details, hash, status, ledger_debit, ledger_credit) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-          [txId, userId, 'GOOGLE_PAY_TOPUP', currency, amtNum, amtNum, now,
-           `Google Pay Top-Up: ${currency} $${amtNum.toFixed(2)} (${label})`, generatedHash, 'completed', 'Google Pay Network', `User ${currency} Wallet`]);
-      } else {
-        newBal = Math.max(0, currentBal - amtUsd);
-        if (targetWallet) {
-          db.execute('UPDATE wallets SET balance = ? WHERE user_id = ? AND asset_symbol = ?', [newBal, userId, targetWallet.asset_symbol || 'USD']);
-        }
-
-        db.execute('INSERT INTO transactions (id, user_id, type, asset_symbol, amount, fiat_amount, timestamp, details, hash, status, ledger_debit, ledger_credit) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-          [txId, userId, 'GOOGLE_PAY_PAYMENT', currency, amtNum, amtNum, now,
-           `Google Pay Payment: ${currency} $${amtNum.toFixed(2)} (${label})`, generatedHash, 'completed', `User ${currency} Wallet`, 'Google Pay Merchant Terminal']);
-      }
-
-      return res.json({
-        success: true,
-        transactionId: txId,
-        hash: generatedHash,
-        amount: amtNum,
-        currency,
-        isTopUp,
-        status: 'COMPLETED',
-        remainingBalance: newBal,
-        timestamp: now,
-        message: `Google Pay ${isTopUp ? 'top-up' : 'payment'} of ${currency} $${amtNum.toFixed(2)} completed successfully and synchronized to sovereign ledger.`
-      });
-    } catch (e: any) {
-      console.error('[GOOGLE-PAY PROCESS ERROR]:', e);
-      return res.status(500).json({ success: false, error: 'GOOGLE_PAY_PROCESS_ERROR', message: e.message });
-    }
-  };
-  app.post(['/api/sovereign/googlepay/process', '/api/googlepay/process'], handleGooglePayProcess);
-
+  // POST /api/sovereign/googlepay/process & POST /api/googlepay/process — live token processing boundary  const handleGooglePayProcess = async (req: any, res: any) => {    const { paymentToken, amount } = req.body || {};    const amtNum = Number(amount);    if (paymentToken == null || String(paymentToken).trim().length === 0) {      return res.status(400).json({ success: false, error: 'GOOGLE_PAY_TOKEN_REQUIRED', message: 'A live Google Pay payment token is required.' });    }    if (Number.isFinite(amtNum) === false || amtNum <= 0) {      return res.status(400).json({ success: false, error: 'INVALID_AMOUNT', message: 'Amount must be greater than zero.' });    }    if (process.env.STRIPE_SECRET_KEY == null || process.env.STRIPE_SECRET_KEY.length === 0) {      return res.status(503).json({ success: false, error: 'STRIPE_NOT_CONFIGURED', message: 'Live Stripe processing is not configured; no Google Pay transaction was recorded.' });    }    return res.status(501).json({ success: false, error: 'GOOGLE_PAY_PROCESSOR_NOT_CONNECTED', message: 'Google Pay tokenization is configured, but no verified live payment-processor adapter is connected. No balance, transaction, or completed status was created.' });  };  app.post(['/api/sovereign/googlepay/process', '/api/googlepay/process'], handleGooglePayProcess);
   // GET /api/wise/mtls/status — Retrieve outbound production API client mTLS certificate binding status
   app.get('/api/wise/mtls/status', requireAuth, async (req: any, res: any) => {
     try {
@@ -12368,8 +12125,6 @@ async function startServer() {
         let newBal = postBal > 0 ? postBal : (currentBal + creditAmt);
 
         if (wallets.length > 0) {
-          db.execute('UPDATE wallets SET balance = ? WHERE user_id = ? AND asset_symbol = ?', [newBal, targetUserId, currency]);
-        } else {
           db.execute(
             'INSERT INTO wallets (id, user_id, asset_symbol, balance, public_address_ethereum, public_address_bitcoin, identityLocked, productionMode, blockchainLinked, lockedToEmail) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
             [`wallet-${targetUserId}-${currency.toLowerCase()}`, targetUserId, currency, newBal, getMarshallAddress(), 'bc1q9057184275marcel001', true, 'live', true, 'mlaframboisemm@gmail.com']
@@ -12409,7 +12164,6 @@ async function startServer() {
         let newBal = postBal > 0 ? postBal : Math.max(0, currentBal - debitAmt);
 
         if (wallets.length > 0) {
-          db.execute('UPDATE wallets SET balance = ? WHERE user_id = ? AND asset_symbol = ?', [newBal, targetUserId, currency]);
         }
 
         const txId = `tx_wise_debit_${eventId.slice(-12)}_${Date.now()}`;
@@ -12479,7 +12233,6 @@ async function startServer() {
                 if (refundAmt > 0) {
                   const userWallets = db.execute('SELECT * FROM wallets WHERE user_id = ? AND asset_symbol = ?', [tx.userId, cur]) as any[];
                   if (userWallets.length > 0) {
-                    db.execute('UPDATE wallets SET balance = ? WHERE user_id = ? AND asset_symbol = ?', [Number(userWallets[0].balance || 0) + refundAmt, tx.userId, cur]);
                   }
                 }
               }
@@ -12495,7 +12248,6 @@ async function startServer() {
         const liveCash = await getWiseTotalCashUSD();
         if (liveCash && typeof liveCash.usdBalance === 'number' && liveCash.usdBalance > 0) {
           liveUsdTotal = liveCash.usdBalance;
-          db.execute('UPDATE wallets SET balance = ? WHERE user_id = ? AND asset_symbol = ?', [liveUsdTotal, targetUserId, 'USD']);
         }
       } catch {
         // live fallback
@@ -12557,7 +12309,6 @@ async function startServer() {
         // Deduct from app wallet
         const newBal = currentUsdBal - amtUsd;
         if (usdWallets.length > 0) {
-          db.execute('UPDATE wallets SET balance = ? WHERE user_id = ? AND asset_symbol = ?', [newBal, userId, 'USD']);
         }
         // Record transaction
         const txId = `wise_payout_${crypto.randomUUID()}`;
@@ -12614,7 +12365,6 @@ async function startServer() {
       const reconciledBalance = wiseTotalUsd;
 
       if (usdWallets.length > 0) {
-        db.execute('UPDATE wallets SET balance = ? WHERE user_id = ? AND asset_symbol = ?', [reconciledBalance, userId, 'USD']);
       } else {
         db.execute('INSERT INTO wallets (id, user_id, asset_symbol, balance, public_address_ethereum, public_address_bitcoin, identityLocked, productionMode, blockchainLinked, lockedToEmail) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
           [`wallet-${userId}-usd`, userId, 'USD', reconciledBalance, '', '', true, 'live', false, req.user.email]);
@@ -12695,7 +12445,6 @@ async function startServer() {
       const reconciledBalance = wiseTotalUsd;
 
       if (usdWallets && usdWallets.length > 0) {
-        db.execute('UPDATE wallets SET balance = ? WHERE user_id = ? AND asset_symbol = ?', [reconciledBalance, userId, 'USD']);
       } else {
         db.execute(
           'INSERT INTO wallets (id, user_id, asset_symbol, balance, public_address_ethereum, public_address_bitcoin, identityLocked, productionMode, blockchainLinked, lockedToEmail) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
@@ -12885,7 +12634,6 @@ async function startServer() {
       // Update central USD wallet in DB
       const usdWallets = db.execute('SELECT * FROM wallets WHERE user_id = ? AND asset_symbol = ?', [userId, 'USD']) as any[];
       if (usdWallets.length > 0) {
-        db.execute('UPDATE wallets SET balance = ? WHERE user_id = ? AND asset_symbol = ?', [totalCashUsd, userId, 'USD']);
       } else {
         db.execute('INSERT INTO wallets (id, user_id, asset_symbol, balance, public_address_ethereum, public_address_bitcoin, identityLocked, productionMode, blockchainLinked, lockedToEmail) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
           [`wallet-${userId}-usd`, userId, 'USD', totalCashUsd, '', '', true, 'live', false, userEmail]);
@@ -13654,7 +13402,6 @@ async function startServer() {
           child.on('error', (err) => {
             console.error('[Interbank] Failed to start Python backend via virtualenv:', err);
           });
-        } else {
           console.log('[Interbank] Python virtual environment with FastAPI dependencies not found; skipping sidecar execution.');
         }
       }
