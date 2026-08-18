@@ -11,7 +11,12 @@ import {
   Terminal,
   ExternalLink,
   Layers,
-  HardDrive
+  HardDrive,
+  PackageCheck,
+  FileArchive,
+  Info,
+  Check,
+  Copy
 } from 'lucide-react';
 
 interface AppDownloadModalProps {
@@ -27,7 +32,8 @@ export const AppDownloadModal: React.FC<AppDownloadModalProps> = ({
 }) => {
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [isPwaInstalled, setIsPwaInstalled] = useState<boolean>(false);
-  const [activeTab, setActiveTab] = useState<'pwa' | 'android'>('pwa');
+  const [activeTab, setActiveTab] = useState<'pwa' | 'apk' | 'sdk'>('pwa');
+  const [copiedCmd, setCopiedCmd] = useState<string | null>(null);
 
   useEffect(() => {
     // Listen for browser PWA install prompt
@@ -61,7 +67,7 @@ export const AppDownloadModal: React.FC<AppDownloadModalProps> = ({
       setDeferredPrompt(null);
     } else {
       showToast(
-        'To install as PWA: Click your browser menu (⋮ or Share) and tap "Add to Home Screen" or "Install App".',
+        'To install: Tap your browser menu (⋮ in Chrome, or Share in Safari) and tap "Install app" or "Add to Home Screen".',
         'info'
       );
     }
@@ -69,38 +75,58 @@ export const AppDownloadModal: React.FC<AppDownloadModalProps> = ({
 
   const handleDownloadApk = () => {
     const link = document.createElement('a');
-    link.href = '/sovereign-app.apk';
+    link.href = '/api/download/apk';
     link.download = 'sovereign-wealth-portal.apk';
+    link.target = '_blank';
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    showToast('Android APK download initiated!', 'success');
+    showToast('Android APK download started!', 'success');
+  };
+
+  const handleDownloadSdk = () => {
+    const link = document.createElement('a');
+    link.href = '/api/download/android-sdk';
+    link.download = 'sovereign-android-sdk.zip';
+    link.target = '_blank';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    showToast('Complete Android SDK (.zip) download started!', 'success');
+  };
+
+  const copyToClipboard = (text: string, label: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedCmd(label);
+    showToast(`Copied ${label} to clipboard`, 'info');
+    setTimeout(() => setCopiedCmd(null), 2500);
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in duration-150">
-      <div className="bg-white rounded-3xl max-w-xl w-full p-6 sm:p-7 shadow-2xl border border-gray-100 space-y-6 relative animate-in zoom-in-95 duration-150 overflow-hidden">
+    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-150">
+      <div className="bg-white rounded-3xl max-w-xl w-full p-5 sm:p-7 shadow-2xl border border-gray-100 space-y-5 relative animate-in zoom-in-95 duration-150 max-h-[90vh] overflow-y-auto">
+        
         {/* Header */}
         <div className="flex items-start justify-between">
           <div className="flex items-center space-x-3">
-            <div className="p-3 bg-blue-50 text-[#0052FF] rounded-2xl border border-blue-100">
+            <div className="p-3 bg-blue-50 text-[#0052FF] rounded-2xl border border-blue-100 shrink-0">
               <Smartphone className="h-6 w-6" />
             </div>
             <div>
               <div className="flex items-center space-x-2">
-                <h2 className="text-lg font-black text-gray-900">Download & Native Apps</h2>
+                <h2 className="text-lg font-black text-gray-900">Mobile & Android Hub</h2>
                 <span className="bg-emerald-50 text-emerald-700 text-[10px] font-black px-2 py-0.5 rounded-full border border-emerald-200">
-                  PWA & GRADLE
+                  Android & iOS
                 </span>
               </div>
               <p className="text-xs text-gray-500 font-medium">
-                Install as a standalone Web App (PWA) or build the native Android Gradle project.
+                Install as a standalone Web App (PWA), download the Android APK, or grab the complete Android SDK.
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 p-1.5 rounded-full hover:bg-gray-100 transition-colors cursor-pointer"
+            className="text-gray-400 hover:text-gray-600 p-1.5 rounded-full hover:bg-gray-100 transition-colors cursor-pointer shrink-0"
           >
             <X className="h-5 w-5" />
           </button>
@@ -110,25 +136,36 @@ export const AppDownloadModal: React.FC<AppDownloadModalProps> = ({
         <div className="flex bg-gray-100 p-1 rounded-2xl space-x-1">
           <button
             onClick={() => setActiveTab('pwa')}
-            className={`flex-1 py-2.5 rounded-xl text-xs font-extrabold transition-all cursor-pointer flex items-center justify-center space-x-2 ${
+            className={`flex-1 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer flex items-center justify-center space-x-1.5 ${
               activeTab === 'pwa'
                 ? 'bg-white text-[#0052FF] shadow-xs'
                 : 'text-gray-500 hover:text-gray-800'
             }`}
           >
-            <Smartphone className="h-4 w-4" />
-            <span>Progressive Web App (PWA)</span>
+            <Smartphone className="h-3.5 w-3.5" />
+            <span>PWA (1-Tap)</span>
           </button>
           <button
-            onClick={() => setActiveTab('android')}
-            className={`flex-1 py-2.5 rounded-xl text-xs font-extrabold transition-all cursor-pointer flex items-center justify-center space-x-2 ${
-              activeTab === 'android'
+            onClick={() => setActiveTab('apk')}
+            className={`flex-1 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer flex items-center justify-center space-x-1.5 ${
+              activeTab === 'apk'
                 ? 'bg-white text-[#0052FF] shadow-xs'
                 : 'text-gray-500 hover:text-gray-800'
             }`}
           >
-            <Layers className="h-4 w-4" />
-            <span>Android Gradle App</span>
+            <PackageCheck className="h-3.5 w-3.5" />
+            <span>Android APK</span>
+          </button>
+          <button
+            onClick={() => setActiveTab('sdk')}
+            className={`flex-1 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer flex items-center justify-center space-x-1.5 ${
+              activeTab === 'sdk'
+                ? 'bg-white text-[#0052FF] shadow-xs'
+                : 'text-gray-500 hover:text-gray-800'
+            }`}
+          >
+            <FileArchive className="h-3.5 w-3.5" />
+            <span>Complete SDK (.zip)</span>
           </button>
         </div>
 
@@ -140,130 +177,187 @@ export const AppDownloadModal: React.FC<AppDownloadModalProps> = ({
                 <div className="flex items-center space-x-2">
                   <Sparkles className="h-4 w-4 text-amber-400" />
                   <span className="text-xs font-extrabold uppercase tracking-wider text-amber-300">
-                    One-Click Mobile & Desktop PWA
+                    Instant Mobile & Desktop Install
                   </span>
                 </div>
                 <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded-full border border-emerald-500/30 font-bold">
-                  Service Worker Active
+                  {isPwaInstalled ? 'App Active' : 'Offline Ready'}
                 </span>
               </div>
 
               <p className="text-xs text-slate-300 leading-relaxed font-medium">
-                Install Sovereign Wealth as an app directly on iOS, Android, macOS, or Windows without downloading from an app store. Features offline caching and full screen standalone display.
+                Install Sovereign Wealth directly on Android, iOS, Windows, or Mac. Runs in a full-screen, native standalone container with instant launch and biometric integration.
               </p>
 
               <div className="grid grid-cols-2 gap-2 text-[11px] pt-1 border-t border-slate-800">
                 <div className="flex items-center space-x-1.5 text-slate-300">
                   <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
-                  <span>Offline Ledger Access</span>
+                  <span>Full Screen (No Browser Bar)</span>
                 </div>
                 <div className="flex items-center space-x-1.5 text-slate-300">
                   <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
-                  <span>Full Screen No-Bar UI</span>
+                  <span>Home Screen App Icon</span>
                 </div>
                 <div className="flex items-center space-x-1.5 text-slate-300">
                   <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
-                  <span>Instant App Launcher</span>
+                  <span>Offline Asset Caching</span>
                 </div>
                 <div className="flex items-center space-x-1.5 text-slate-300">
                   <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
-                  <span>Automatic Sync</span>
+                  <span>Instant Hardware Acceleration</span>
                 </div>
               </div>
             </div>
 
-            {/* Install Action */}
-            <div className="p-4 bg-blue-50/60 rounded-2xl border border-blue-100 flex flex-col sm:flex-row items-center justify-between gap-3">
+            {/* Install Action Card */}
+            <div className="p-4 bg-blue-50/70 rounded-2xl border border-blue-100 flex flex-col sm:flex-row items-center justify-between gap-3">
               <div>
-                <h4 className="text-xs font-black text-gray-900">Ready to Install</h4>
-                <p className="text-[11px] text-gray-500">
+                <h4 className="text-xs font-black text-gray-900">
+                  {isPwaInstalled ? 'Application Installed' : 'Ready to Install on Phone'}
+                </h4>
+                <p className="text-[11px] text-gray-600">
                   {isPwaInstalled
-                    ? 'App is running in standalone PWA mode.'
-                    : 'Tap below to trigger native PWA prompt.'}
+                    ? 'Running as standalone application.'
+                    : 'Tap below to trigger prompt or add to your home screen.'}
                 </p>
               </div>
 
               <button
                 onClick={handleInstallPwa}
-                className="w-full sm:w-auto px-5 py-2.5 bg-[#0052FF] hover:bg-blue-700 text-white font-extrabold text-xs rounded-xl transition-all shadow-md shadow-blue-500/20 cursor-pointer flex items-center justify-center space-x-2"
+                className="w-full sm:w-auto px-5 py-2.5 bg-[#0052FF] hover:bg-blue-700 active:scale-95 text-white font-extrabold text-xs rounded-xl transition-all shadow-md shadow-blue-500/20 cursor-pointer flex items-center justify-center space-x-2"
               >
                 <Download className="h-4 w-4" />
-                <span>{deferredPrompt ? 'Install PWA Now' : 'Add to Home Screen'}</span>
+                <span>{deferredPrompt ? 'Install App' : 'Add to Home Screen'}</span>
               </button>
+            </div>
+
+            {/* Quick Mobile Browser Guide */}
+            <div className="bg-gray-50 p-3.5 rounded-2xl border border-gray-200 text-[11px] text-gray-600 space-y-2">
+              <span className="font-extrabold text-gray-800 flex items-center space-x-1.5">
+                <Info className="h-3.5 w-3.5 text-blue-600" />
+                <span>How to Install Manually on Mobile Browsers:</span>
+              </span>
+              <ul className="space-y-1 pl-4 list-disc text-gray-600">
+                <li><strong>Chrome / Brave on Android:</strong> Tap the <strong>⋮ (3 dots menu)</strong> at top right &gt; tap <strong>"Install app"</strong> or <strong>"Add to Home screen"</strong>.</li>
+                <li><strong>Samsung Internet:</strong> Tap the <strong>≡ (bottom right menu)</strong> &gt; tap <strong>"+ Add page to"</strong> &gt; <strong>"Home screen"</strong>.</li>
+                <li><strong>Safari on iPhone:</strong> Tap the <strong>Share button (square with arrow)</strong> &gt; scroll down &gt; tap <strong>"Add to Home Screen"</strong>.</li>
+              </ul>
             </div>
           </div>
         )}
 
-        {/* TAB 2: Android App with Gradle */}
-        {activeTab === 'android' && (
+        {/* TAB 2: Android APK Package */}
+        {activeTab === 'apk' && (
           <div className="space-y-4 animate-in fade-in duration-150">
-            {/* APK Download Highlight Card */}
             <div className="bg-gradient-to-br from-slate-900 to-indigo-950 text-white p-5 rounded-2xl space-y-3 shadow-md">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-extrabold text-emerald-400 uppercase tracking-wider flex items-center">
                   <ShieldCheck className="h-4 w-4 mr-1 text-emerald-400" />
-                  Android Package (APK) & Gradle Source
+                  Android Package Archive (.apk)
                 </span>
                 <span className="text-[10px] bg-indigo-500/30 text-indigo-200 px-2 py-0.5 rounded-full font-mono border border-indigo-400/30">
-                  SDK 34 (Android 14)
+                  Target API 34 (Android 14)
                 </span>
               </div>
 
               <p className="text-xs text-slate-300 leading-relaxed font-medium">
-                The repository includes a complete Android Studio Gradle project located at <code className="bg-slate-800 text-blue-300 px-1.5 py-0.5 rounded font-mono text-[10px]">/android</code> with full permissions for Internet, NFC Tap-to-Pay, and Biometrics.
+                Download the standalone Android package for direct sideloading or testing on Android devices and emulators.
               </p>
 
-              <div className="flex flex-col sm:flex-row gap-2 pt-2">
-                <button
-                  onClick={handleDownloadApk}
-                  className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs rounded-xl transition-all flex items-center justify-center space-x-2 cursor-pointer shadow-sm"
-                >
-                  <Download className="h-4 w-4" />
-                  <span>Download sovereign-app.apk</span>
-                </button>
+              <div className="p-3 bg-slate-950/80 rounded-xl border border-slate-800 text-[11px] font-mono text-slate-300 space-y-1">
+                <div>Package: <span className="text-emerald-400 font-bold">com.sovereign.wealth</span></div>
+                <div>File: <span className="text-blue-300">sovereign-wealth-portal.apk (553 KB)</span></div>
+                <div>Min SDK: <span className="text-slate-400">Android 7.0+ (API 24)</span></div>
               </div>
+
+              <button
+                onClick={handleDownloadApk}
+                className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-extrabold text-xs rounded-xl transition-all flex items-center justify-center space-x-2 cursor-pointer shadow-lg shadow-emerald-900/30"
+              >
+                <Download className="h-4 w-4" />
+                <span>Download sovereign-wealth-portal.apk</span>
+              </button>
             </div>
 
-            {/* Gradle Build Terminal Box */}
+            {/* Android Install Instructions */}
+            <div className="bg-gray-50 p-4 rounded-2xl border border-gray-200 text-xs text-gray-700 space-y-2">
+              <span className="font-extrabold text-gray-900 block text-[11px] uppercase tracking-wider">
+                How to Install APK on Android:
+              </span>
+              <ol className="space-y-1.5 list-decimal pl-4 text-[11px] text-gray-600">
+                <li>Tap <strong>Download sovereign-wealth-portal.apk</strong> above.</li>
+                <li>Open your Android <strong>Files</strong> or <strong>Downloads</strong> app and tap the downloaded file.</li>
+                <li>If prompted by Android Security, tap <strong>Settings</strong> &gt; enable <strong>Allow from this source</strong>.</li>
+                <li>Tap <strong>Install</strong> to complete installation.</li>
+              </ol>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 3: Complete Android Studio SDK Project (.zip) */}
+        {activeTab === 'sdk' && (
+          <div className="space-y-4 animate-in fade-in duration-150">
+            <div className="bg-slate-900 text-white p-5 rounded-2xl space-y-3 shadow-md">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-extrabold text-blue-400 uppercase tracking-wider flex items-center">
+                  <FolderGit2 className="h-4 w-4 mr-1 text-blue-400" />
+                  Full Android Studio SDK & Gradle Source (.zip)
+                </span>
+                <span className="text-[10px] bg-blue-500/30 text-blue-200 px-2 py-0.5 rounded-full font-mono border border-blue-400/30">
+                  Gradle 8.2 + JDK 17
+                </span>
+              </div>
+
+              <p className="text-xs text-slate-300 leading-relaxed font-medium">
+                The complete native Android project source archive containing <code className="bg-slate-800 text-blue-300 px-1 py-0.5 rounded font-mono text-[10px]">/android</code>, Gradle wrapper (<code className="text-blue-300">gradlew</code>), native Java activities, biometrics security, and Capacitor runtime.
+              </p>
+
+              <button
+                onClick={handleDownloadSdk}
+                className="w-full py-3 bg-[#0052FF] hover:bg-blue-600 active:scale-95 text-white font-extrabold text-xs rounded-xl transition-all flex items-center justify-center space-x-2 cursor-pointer shadow-lg shadow-blue-900/30"
+              >
+                <Download className="h-4 w-4" />
+                <span>Download sovereign-android-sdk.zip (282 KB)</span>
+              </button>
+            </div>
+
+            {/* Build Terminal Box */}
             <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-2">
               <div className="flex items-center justify-between text-[11px] font-mono text-slate-400 border-b border-slate-800 pb-2">
                 <span className="flex items-center text-slate-300">
                   <Terminal className="h-3.5 w-3.5 mr-1.5 text-blue-400" />
-                  Gradle Build Instructions
+                  CLI & Android Studio Build Commands
                 </span>
-                <span className="text-gray-500">Android Studio / CLI</span>
+                <span className="text-gray-500">Gradle Wrapper</span>
               </div>
 
-              <div className="space-y-1.5 font-mono text-[11px] text-emerald-400 pt-1 select-all">
-                <p className="text-slate-400"># 1. Sync Capacitor web assets into Android project</p>
-                <p className="bg-slate-900 p-2 rounded border border-slate-800 text-white">
-                  npx cap copy android
-                </p>
+              <div className="space-y-2 font-mono text-[11px]">
+                <div className="bg-slate-900 p-2.5 rounded-xl border border-slate-800 flex items-center justify-between">
+                  <span className="text-emerald-400 select-all">cd android && ./gradlew assembleDebug</span>
+                  <button
+                    onClick={() => copyToClipboard('cd android && ./gradlew assembleDebug', 'Build Command')}
+                    className="p-1 text-slate-400 hover:text-white cursor-pointer"
+                  >
+                    {copiedCmd === 'Build Command' ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
+                  </button>
+                </div>
 
-                <p className="text-slate-400 pt-1"># 2. Build Release APK via Gradle Wrapper</p>
-                <p className="bg-slate-900 p-2 rounded border border-slate-800 text-white">
-                  cd android && ./gradlew assembleRelease
-                </p>
-              </div>
-            </div>
-
-            {/* Android Manifest Info */}
-            <div className="bg-gray-50 p-3.5 rounded-2xl border border-gray-200 text-xs text-gray-700 space-y-1">
-              <span className="font-extrabold text-gray-900 block text-[11px] uppercase tracking-wider">
-                Configured Permissions & Features:
-              </span>
-              <div className="grid grid-cols-2 gap-1 text-[11px] text-gray-600 pt-1">
-                <span>• Package: <strong className="text-gray-800">com.sovereign.wealth</strong></span>
-                <span>• Scheme: <strong className="text-gray-800">sovereign://app</strong></span>
-                <span>• Biometric Auth & NFC Tap</span>
-                <span>• Hardware Acceleration</span>
+                <div className="bg-slate-900 p-2.5 rounded-xl border border-slate-800 flex items-center justify-between">
+                  <span className="text-emerald-400 select-all">cd android && ./gradlew assembleRelease</span>
+                  <button
+                    onClick={() => copyToClipboard('cd android && ./gradlew assembleRelease', 'Release Command')}
+                    className="p-1 text-slate-400 hover:text-white cursor-pointer"
+                  >
+                    {copiedCmd === 'Release Command' ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
+                  </button>
+                </div>
               </div>
             </div>
           </div>
         )}
 
         {/* Footer Close */}
-        <div className="pt-2">
+        <div className="pt-1">
           <button
             onClick={onClose}
             className="w-full py-3 bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold text-xs rounded-xl transition-all cursor-pointer"

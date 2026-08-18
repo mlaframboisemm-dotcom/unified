@@ -48,7 +48,7 @@
       "kycPostalCode": "l1h4s7",
       "kycTaxId": "0512",
       "kycPhone": "9057184275",
-      "kycVerifiedAt": "2026-08-17T21:57:53.379Z"
+      "kycVerifiedAt": "2026-08-17T23:58:51.252Z"
     }
   ],
   "wallets": [
@@ -108,7 +108,7 @@
       "id": "wallet-user_mlaframboisemm-btc",
       "userId": "user_mlaframboisemm",
       "assetSymbol": "BTC",
-      "balance": 1280.5,
+      "balance": 0,
       "publicAddressEthereum": "",
       "publicAddressBitcoin": "bc1qz8w9j7k6m5n4p3r2t1v0x9y8z7w6v5u",
       "identityLocked": true,
@@ -1151,6 +1151,15 @@
       "userId": "system",
       "action": "RECONCILIATION_AUDIT_SUCCESS",
       "timestamp": 1787003872436,
+      "ipAddress": "127.0.0.1",
+      "status": "success",
+      "details": "Reconciliation audit succeeded. All queried Stripe transactions match internal database records perfectly."
+    },
+    {
+      "id": "audit_29ef4cb8-4fb2-4180-bbfd-f13fabe88411",
+      "userId": "system",
+      "action": "RECONCILIATION_AUDIT_SUCCESS",
+      "timestamp": 1787011142527,
       "ipAddress": "127.0.0.1",
       "status": "success",
       "details": "Reconciliation audit succeeded. All queried Stripe transactions match internal database records perfectly."

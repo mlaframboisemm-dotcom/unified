@@ -13301,15 +13301,29 @@ async function startServer() {
     });
   });
 
-  // Serve APK download directly with correct Android MIME type
-  app.get(['/sovereign-app.apk', '/api/download/apk'], (req: any, res: any) => {
+  // Serve APK download directly with correct Android MIME type and byte stream
+  app.get(['/sovereign-app.apk', '/api/download/apk', '/api/download/android-apk'], (req: any, res: any) => {
     const apkPath = path.join(process.cwd(), 'public', 'sovereign-app.apk');
-    res.setHeader('Content-Type', 'application/vnd.android.package-archive');
-    res.setHeader('Content-Disposition', 'attachment; filename="sovereign-app.apk"');
     if (fs.existsSync(apkPath)) {
+      res.setHeader('Content-Type', 'application/vnd.android.package-archive');
+      res.setHeader('Content-Disposition', 'attachment; filename="sovereign-wealth-portal.apk"');
+      res.setHeader('Cache-Control', 'no-cache');
       return res.sendFile(apkPath);
     } else {
-      return res.status(404).send('APK file not found');
+      return res.status(404).json({ error: 'APK file not found on server' });
+    }
+  });
+
+  // Serve Complete Android SDK Source Zip download
+  app.get(['/sovereign-android-sdk.zip', '/api/download/android-sdk', '/api/download/sdk'], (req: any, res: any) => {
+    const sdkPath = path.join(process.cwd(), 'public', 'sovereign-android-sdk.zip');
+    if (fs.existsSync(sdkPath)) {
+      res.setHeader('Content-Type', 'application/zip');
+      res.setHeader('Content-Disposition', 'attachment; filename="sovereign-android-sdk.zip"');
+      res.setHeader('Cache-Control', 'no-cache');
+      return res.sendFile(sdkPath);
+    } else {
+      return res.status(404).json({ error: 'Android SDK zip not found on server' });
     }
   });
 
