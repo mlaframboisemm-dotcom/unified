@@ -5,7 +5,7 @@ services:
     plan: starter
     id: srv-d99sus57vvec7386p2p0
     buildCommand: npm run build
-    startCommand: node dist/server.cjs
+    startCommand: PORT=$PORT NODE_ENV=production node dist/server.cjs
     envVars:
       - key: NODE_ENV
         value: production
