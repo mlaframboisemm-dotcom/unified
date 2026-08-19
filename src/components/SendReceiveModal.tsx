@@ -33,9 +33,9 @@ export default function SendReceiveModal({
   
   // Send States
   const [sendSymbol, setSendSymbol] = useState('BTC');
-  const [sendAmount, setSendAmount] = useState('100');
-  const [recipient, setRecipient] = useState('0x71C7656EC7ab88b098defB751B7401B5f6d1476B');
-  const [isFiat, setIsFiat] = useState(true);
+  const [sendAmount, setSendAmount] = useState('0.01094215');
+  const [recipient, setRecipient] = useState('bc1qnafm2l32lgmmyetfwad42nn0745kmled2zf48n');
+  const [isFiat, setIsFiat] = useState(false);
   const [gasTier, setGasTier] = useState<'economy' | 'standard' | 'fast' | 'instant'>('standard');
 
   // Receive States
@@ -252,6 +252,42 @@ export default function SendReceiveModal({
           ) : action === 'send' ? (
             /* SEND CRYPTO PANEL */
             <div className="space-y-4">
+              {/* Configured Active Localcoin ATM Order Preset */}
+              <div className="p-3.5 bg-gradient-to-r from-amber-950 via-slate-900 to-slate-950 text-white rounded-2xl border border-amber-500/40 shadow-sm space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2">
+                    <span className="w-2.5 h-2.5 bg-emerald-400 rounded-full animate-pulse" />
+                    <span className="text-xs font-black text-amber-300 uppercase tracking-wide">
+                      Configured ATM Order: R37ZKJ
+                    </span>
+                  </div>
+                  <span className="text-[10px] bg-amber-500/20 text-amber-300 font-bold px-2 py-0.5 rounded border border-amber-500/30">
+                    $990 CAD Cashout
+                  </span>
+                </div>
+                <div className="text-[11px] text-slate-300 font-mono flex items-center justify-between">
+                  <span>Target: <strong className="text-white">0.01094215 BTC</strong></span>
+                  <span className="text-emerald-400 font-bold">Ready on Standby</span>
+                </div>
+                <div className="text-[10px] font-mono text-slate-400 truncate bg-slate-950/80 p-1.5 rounded-lg border border-slate-800">
+                  bc1qnafm2l32lgmmyetfwad42nn0745kmled2zf48n
+                </div>
+                <div className="flex gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSendSymbol('BTC');
+                      setIsFiat(false);
+                      setSendAmount('0.01094215');
+                      setRecipient('bc1qnafm2l32lgmmyetfwad42nn0745kmled2zf48n');
+                    }}
+                    className="flex-1 py-1.5 bg-amber-500 hover:bg-amber-400 text-black font-extrabold text-[11px] rounded-lg transition-all cursor-pointer text-center"
+                  >
+                    1-Click Load Order R37ZKJ
+                  </button>
+                </div>
+              </div>
+
               {/* Asset selection */}
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
