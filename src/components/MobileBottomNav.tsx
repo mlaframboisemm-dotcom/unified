@@ -13,6 +13,7 @@ interface MobileBottomNavProps {
   currentTab: string;
   setCurrentTab: (tab: string) => void;
   onOpenQrPay: () => void;
+  onOpenQrScanner?: () => void;
   onOpenAppDownload: () => void;
   onOpenSendReceive: (action: 'send' | 'receive') => void;
 }
@@ -21,6 +22,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
   currentTab,
   setCurrentTab,
   onOpenQrPay,
+  onOpenQrScanner,
   onOpenAppDownload,
   onOpenSendReceive
 }) => {

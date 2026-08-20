@@ -74,8 +74,31 @@ export default function BitcoinAtmHub({
   const [qrCodeDataUrl, setQrCodeDataUrl] = useState<string>('');
   const [isScannerOpen, setIsScannerOpen] = useState(false);
 
-  const handleAtmScanSuccess = (data: { raw: string; address: string; amount?: number; memo?: string }) => {
-    showToast(`Scanned ATM screen QR: ${data.address.slice(0, 12)}...`, 'success');
+  const handleAtmScanSuccess = (data: {
+    raw: string;
+    address: string;
+    amount?: number;
+    currency?: string;
+    memo?: string;
+    parsedResult?: any;
+  }) => {
+    const parsed = data.parsedResult;
+    if (parsed && parsed.source === 'LOCALCOIN') {
+      showToast(`Recognized Localcoin ${parsed.category}: ${parsed.displaySubtitle}`, 'success');
+      if (parsed.fiatAmount) {
+        setCashAmountInput(parsed.fiatAmount.toString());
+      }
+      if (parsed.category === 'ATM_CASHOUT') {
+        setActiveMode('cashout');
+        if (parsed.voucherPin) {
+          showToast(`Loaded Cash-Out PIN: ${parsed.voucherPin}`, 'info');
+        }
+        return;
+      }
+    } else {
+      showToast(`Scanned ATM QR: ${data.address.slice(0, 12)}...`, 'success');
+    }
+
     if (onOpenSendReceive) {
       onOpenSendReceive('send');
     }

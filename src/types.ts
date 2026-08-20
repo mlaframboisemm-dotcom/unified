@@ -48,12 +48,20 @@ export interface Transaction {
   timestamp: number;
   details: string;
   hash?: string;
-  status?: 'pending' | 'completed' | 'failed';
+  status?: 'pending' | 'completed' | 'failed' | 'processing' | 'settled';
   blockHeight?: number;
   fromAddress?: string;
   toAddress?: string;
   ledgerDebit?: string; // e.g. "Asset Holding Account (BTC)"
   ledgerCredit?: string; // e.g. "Cash Vault Account (USD)"
+  progressPercent?: number;
+  stage?: 'INITIATED' | 'MEMPOOL_BROADCAST' | 'CONFIRMING' | 'SETTLED' | 'FAILED';
+  stageLabel?: string;
+  confirmations?: number;
+  requiredConfirmations?: number;
+  estimatedCompletionTime?: number;
+  lastPolledAt?: number;
+  network?: string;
 }
 
 export type TimeFrame = '1H' | '1D' | '1W' | '1M' | '1Y' | 'ALL';

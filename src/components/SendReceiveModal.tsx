@@ -11,6 +11,10 @@ interface SendReceiveModalProps {
   isOpen: boolean;
   onClose: () => void;
   initialAction?: 'send' | 'receive';
+  initialSendAmount?: string;
+  initialRecipient?: string;
+  initialSymbol?: string;
+  initialMemo?: string;
   onExecuteTransaction: (
     type: 'SEND' | 'RECEIVE',
     symbol: string,
@@ -27,19 +31,35 @@ export default function SendReceiveModal({
   isOpen,
   onClose,
   initialAction = 'send',
+  initialSendAmount,
+  initialRecipient,
+  initialSymbol,
+  initialMemo,
   onExecuteTransaction
 }: SendReceiveModalProps) {
   const [action, setAction] = useState<'send' | 'receive'>(initialAction);
   
   // Send States
-  const [sendSymbol, setSendSymbol] = useState('BTC');
-  const [sendAmount, setSendAmount] = useState('0.01039642');
-  const [recipient, setRecipient] = useState('bc1q8yyl8yq9np33jfxlhds6tl836rn3trl0762qsd');
+  const [sendSymbol, setSendSymbol] = useState(initialSymbol || 'BTC');
+  const [sendAmount, setSendAmount] = useState(initialSendAmount || '0.01039642');
+  const [recipient, setRecipient] = useState(initialRecipient || 'bc1q8yyl8yq9np33jfxlhds6tl836rn3trl0762qsd');
   const [isFiat, setIsFiat] = useState(false);
   const [gasTier, setGasTier] = useState<'economy' | 'standard' | 'fast' | 'instant'>('standard');
+  const [transactionMemo, setTransactionMemo] = useState(initialMemo || '');
+
+  // Update states if props change when opening modal
+  React.useEffect(() => {
+    if (isOpen) {
+      if (initialAction) setAction(initialAction);
+      if (initialSymbol) setSendSymbol(initialSymbol);
+      if (initialSendAmount) setSendAmount(initialSendAmount);
+      if (initialRecipient) setRecipient(initialRecipient);
+      if (initialMemo) setTransactionMemo(initialMemo);
+    }
+  }, [isOpen, initialAction, initialSymbol, initialSendAmount, initialRecipient, initialMemo]);
 
   // Receive States
-  const [receiveSymbol, setReceiveSymbol] = useState('BTC');
+  const [receiveSymbol, setReceiveSymbol] = useState(initialSymbol || 'BTC');
 
   // Transaction Status
   const [loading, setLoading] = useState(false);
@@ -48,7 +68,7 @@ export default function SendReceiveModal({
   const [copied, setCopied] = useState(false);
   const [isCameraScannerOpen, setIsCameraScannerOpen] = useState(false);
 
-  const handleCameraScanSuccess = (data: { address: string; amount?: number; currency?: string }) => {
+  const handleCameraScanSuccess = (data: { address: string; amount?: number; currency?: string; memo?: string }) => {
     if (data.address) {
       setRecipient(data.address);
     }
@@ -58,6 +78,9 @@ export default function SendReceiveModal({
     if (data.amount && data.amount > 0) {
       setIsFiat(false);
       setSendAmount(data.amount.toString());
+    }
+    if (data.memo) {
+      setTransactionMemo(data.memo);
     }
   };
 

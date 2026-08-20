@@ -37,6 +37,8 @@ import { MobileBottomNav } from './components/MobileBottomNav';
 import { AndroidInstallPromptBanner } from './components/AndroidInstallPromptBanner';
 import UserProfileHub from './components/UserProfileHub';
 import BitcoinAtmHub from './components/BitcoinAtmHub';
+import CameraQrScannerModal from './components/CameraQrScannerModal';
+import { parseQrOrDeepLink, ParsedQrResult } from './lib/qrProtocolParser';
 import { SettlementConfirmationDialog, SettlementConfirmationData } from './components/SettlementConfirmationDialog';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { convertUsdToCad, DEFAULT_USD_CAD_RATE } from './lib/financial-hardening';
@@ -44,6 +46,7 @@ import { debouncedStorageSetItem } from './lib/sync-to-storage';
 import { db } from './lib/firebase';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { OfflineSyncStatusBar } from './components/OfflineSyncStatusBar';
+import { TransactionStatusTracker } from './components/TransactionStatusTracker';
 import { 
   saveTransactionWithOfflineFallback, 
   cacheTransactionsLocally, 
@@ -258,6 +261,13 @@ export default function App() {
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [isSendReceiveOpen, setIsSendReceiveOpen] = useState(false);
   const [sendReceiveAction, setSendReceiveAction] = useState<'send' | 'receive'>('send');
+  const [sendReceivePrefill, setSendReceivePrefill] = useState<{
+    recipient?: string;
+    amount?: string;
+    symbol?: string;
+    memo?: string;
+  } | null>(null);
+  const [isGlobalCameraScannerOpen, setIsGlobalCameraScannerOpen] = useState(false);
   const [isCashModalOpen, setIsCashModalOpen] = useState(false);
   const [cashModalAction, setCashModalAction] = useState<'deposit' | 'withdraw'>('deposit');
   const [isQrPayOpen, setIsQrPayOpen] = useState(false);
@@ -266,6 +276,8 @@ export default function App() {
   const [isProofModalOpen, setIsProofModalOpen] = useState(false);
   const [isPlaidLinkModalOpen, setIsPlaidLinkModalOpen] = useState(false);
   const [expandedTxId, setExpandedTxId] = useState<string | null>(null);
+  const [ledgerFilter, setLedgerFilter] = useState<'ALL' | 'PENDING' | 'COMPLETED' | 'CRYPTO' | 'FIAT'>('ALL');
+  const [ledgerSearchQuery, setLedgerSearchQuery] = useState<string>('');
 
   // Stripe Hub states
   const [stripeAvailable, setStripeAvailable] = useState<number>(0);
@@ -1318,6 +1330,83 @@ export default function App() {
     };
   }, []);
 
+  // Handle deep-links, web protocol handlers (web+bitcoin, web+localcoin, web+interac), and QR parameters
+  useEffect(() => {
+    // 1. Register Web Protocol Handlers in browser if supported
+    if (typeof navigator !== 'undefined' && 'registerProtocolHandler' in navigator) {
+      try {
+        (navigator as any).registerProtocolHandler?.('web+bitcoin', `${window.location.origin}/?uri=%s`);
+        (navigator as any).registerProtocolHandler?.('web+localcoin', `${window.location.origin}/?uri=%s`);
+        (navigator as any).registerProtocolHandler?.('web+etransfer', `${window.location.origin}/?uri=%s`);
+        (navigator as any).registerProtocolHandler?.('web+interac', `${window.location.origin}/?uri=%s`);
+      } catch {
+        // Quiet non-fatal ignore if user rejected or insecure origin
+      }
+    }
+
+    // 2. Parse URL parameters on initial launch or deep-link navigation
+    try {
+      const urlParams = new URLSearchParams(window.location.search);
+      const action = urlParams.get('action');
+      const uriParam = urlParams.get('uri') || urlParams.get('qr') || urlParams.get('url') || urlParams.get('text');
+      const addressParam = urlParams.get('address') || urlParams.get('to') || urlParams.get('recipient');
+      const amountParam = urlParams.get('amount') || urlParams.get('cryptoAmount') || urlParams.get('fiatAmount');
+      const currencyParam = urlParams.get('currency') || urlParams.get('crypto') || urlParams.get('asset') || urlParams.get('symbol');
+      const memoParam = urlParams.get('memo') || urlParams.get('message') || urlParams.get('orderId') || urlParams.get('ref');
+
+      if (action === 'scan_qr' || action === 'scan') {
+        setIsGlobalCameraScannerOpen(true);
+      } else if (action === 'etransfer' || action === 'interac') {
+        setIsCashModalOpen(true);
+        setCashModalAction('deposit');
+      } else if (action === 'atm' || action === 'localcoin') {
+        setCurrentTab('bitcoin-atm');
+      } else if (action === 'send') {
+        setSendReceiveAction('send');
+        setIsSendReceiveOpen(true);
+      } else if (action === 'receive') {
+        setSendReceiveAction('receive');
+        setIsSendReceiveOpen(true);
+      }
+
+      if (uriParam) {
+        const decoded = decodeURIComponent(uriParam);
+        const parsed = parseQrOrDeepLink(decoded);
+        if (parsed.category === 'ETRANSFER' || parsed.source === 'INTERAC_ETRANSFER') {
+          setIsCashModalOpen(true);
+          setCashModalAction('deposit');
+          showToast(`Recognized Interac e-Transfer Link: ${parsed.displaySubtitle}`, 'success');
+        } else if (parsed.category === 'ATM_CASHOUT') {
+          setCurrentTab('bitcoin-atm');
+          showToast(`Recognized ATM Cash-Out Voucher: ${parsed.displaySubtitle}`, 'success');
+        } else {
+          setSendReceivePrefill({
+            recipient: parsed.address || '',
+            amount: parsed.amount ? parsed.amount.toString() : '',
+            symbol: parsed.currency || 'BTC',
+            memo: parsed.memo || ''
+          });
+          setSendReceiveAction('send');
+          setIsSendReceiveOpen(true);
+          showToast(`Recognized ${parsed.displayTitle}: ${parsed.displaySubtitle}`, 'success');
+        }
+      } else if (addressParam || amountParam) {
+        setSendReceivePrefill({
+          recipient: addressParam || '',
+          amount: amountParam || '',
+          symbol: (currencyParam || 'BTC').toUpperCase(),
+          memo: memoParam || ''
+        });
+        setSendReceiveAction('send');
+        setIsSendReceiveOpen(true);
+      }
+    } catch (e) {
+      if ((import.meta as any).env?.DEV) {
+        console.warn('[Deep Link Parse Notice]:', e);
+      }
+    }
+  }, []);
+
   // Synchronize state with Firebase Firestore for cross-device persistence
   useEffect(() => {
     if (!isAuthenticated || !userEmail || firestoreDisabledRef.current) return;
@@ -1765,19 +1854,37 @@ export default function App() {
           .map((h) => (h.symbol === symbol ? { ...h, amount: Math.max(0, h.amount - amount) } : h))
           .filter((h) => h.amount > 0)
       );
+      const newTxId = `tx-send-${Date.now()}`;
       const newTx: Transaction = {
-        id: `tx-send-${Date.now()}`,
+        id: newTxId,
         type: 'SEND',
         assetSymbol: symbol,
         amount: amount,
         fiatAmount: fiatAmount,
         timestamp: Date.now(),
-        status: 'completed',
+        status: 'pending',
+        stage: 'INITIATED',
+        stageLabel: 'Validating Signatures & Mempool Broadcast',
+        progressPercent: 25,
+        confirmations: 0,
+        requiredConfirmations: 3,
+        estimatedCompletionTime: 60,
         hash: txHash,
-        details: recipientAddress ? `Sent ${amount} ${symbol} to ${recipientAddress}` : `Sent to ${details}`
+        details: recipientAddress ? `Sent ${amount} ${symbol} to ${recipientAddress}` : `Sent to ${details}`,
+        ledgerDebit: `Asset Holding Account (${symbol})`,
+        ledgerCredit: `External Settlement Node (${recipientAddress || details || 'Mempool'})`
       };
       recordNewTransaction(newTx);
-      showToast(`Successfully broadcast ${amount.toFixed(6)} ${symbol} to ${recipientAddress || details}! Tx Hash: ${txHash}`, 'success');
+      
+      // Register with backend status tracking engine
+      fetch('/api/transactions/track', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(newTx)
+      }).catch(() => {});
+
+      showToast(`Broadcast initiated! Tracking real-time progress for ${amount.toFixed(6)} ${symbol} in Ledger...`, 'info');
       return true;
     } else if (type === 'RECEIVE') {
       const generatedTxHash = `0x${Math.random().toString(16).substring(2, 14)}${Date.now().toString(16)}`;
@@ -1789,19 +1896,37 @@ export default function App() {
           return [...prev, { symbol, amount, avgBuyPrice: coin?.price || 0 }];
         }
       });
+      const newTxId = `tx-receive-${Date.now()}`;
       const newTx: Transaction = {
-        id: `tx-receive-${Date.now()}`,
+        id: newTxId,
         type: 'RECEIVE',
         assetSymbol: symbol,
         amount: amount,
         fiatAmount: fiatAmount,
         timestamp: Date.now(),
-        status: 'completed',
+        status: 'pending',
+        stage: 'INITIATED',
+        stageLabel: 'Detecting Inbound Block Transaction',
+        progressPercent: 30,
+        confirmations: 0,
+        requiredConfirmations: 3,
+        estimatedCompletionTime: 45,
         hash: generatedTxHash,
-        details: details || `Received external deposit`
+        details: details || `Received external deposit`,
+        ledgerDebit: `Inbound Clearing Node`,
+        ledgerCredit: `Asset Holding Account (${symbol})`
       };
       recordNewTransaction(newTx);
-      showToast(`Deposit of ${amount.toFixed(6)} ${symbol} ($${fiatAmount.toFixed(2)}) confirmed!`, 'success');
+
+      // Register with backend status tracking engine
+      fetch('/api/transactions/track', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(newTx)
+      }).catch(() => {});
+
+      showToast(`Inbound transfer detected! Tracking live confirmations in Ledger...`, 'info');
       return true;
     }
     return false;
@@ -1952,6 +2077,46 @@ export default function App() {
     });
   }, [coins, marketFilter, marketSearchQuery, watchlist]);
 
+  // --- Filtering transactions for Account Activity Ledger ---
+  const filteredLedgerTransactions = useMemo(() => {
+    return transactions.filter((tx) => {
+      // Status filter
+      if (ledgerFilter === 'PENDING' && !(tx.status === 'pending' || tx.status === 'processing')) {
+        return false;
+      }
+      if (ledgerFilter === 'COMPLETED' && (tx.status === 'pending' || tx.status === 'processing' || tx.status === 'failed')) {
+        return false;
+      }
+      if (ledgerFilter === 'CRYPTO') {
+        const cryptoSymbols = ['BTC', 'ETH', 'SOL', 'USDC', 'DOGE', 'ADA', 'XRP', 'DOT', 'AVAX', 'LINK', 'MATIC'];
+        if (!cryptoSymbols.includes(tx.assetSymbol)) return false;
+      }
+      if (ledgerFilter === 'FIAT') {
+        const fiatKeywords = ['CAD', 'USD', 'INTERAC', 'E-TRANSFER', 'WISE', 'STRIPE', 'BANK', 'WIRE'];
+        const hasFiat = fiatKeywords.some((kw) =>
+          tx.assetSymbol.toUpperCase().includes(kw) ||
+          tx.details?.toUpperCase().includes(kw) ||
+          tx.type === 'BUY' ||
+          tx.type === 'SELL'
+        );
+        if (!hasFiat) return false;
+      }
+
+      // Search query filter
+      if (ledgerSearchQuery.trim()) {
+        const q = ledgerSearchQuery.toLowerCase();
+        const matchDetails = tx.details?.toLowerCase().includes(q);
+        const matchSymbol = tx.assetSymbol?.toLowerCase().includes(q);
+        const matchHash = tx.hash?.toLowerCase().includes(q);
+        const matchType = tx.type?.toLowerCase().includes(q);
+        const matchStage = tx.stageLabel?.toLowerCase().includes(q);
+        return Boolean(matchDetails || matchSymbol || matchHash || matchType || matchStage);
+      }
+
+      return true;
+    });
+  }, [transactions, ledgerFilter, ledgerSearchQuery]);
+
   if (!isAuthenticated) {
     return (
       <div className="min-h-screen bg-gray-50/50 text-gray-900 font-sans flex flex-col justify-between">
@@ -2090,6 +2255,7 @@ export default function App() {
           setIsSendReceiveOpen(true);
         }}
         onOpenQrPay={() => setIsQrPayOpen(true)}
+        onOpenQrScanner={() => setIsGlobalCameraScannerOpen(true)}
         onOpenAppDownload={() => setIsAppDownloadOpen(true)}
         onOpenProof={() => setIsProofModalOpen(true)}
         onSearchSelect={(coin) => {
@@ -2917,22 +3083,43 @@ export default function App() {
               showToast={showToast}
             />
 
+            {/* Real-time Transaction Status Tracker & Mempool Polling Engine */}
+            <TransactionStatusTracker
+              transactions={transactions}
+              onUpdateAllTransactions={setTransactions}
+              showToast={showToast}
+              selectedFilter={ledgerFilter}
+              onFilterChange={setLedgerFilter}
+              searchQuery={ledgerSearchQuery}
+              onSearchChange={setLedgerSearchQuery}
+            />
+
             <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-xs">
               <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
               <h3 className="text-sm font-bold text-gray-900 flex items-center space-x-2">
                 <Clock className="h-4.5 w-4.5 text-gray-500" />
                 <span>Account Activity Ledger</span>
               </h3>
-              <span className="text-[10px] bg-slate-100 text-gray-500 font-bold px-2.5 py-0.5 rounded-full">
-                {transactions.length} Records
-              </span>
+              <div className="flex items-center space-x-2">
+                {transactions.some((t) => t.status === 'pending' || t.status === 'processing') && (
+                  <span className="text-[10px] bg-amber-50 text-amber-700 border border-amber-200 font-bold px-2 py-0.5 rounded-full flex items-center gap-1 animate-pulse">
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                    Live Polling
+                  </span>
+                )}
+                <span className="text-[10px] bg-slate-100 text-gray-500 font-bold px-2.5 py-0.5 rounded-full">
+                  {filteredLedgerTransactions.length} of {transactions.length} Records
+                </span>
+              </div>
             </div>
 
             <div className="divide-y divide-gray-100">
-              {transactions.length > 0 ? (
-                transactions.map((tx) => {
+              {filteredLedgerTransactions.length > 0 ? (
+                filteredLedgerTransactions.map((tx) => {
                   const isPositiveTx = tx.type === 'RECEIVE' || tx.type === 'EARN';
                   const isConvert = tx.type === 'CONVERT';
+                  const isPending = tx.status === 'pending' || tx.status === 'processing';
+                  const isFailed = tx.status === 'failed';
                   const txDate = new Date(tx.timestamp).toLocaleString(undefined, {
                     month: 'short',
                     day: 'numeric',
@@ -2946,30 +3133,61 @@ export default function App() {
                     <div key={tx.id} className="border-b border-gray-100 last:border-b-0">
                       <div
                         onClick={() => setExpandedTxId(isExpanded ? null : tx.id)}
-                        className="p-6 hover:bg-gray-50/50 transition-colors flex items-center justify-between cursor-pointer select-none"
+                        className={`p-5 sm:p-6 transition-colors flex items-center justify-between cursor-pointer select-none ${
+                          isPending ? 'bg-amber-50/40 hover:bg-amber-50/70' : 'hover:bg-gray-50/50'
+                        }`}
                       >
                         <div className="flex items-center space-x-3.5">
                           <div
-                            className={`w-10 h-10 rounded-full flex items-center justify-center text-white shrink-0 ${
-                              isConvert
+                            className={`w-10 h-10 rounded-full flex items-center justify-center text-white shrink-0 relative ${
+                              isPending
+                                ? 'bg-amber-500'
+                                : isConvert
                                 ? 'bg-amber-500'
                                 : isPositiveTx
                                 ? 'bg-green-600'
                                 : 'bg-[#0052FF]'
                             }`}
                           >
-                            {tx.type === 'BUY' && <ArrowUpRight className="h-5 w-5 rotate-90" />}
-                            {tx.type === 'SELL' && <ArrowUpRight className="h-5 w-5" />}
-                            {tx.type === 'SEND' && <ArrowUpRight className="h-5 w-5" />}
-                            {tx.type === 'RECEIVE' && <ArrowDownLeft className="h-5 w-5" />}
-                            {tx.type === 'EARN' && <Award className="h-5 w-5" />}
-                            {tx.type === 'CONVERT' && <RefreshCw className="h-5 w-5" />}
+                            {isPending ? (
+                              <RefreshCw className="h-5 w-5 animate-spin" />
+                            ) : tx.type === 'BUY' ? (
+                              <ArrowUpRight className="h-5 w-5 rotate-90" />
+                            ) : tx.type === 'SELL' ? (
+                              <ArrowUpRight className="h-5 w-5" />
+                            ) : tx.type === 'SEND' ? (
+                              <ArrowUpRight className="h-5 w-5" />
+                            ) : tx.type === 'RECEIVE' ? (
+                              <ArrowDownLeft className="h-5 w-5" />
+                            ) : tx.type === 'EARN' ? (
+                              <Award className="h-5 w-5" />
+                            ) : (
+                              <RefreshCw className="h-5 w-5" />
+                            )}
                           </div>
                           <div>
-                            <div className="flex items-center space-x-2">
+                            <div className="flex items-center space-x-2 flex-wrap gap-y-1">
                               <span className="text-sm font-bold text-gray-900">
                                 {tx.type} {tx.assetSymbol}
                               </span>
+
+                              {/* Real-time Status Badge */}
+                              {isPending ? (
+                                <span className="text-[10px] bg-amber-100 text-amber-800 font-bold px-2 py-0.5 rounded-full flex items-center gap-1 border border-amber-300">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping" />
+                                  <span>In-Flight ({tx.confirmations || 0}/3 Blocks)</span>
+                                </span>
+                              ) : isFailed ? (
+                                <span className="text-[10px] bg-red-100 text-red-700 font-bold px-2 py-0.5 rounded-full border border-red-200">
+                                  Failed / Rejected
+                                </span>
+                              ) : (
+                                <span className="text-[10px] bg-emerald-50 text-emerald-700 font-bold px-2 py-0.5 rounded-full flex items-center gap-1 border border-emerald-200">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                                  <span>Settled (3/3)</span>
+                                </span>
+                              )}
+
                               <span className="text-[10px] text-gray-400 font-mono font-medium">
                                 {txDate}
                               </span>
@@ -2980,7 +3198,7 @@ export default function App() {
 
                         <div className="flex items-center space-x-3">
                           <div className="text-right">
-                            <p className="text-sm font-bold text-gray-900 font-mono">
+                            <p className={`text-sm font-bold font-mono ${isPending ? 'text-amber-600' : 'text-gray-900'}`}>
                               {isPositiveTx ? '+' : isConvert ? '' : '-'}
                               {tx.assetSymbol === 'USD' ? '' : `${tx.amount.toFixed(5)} `}
                               {tx.assetSymbol === 'USD' ? `$${tx.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : tx.assetSymbol}
@@ -2998,6 +3216,31 @@ export default function App() {
                       {/* Expanded accounting ledger & hashcode details block */}
                       {isExpanded && (
                         <div className="px-6 pb-6 pt-2 bg-slate-50 border-t border-gray-100 text-xs text-gray-600 space-y-4 animate-slide-up">
+                          {/* In-Flight Real-Time Confirmation Progress Block */}
+                          {isPending && (
+                            <div className="bg-amber-50/80 border border-amber-200 rounded-xl p-3.5 space-y-2">
+                              <div className="flex items-center justify-between text-xs">
+                                <span className="font-bold text-amber-900 flex items-center gap-1.5">
+                                  <Clock className="w-3.5 h-3.5 text-amber-600 animate-spin" />
+                                  Real-Time Settlement Progress: {tx.progressPercent || 25}%
+                                </span>
+                                <span className="font-mono text-[11px] text-amber-700 font-bold">
+                                  Stage: {tx.stageLabel || 'Mempool Relay'}
+                                </span>
+                              </div>
+                              <div className="w-full bg-amber-200/60 rounded-full h-2 overflow-hidden">
+                                <div 
+                                  className="bg-amber-500 h-full rounded-full transition-all duration-500" 
+                                  style={{ width: `${tx.progressPercent || 25}%` }} 
+                                />
+                              </div>
+                              <div className="flex items-center justify-between text-[10px] text-amber-700 font-mono">
+                                <span>Confirmations: {tx.confirmations || 0}/{tx.requiredConfirmations || 3} Blocks</span>
+                                <span>{tx.estimatedCompletionTime ? `Estimated Time: ~${tx.estimatedCompletionTime}s` : 'Settlement in progress...'}</span>
+                              </div>
+                            </div>
+                          )}
+
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             
                             {/* Blockchain section */}
@@ -3006,9 +3249,11 @@ export default function App() {
                               
                               <div className="grid grid-cols-3 gap-1">
                                 <span className="text-[10px] text-gray-400 font-bold">Status:</span>
-                                <span className="col-span-2 text-gray-800 font-bold flex items-center text-[11px]">
-                                  <span className="w-1.5 h-1.5 rounded-full bg-green-500 mr-1.5" />
-                                  Broadcasted & Completed
+                                <span className="col-span-2 font-bold flex items-center text-[11px]">
+                                  <span className={`w-1.5 h-1.5 rounded-full mr-1.5 ${isPending ? 'bg-amber-500 animate-ping' : isFailed ? 'bg-red-500' : 'bg-green-500'}`} />
+                                  <span className={isPending ? 'text-amber-700' : isFailed ? 'text-red-700' : 'text-gray-800'}>
+                                    {isPending ? `Pending Confirmation (${tx.confirmations || 0}/3 Blocks)` : isFailed ? 'Transaction Rejected' : 'Broadcasted & Settled'}
+                                  </span>
                                 </span>
                               </div>
 
@@ -3099,7 +3344,9 @@ export default function App() {
                 })
               ) : (
                 <div className="p-12 text-center text-sm text-gray-500">
-                  No account transaction activity recorded yet.
+                  {ledgerSearchQuery || ledgerFilter !== 'ALL' 
+                    ? 'No transactions match the selected filter criteria.' 
+                    : 'No account transaction activity recorded yet.'}
                 </div>
               )}
             </div>
@@ -3563,8 +3810,15 @@ export default function App() {
         coins={coins}
         holdings={holdings}
         isOpen={isSendReceiveOpen}
-        onClose={() => setIsSendReceiveOpen(false)}
+        onClose={() => {
+          setIsSendReceiveOpen(false);
+          setSendReceivePrefill(null);
+        }}
         initialAction={sendReceiveAction}
+        initialSendAmount={sendReceivePrefill?.amount}
+        initialRecipient={sendReceivePrefill?.recipient}
+        initialSymbol={sendReceivePrefill?.symbol}
+        initialMemo={sendReceivePrefill?.memo}
         onExecuteTransaction={handleExecuteSendReceive}
       />
 
@@ -4193,11 +4447,41 @@ export default function App() {
         currentTab={currentTab}
         setCurrentTab={setCurrentTab}
         onOpenQrPay={() => setIsQrPayOpen(true)}
+        onOpenQrScanner={() => setIsGlobalCameraScannerOpen(true)}
         onOpenAppDownload={() => setIsAppDownloadOpen(true)}
         onOpenSendReceive={(act) => {
           setSendReceiveAction(act);
           setIsSendReceiveOpen(true);
         }}
+      />
+
+      {/* --- GLOBAL CAMERA QR SCANNER MODAL (LOCALCOIN ATM, INTERAC, CRYPTO) --- */}
+      <CameraQrScannerModal
+        isOpen={isGlobalCameraScannerOpen}
+        onClose={() => setIsGlobalCameraScannerOpen(false)}
+        onScanSuccess={(data) => {
+          setIsGlobalCameraScannerOpen(false);
+          const parsed = data.parsedResult || parseQrOrDeepLink(data.raw);
+          if (parsed.category === 'ETRANSFER' || parsed.source === 'INTERAC_ETRANSFER') {
+            setIsCashModalOpen(true);
+            setCashModalAction('deposit');
+            showToast(`Scanned Interac e-Transfer QR: ${parsed.displaySubtitle}`, 'success');
+          } else if (parsed.category === 'ATM_CASHOUT') {
+            setCurrentTab('bitcoin-atm');
+            showToast(`Scanned Localcoin ATM Cash-Out: ${parsed.displaySubtitle}`, 'success');
+          } else {
+            setSendReceivePrefill({
+              recipient: parsed.address || data.address,
+              amount: (parsed.amount ?? data.amount)?.toString() || '',
+              symbol: parsed.currency || 'BTC',
+              memo: parsed.memo || data.memo || ''
+            });
+            setSendReceiveAction('send');
+            setIsSendReceiveOpen(true);
+            showToast(`Recognized ${parsed.displayTitle}: ${parsed.displaySubtitle}`, 'success');
+          }
+        }}
+        showToast={showToast}
       />
     </div>
   );

@@ -24,7 +24,8 @@ import {
   Clock,
   ShieldAlert,
   TrendingUp,
-  Landmark
+  Landmark,
+  Camera
 } from 'lucide-react';
 import { Coin } from '../types';
 
@@ -35,6 +36,7 @@ interface HeaderProps {
   onSearchSelect: (coin: Coin) => void;
   onOpenSendReceive: (action: 'send' | 'receive') => void;
   onOpenQrPay?: () => void;
+  onOpenQrScanner?: () => void;
   onOpenAppDownload?: () => void;
   onOpenProof?: () => void;
   portfolioValue: number;
@@ -54,6 +56,7 @@ export default function Header({
   onSearchSelect,
   onOpenSendReceive,
   onOpenQrPay,
+  onOpenQrScanner,
   onOpenAppDownload,
   onOpenProof,
   portfolioValue,
@@ -313,6 +316,17 @@ export default function Header({
               <ArrowDownLeft className="h-3.5 w-3.5 text-gray-600" />
               <span>Receive</span>
             </button>
+            {onOpenQrScanner && (
+              <button
+                onClick={onOpenQrScanner}
+                className="px-2.5 py-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200/80 rounded-xl flex items-center space-x-1 transition-all cursor-pointer"
+                id="header-scan-qr-btn"
+                title="Scan Localcoin ATM, Interac e-Transfer or Crypto QR Code"
+              >
+                <Camera className="h-3.5 w-3.5 text-emerald-600" />
+                <span>Scan QR</span>
+              </button>
+            )}
             {onOpenQrPay && (
               <button
                 onClick={onOpenQrPay}
