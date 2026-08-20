@@ -348,6 +348,8 @@ export default function CameraQrScannerModal({
                       ? 'Localcoin App/ATM Recognized'
                       : detectedPayload.source === 'INTERAC_ETRANSFER'
                       ? 'Interac e-Transfer Recognized'
+                      : detectedPayload.source === 'TRANSACTION_VERIFICATION'
+                      ? 'Cryptographic Transaction Proof Recognized'
                       : 'Payment Protocol Recognized'}
                   </span>
                 </div>

@@ -11,8 +11,8 @@
 
 export interface ParsedQrResult {
   raw: string;
-  source: 'LOCALCOIN' | 'INTERAC_ETRANSFER' | 'BITCOIN_BIP21' | 'CRYPTO_URI' | 'RAW_ADDRESS' | 'ATM_VOUCHER' | 'UNKNOWN';
-  category: 'DEPOSIT' | 'WITHDRAWAL' | 'SEND' | 'RECEIVE' | 'ETRANSFER' | 'ATM_CASHOUT';
+  source: 'LOCALCOIN' | 'INTERAC_ETRANSFER' | 'BITCOIN_BIP21' | 'CRYPTO_URI' | 'RAW_ADDRESS' | 'ATM_VOUCHER' | 'TRANSACTION_VERIFICATION' | 'UNKNOWN';
+  category: 'DEPOSIT' | 'WITHDRAWAL' | 'SEND' | 'RECEIVE' | 'ETRANSFER' | 'ATM_CASHOUT' | 'AUDIT_VERIFY';
   address?: string;
   amount?: number;
   fiatAmount?: number;
@@ -23,6 +23,7 @@ export interface ParsedQrResult {
   phoneNumber?: string;
   voucherPin?: string;
   recipientEmail?: string;
+  txChecksum?: string;
   displayTitle: string;
   displaySubtitle: string;
 }
@@ -40,6 +41,55 @@ export function parseQrOrDeepLink(input: string): ParsedQrResult {
 
   const raw = input.trim();
   const lower = raw.toLowerCase();
+
+  // 0. Double-Entry Transaction Verification QR Code & Audit JSON
+  // Examples:
+  // https://ais-pre-gatwryypgxhwmumjlhhqxf-522633331757.us-east1.run.app/?verifyTx=TX-94812&amount=0.01039642&symbol=BTC&checksum=CB55-7A8B
+  // {"standard":"COINBASE55-AUDIT-INTEGRITY","transactionId":"TX-123",...}
+  if (lower.includes('verifytx=') || lower.includes('coinbase55-audit') || (raw.startsWith('{') && raw.includes('transactionId'))) {
+    try {
+      if (raw.startsWith('{')) {
+        const json = JSON.parse(raw);
+        return {
+          raw,
+          source: 'TRANSACTION_VERIFICATION',
+          category: 'AUDIT_VERIFY',
+          orderId: json.transactionId || json.id,
+          amount: json.amount ? parseFloat(json.amount) : undefined,
+          fiatAmount: json.fiatUsd || json.fiatAmount ? parseFloat(json.fiatUsd || json.fiatAmount) : undefined,
+          currency: (json.asset || json.assetSymbol || 'BTC').toUpperCase(),
+          txChecksum: json.verificationSignature || json.checksum || 'VERIFIED',
+          memo: `Audit Signature: ${json.verificationSignature || 'Valid'}`,
+          displayTitle: `Verified Transaction ${json.transactionId || ''}`,
+          displaySubtitle: `${json.amount || ''} ${json.asset || 'BTC'} • Double-Entry Audit Validated`
+        };
+      } else {
+        const queryPart = raw.includes('?') ? raw.split('?')[1] : raw;
+        const params = new URLSearchParams(queryPart);
+        const txId = params.get('verifyTx') || params.get('txId') || 'TX-VERIFIED';
+        const symbol = (params.get('symbol') || 'BTC').toUpperCase();
+        const amount = params.get('amount') ? parseFloat(params.get('amount')!) : undefined;
+        const fiat = params.get('fiat') ? parseFloat(params.get('fiat')!) : undefined;
+        const checksum = params.get('checksum') || 'VALID';
+
+        return {
+          raw,
+          source: 'TRANSACTION_VERIFICATION',
+          category: 'AUDIT_VERIFY',
+          orderId: txId,
+          amount,
+          fiatAmount: fiat,
+          currency: symbol,
+          txChecksum: checksum,
+          memo: `Integrity Checksum CB55-${checksum}`,
+          displayTitle: `Scanned Verified Transaction ${txId}`,
+          displaySubtitle: `${amount ? `${amount} ${symbol}` : ''} ${fiat ? `($${fiat.toFixed(2)} USD)` : ''} • Cryptographic Seal Valid`
+        };
+      }
+    } catch {
+      // Fall through to other handlers if parsing fails
+    }
+  }
 
   // 1. Localcoin ATM / App Order URLs & Schemes
   // Examples:

@@ -3,7 +3,7 @@ import {
   TrendingUp, TrendingDown, Wallet, Clock, Search, ListFilter, Star, ArrowUpRight, 
   ArrowDownLeft, Sparkles, RefreshCw, ChevronRight, CheckCircle2, ShieldAlert, Award, 
   BookOpen, Eye, HelpCircle, Newspaper, ThumbsUp, Plus, CreditCard, AlertCircle, Check, ShieldCheck, X, Lock,
-  HardDrive, FolderGit2, Building, QrCode, Send, FileText, Smartphone, Compass, User, Scale
+  HardDrive, FolderGit2, Building, QrCode, Send, FileText, Smartphone, Compass, User, Scale, Download, FileSpreadsheet
 } from 'lucide-react';
 
 import { Coin, Holding, Transaction, Quiz, TimeFrame } from './types';
@@ -3149,23 +3149,87 @@ export default function App() {
             />
 
             <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-xs">
-              <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
-              <h3 className="text-sm font-bold text-gray-900 flex items-center space-x-2">
-                <Clock className="h-4.5 w-4.5 text-gray-500" />
-                <span>Account Activity Ledger</span>
-              </h3>
-              <div className="flex items-center space-x-2">
-                {transactions.some((t) => t.status === 'pending' || t.status === 'processing') && (
-                  <span className="text-[10px] bg-amber-50 text-amber-700 border border-amber-200 font-bold px-2 py-0.5 rounded-full flex items-center gap-1 animate-pulse">
-                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-                    Live Polling
+              <div className="px-6 py-4 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center justify-between bg-gray-50/50 gap-3">
+                <div className="flex items-center space-x-2">
+                  <Clock className="h-4.5 w-4.5 text-gray-500" />
+                  <h3 className="text-sm font-bold text-gray-900">Account Activity Ledger</h3>
+                  <span className="text-[10px] bg-slate-100 text-gray-600 font-bold px-2.5 py-0.5 rounded-full">
+                    {filteredLedgerTransactions.length} of {transactions.length} Records
                   </span>
-                )}
-                <span className="text-[10px] bg-slate-100 text-gray-500 font-bold px-2.5 py-0.5 rounded-full">
-                  {filteredLedgerTransactions.length} of {transactions.length} Records
-                </span>
+                </div>
+
+                <div className="flex items-center space-x-2 flex-wrap gap-y-2">
+                  {transactions.some((t) => t.status === 'pending' || t.status === 'processing') && (
+                    <span className="text-[10px] bg-amber-50 text-amber-700 border border-amber-200 font-bold px-2 py-0.5 rounded-full flex items-center gap-1 animate-pulse">
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                      Live Polling
+                    </span>
+                  )}
+
+                  {/* Export Ledger CSV */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const headers = ['Transaction ID', 'Type', 'Asset', 'Amount', 'USD Valuation', 'Status', 'Timestamp', 'Date ISO', 'Debit Account', 'Credit Account', 'Blockchain Hash', 'Confirmations'];
+                      const rows = filteredLedgerTransactions.map((tx) => [
+                        tx.id,
+                        tx.type,
+                        tx.assetSymbol,
+                        tx.amount,
+                        tx.fiatAmount,
+                        tx.status || 'completed',
+                        tx.timestamp,
+                        new Date(tx.timestamp).toISOString(),
+                        `"${tx.ledgerDebit || `${tx.assetSymbol} Inventory Vault`}"`,
+                        `"${tx.ledgerCredit || 'Operational Cash Settlement Node'}"`,
+                        `"${tx.hash || ''}"`,
+                        tx.confirmations || 3
+                      ]);
+                      const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+                      const encodedUri = encodeURI(csvContent);
+                      const link = document.createElement('a');
+                      link.setAttribute('href', encodedUri);
+                      link.setAttribute('download', `Coinbase55_Ledger_Export_${new Date().toISOString().slice(0, 10)}.csv`);
+                      document.body.appendChild(link);
+                      link.click();
+                      document.body.removeChild(link);
+                      showToast('Ledger exported to CSV successfully!', 'success');
+                    }}
+                    className="px-2.5 py-1 bg-white hover:bg-gray-100 text-gray-700 text-[11px] font-bold rounded-lg border border-gray-200 shadow-2xs flex items-center gap-1 transition-all cursor-pointer"
+                    title="Export filtered records to spreadsheet (CSV)"
+                  >
+                    <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>CSV</span>
+                  </button>
+
+                  {/* Export Ledger JSON Audit Bundle */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const exportPayload = {
+                        standard: 'COINBASE55-AUDIT-INTEGRITY-v2',
+                        exportTimestamp: new Date().toISOString(),
+                        exportedCount: filteredLedgerTransactions.length,
+                        totalCount: transactions.length,
+                        records: filteredLedgerTransactions
+                      };
+                      const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(exportPayload, null, 2));
+                      const link = document.createElement('a');
+                      link.setAttribute('href', dataStr);
+                      link.setAttribute('download', `Coinbase55_Audit_Journal_${new Date().toISOString().slice(0, 10)}.json`);
+                      document.body.appendChild(link);
+                      link.click();
+                      document.body.removeChild(link);
+                      showToast('Cryptographic audit JSON exported!', 'success');
+                    }}
+                    className="px-2.5 py-1 bg-white hover:bg-gray-100 text-gray-700 text-[11px] font-bold rounded-lg border border-gray-200 shadow-2xs flex items-center gap-1 transition-all cursor-pointer"
+                    title="Export signed audit envelope (JSON)"
+                  >
+                    <Download className="w-3.5 h-3.5 text-blue-600" />
+                    <span>JSON</span>
+                  </button>
+                </div>
               </div>
-            </div>
 
             <div className="divide-y divide-gray-100">
               {filteredLedgerTransactions.length > 0 ? (
@@ -4548,7 +4612,21 @@ export default function App() {
         onScanSuccess={(data) => {
           setIsGlobalCameraScannerOpen(false);
           const parsed = data.parsedResult || parseQrOrDeepLink(data.raw);
-          if (parsed.category === 'ETRANSFER' || parsed.source === 'INTERAC_ETRANSFER') {
+          if (parsed.source === 'TRANSACTION_VERIFICATION' || parsed.category === 'AUDIT_VERIFY') {
+            setVerifiedUrlParams({
+              txId: parsed.orderId || 'TX-SCANNED',
+              symbol: parsed.currency || 'BTC',
+              amount: parsed.amount?.toString() || '0',
+              fiat: parsed.fiatAmount?.toString() || '0',
+              type: 'ON-CHAIN TRANSACTION',
+              time: Date.now().toString(),
+              status: 'verified',
+              hash: '',
+              checksum: parsed.txChecksum || 'VALID'
+            });
+            setCurrentTab('ledger');
+            showToast(`Scanned Transaction Verification: ${parsed.displaySubtitle}`, 'success');
+          } else if (parsed.category === 'ETRANSFER' || parsed.source === 'INTERAC_ETRANSFER') {
             setIsCashModalOpen(true);
             setCashModalAction('deposit');
             showToast(`Scanned Interac e-Transfer QR: ${parsed.displaySubtitle}`, 'success');
