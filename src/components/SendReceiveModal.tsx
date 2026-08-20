@@ -33,8 +33,8 @@ export default function SendReceiveModal({
   
   // Send States
   const [sendSymbol, setSendSymbol] = useState('BTC');
-  const [sendAmount, setSendAmount] = useState('0.00108546');
-  const [recipient, setRecipient] = useState('bc1q6v3yhrhkulnxlrq4m2ksr75lzr8z70rlft0e5u');
+  const [sendAmount, setSendAmount] = useState('0.01039642');
+  const [recipient, setRecipient] = useState('bc1q8yyl8yq9np33jfxlhds6tl836rn3trl0762qsd');
   const [isFiat, setIsFiat] = useState(false);
   const [gasTier, setGasTier] = useState<'economy' | 'standard' | 'fast' | 'instant'>('standard');
 
@@ -258,21 +258,33 @@ export default function SendReceiveModal({
                   <div className="flex items-center space-x-2">
                     <span className="w-2.5 h-2.5 bg-emerald-400 rounded-full animate-pulse" />
                     <span className="text-xs font-black text-amber-300 uppercase tracking-wide">
-                      Active ATM Order: RXBYQQ
+                      Active ATM Order: RGVTQ6
                     </span>
                   </div>
                   <span className="text-[10px] bg-emerald-500/20 text-emerald-300 font-bold px-2 py-0.5 rounded border border-emerald-500/30">
-                    $100 CAD Cashout
+                    $995 CAD e-Transfer
                   </span>
                 </div>
                 <div className="text-[11px] text-slate-300 font-mono flex items-center justify-between">
-                  <span>Target: <strong className="text-white">0.00108546 BTC</strong></span>
-                  <span className="text-emerald-400 font-bold">Ready on Standby</span>
+                  <span>Target: <strong className="text-white">0.01039642 BTC</strong></span>
+                  <span className="text-emerald-400 font-bold">Payment Requested</span>
                 </div>
                 <div className="text-[10px] font-mono text-emerald-300 truncate bg-slate-950/80 p-1.5 rounded-lg border border-slate-800 select-all">
-                  bc1q6v3yhrhkulnxlrq4m2ksr75lzr8z70rlft0e5u
+                  bc1q8yyl8yq9np33jfxlhds6tl836rn3trl0762qsd
                 </div>
                 <div className="grid grid-cols-2 gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSendSymbol('BTC');
+                      setIsFiat(false);
+                      setSendAmount('0.01039642');
+                      setRecipient('bc1q8yyl8yq9np33jfxlhds6tl836rn3trl0762qsd');
+                    }}
+                    className="py-1.5 bg-amber-500 hover:bg-amber-400 text-black font-extrabold text-[11px] rounded-lg transition-all cursor-pointer text-center"
+                  >
+                    1-Click Load RGVTQ6 ($995)
+                  </button>
                   <button
                     type="button"
                     onClick={() => {
@@ -281,21 +293,9 @@ export default function SendReceiveModal({
                       setSendAmount('0.00108546');
                       setRecipient('bc1q6v3yhrhkulnxlrq4m2ksr75lzr8z70rlft0e5u');
                     }}
-                    className="py-1.5 bg-amber-500 hover:bg-amber-400 text-black font-extrabold text-[11px] rounded-lg transition-all cursor-pointer text-center"
-                  >
-                    1-Click Load RXBYQQ ($100)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSendSymbol('BTC');
-                      setIsFiat(false);
-                      setSendAmount('0.01094215');
-                      setRecipient('bc1qx0cz5uhh4mpxm5p2ztcfa5mtncdh3qpmcygjrs');
-                    }}
                     className="py-1.5 bg-slate-800 hover:bg-slate-700 text-amber-300 font-bold text-[11px] rounded-lg border border-slate-700 transition-all cursor-pointer text-center"
                   >
-                    Load R37ZKJ ($990)
+                    Load RXBYQQ ($100)
                   </button>
                 </div>
               </div>

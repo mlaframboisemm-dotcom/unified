@@ -86,8 +86,8 @@ export default function BitcoinAtmHub({
   const [cashAmountInput, setCashAmountInput] = useState<string>('200');
 
   // Cash-out (BTC -> Cash) State
-  const [cashoutAmountFiat, setCashoutAmountFiat] = useState<number>(200);
-  const [cashoutPhoneNumber, setCashoutPhoneNumber] = useState<string>('+1 (555) 019-2834');
+  const [cashoutAmountFiat, setCashoutAmountFiat] = useState<number>(995);
+  const [cashoutPhoneNumber, setCashoutPhoneNumber] = useState<string>('9057184275');
   const [activeVoucher, setActiveVoucher] = useState<{
     id: string;
     pin: string;
@@ -533,7 +533,7 @@ export default function BitcoinAtmHub({
       {/* MODE 2: CASHOUT (SELL BTC FOR PAPER CASH AT 2-WAY ATMS) */}
       {activeMode === 'cashout' && (
         <div className="space-y-6">
-          {/* Active Configured Standby Order R37ZKJ Banner */}
+          {/* Active Configured Standby Order RGVTQ6 Banner */}
           <div className="bg-gradient-to-r from-amber-950 via-slate-900 to-slate-950 text-white rounded-3xl p-6 border border-amber-500/50 shadow-xl space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
               <div className="flex items-center space-x-3">
@@ -542,55 +542,70 @@ export default function BitcoinAtmHub({
                 </div>
                 <div>
                   <div className="flex items-center space-x-2">
-                    <h4 className="text-sm font-black text-white">Active Configured ATM Order: RXBYQQ</h4>
+                    <h4 className="text-sm font-black text-white">Active Order: RGVTQ6 (Localcoin Interac e-Transfer)</h4>
                     <span className="bg-emerald-500/20 text-emerald-300 text-[10px] font-extrabold px-2 py-0.5 rounded border border-emerald-500/40">
-                      Standby Ready
+                      Payment Requested
                     </span>
                   </div>
                   <p className="text-xs text-slate-400">
-                    Localcoin ATM Kiosk • $100.00 CAD Cash Dispense Target
+                    Localcoin e-Transfer • Phone: 905-718-4275 • $995.00 CAD Payout Target
                   </p>
                 </div>
               </div>
               <span className="text-xs font-mono font-bold text-amber-400 bg-slate-950 px-3 py-1.5 rounded-xl border border-slate-800 self-start sm:self-auto">
-                0.00108546 BTC
+                0.01039642 BTC
               </span>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-3 text-xs">
               <div className="p-3 bg-slate-950/80 rounded-xl border border-slate-800">
                 <span className="text-[10px] uppercase font-bold text-slate-400 block mb-0.5">Order ID</span>
-                <span className="font-mono font-bold text-white">RXBYQQ (Localcoin)</span>
+                <span className="font-mono font-bold text-white">RGVTQ6 (Localcoin)</span>
               </div>
               <div className="p-3 bg-slate-950/80 rounded-xl border border-slate-800">
-                <span className="text-[10px] uppercase font-bold text-slate-400 block mb-0.5">Cash Output</span>
-                <span className="font-mono font-bold text-emerald-400">$100.00 CAD</span>
+                <span className="text-[10px] uppercase font-bold text-slate-400 block mb-0.5">Cash Payout</span>
+                <span className="font-mono font-bold text-emerald-400">$995.00 CAD</span>
               </div>
               <div className="p-3 bg-slate-950/80 rounded-xl border border-slate-800">
-                <span className="text-[10px] uppercase font-bold text-slate-400 block mb-0.5">Crypto Amount</span>
-                <span className="font-mono font-bold text-amber-400">0.00108546 BTC</span>
+                <span className="text-[10px] uppercase font-bold text-slate-400 block mb-0.5">Crypto Due</span>
+                <span className="font-mono font-bold text-amber-400">0.01039642 BTC</span>
+              </div>
+              <div className="p-3 bg-slate-950/80 rounded-xl border border-slate-800">
+                <span className="text-[10px] uppercase font-bold text-slate-400 block mb-0.5">Linked Phone</span>
+                <span className="font-mono font-bold text-sky-400">905-718-4275</span>
               </div>
             </div>
 
             <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
               <div className="truncate">
-                <span className="text-[10px] uppercase font-bold text-slate-400 block">Configured Destination Address</span>
+                <span className="text-[10px] uppercase font-bold text-slate-400 block">Localcoin Receiving Address</span>
                 <span className="font-mono text-emerald-300 text-[11px] select-all">
-                  bc1q6v3yhrhkulnxlrq4m2ksr75lzr8z70rlft0e5u
+                  bc1q8yyl8yq9np33jfxlhds6tl836rn3trl0762qsd
                 </span>
               </div>
-              <button
-                onClick={() => {
-                  if (onOpenSendReceive) {
-                    onOpenSendReceive('send');
-                  }
-                  showToast('Localcoin Order RXBYQQ loaded in Send modal! Tap Confirm to broadcast.', 'success');
-                }}
-                className="px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-black font-black text-xs rounded-xl shadow-md cursor-pointer transition-all shrink-0 flex items-center justify-center gap-1.5"
-              >
-                <span>Open 1-Click Send for Order RXBYQQ</span>
-                <ArrowUpRight className="w-3.5 h-3.5" />
-              </button>
+              <div className="flex items-center gap-2 shrink-0">
+                <a
+                  href="https://localcoinatm.com/e-transfer?orderId=RGVTQ6&phoneNumber=9057184275"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs rounded-xl border border-slate-700 cursor-pointer transition-all flex items-center gap-1"
+                >
+                  <span>View Localcoin Order</span>
+                  <ArrowUpRight className="w-3.5 h-3.5" />
+                </a>
+                <button
+                  onClick={() => {
+                    if (onOpenSendReceive) {
+                      onOpenSendReceive('send');
+                    }
+                    showToast('Localcoin Order RGVTQ6 loaded in Send modal! Tap Confirm to broadcast 0.01039642 BTC.', 'success');
+                  }}
+                  className="px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-black font-black text-xs rounded-xl shadow-md cursor-pointer transition-all flex items-center justify-center gap-1.5"
+                >
+                  <span>Open 1-Click Send (RGVTQ6)</span>
+                  <ArrowUpRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
             </div>
           </div>
 
