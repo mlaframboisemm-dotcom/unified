@@ -79,6 +79,11 @@ initialize_interbank_vault()
 # =====================================================================
 # SYSTEM CORE ROUTERS (MONOLITHIC CONTROLLER)
 # =====================================================================
+@app.get("/")
+@app.head("/")
+async def root_health():
+    return {"status": "healthy", "service": "sovereigns-interbank-gateway"}
+
 @app.post("/api/v1/interac/initiate")
 async def initiate_branded_transaction_session(payload: TransactionManifestSchema):
     """

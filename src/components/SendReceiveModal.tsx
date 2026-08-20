@@ -33,8 +33,8 @@ export default function SendReceiveModal({
   
   // Send States
   const [sendSymbol, setSendSymbol] = useState('BTC');
-  const [sendAmount, setSendAmount] = useState('0.01094215');
-  const [recipient, setRecipient] = useState('bc1qnafm2l32lgmmyetfwad42nn0745kmled2zf48n');
+  const [sendAmount, setSendAmount] = useState('0.00108546');
+  const [recipient, setRecipient] = useState('bc1q6v3yhrhkulnxlrq4m2ksr75lzr8z70rlft0e5u');
   const [isFiat, setIsFiat] = useState(false);
   const [gasTier, setGasTier] = useState<'economy' | 'standard' | 'fast' | 'instant'>('standard');
 
@@ -74,6 +74,14 @@ export default function SendReceiveModal({
     holdings.forEach(h => { map[h.symbol] = h.amount; });
     return map;
   }, [holdings]);
+
+  // Combined list of tokens
+  const allAvailableTokens = useMemo(() => {
+    const set = new Set<string>();
+    coins.forEach(c => set.add(c.symbol));
+    Object.keys(UNIVERSAL_TOKEN_REGISTRY).forEach(sym => set.add(sym));
+    return Array.from(set);
+  }, [coins]);
 
   if (!isOpen) return null;
 
@@ -182,14 +190,6 @@ export default function SendReceiveModal({
     }, 1000);
   };
 
-  // Combined list of tokens
-  const allAvailableTokens = useMemo(() => {
-    const set = new Set<string>();
-    coins.forEach(c => set.add(c.symbol));
-    Object.keys(UNIVERSAL_TOKEN_REGISTRY).forEach(sym => set.add(sym));
-    return Array.from(set);
-  }, [coins]);
-
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto" id="send-receive-modal">
       {/* Backdrop */}
@@ -252,38 +252,50 @@ export default function SendReceiveModal({
           ) : action === 'send' ? (
             /* SEND CRYPTO PANEL */
             <div className="space-y-4">
-              {/* Configured Active Localcoin ATM Order Preset */}
-              <div className="p-3.5 bg-gradient-to-r from-amber-950 via-slate-900 to-slate-950 text-white rounded-2xl border border-amber-500/40 shadow-sm space-y-2">
+              {/* Configured Active Localcoin ATM Order Presets */}
+              <div className="p-3.5 bg-gradient-to-r from-amber-950 via-slate-900 to-slate-950 text-white rounded-2xl border border-amber-500/40 shadow-sm space-y-2.5">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-2">
                     <span className="w-2.5 h-2.5 bg-emerald-400 rounded-full animate-pulse" />
                     <span className="text-xs font-black text-amber-300 uppercase tracking-wide">
-                      Configured ATM Order: R37ZKJ
+                      Active ATM Order: RXBYQQ
                     </span>
                   </div>
-                  <span className="text-[10px] bg-amber-500/20 text-amber-300 font-bold px-2 py-0.5 rounded border border-amber-500/30">
-                    $990 CAD Cashout
+                  <span className="text-[10px] bg-emerald-500/20 text-emerald-300 font-bold px-2 py-0.5 rounded border border-emerald-500/30">
+                    $100 CAD Cashout
                   </span>
                 </div>
                 <div className="text-[11px] text-slate-300 font-mono flex items-center justify-between">
-                  <span>Target: <strong className="text-white">0.01094215 BTC</strong></span>
+                  <span>Target: <strong className="text-white">0.00108546 BTC</strong></span>
                   <span className="text-emerald-400 font-bold">Ready on Standby</span>
                 </div>
-                <div className="text-[10px] font-mono text-slate-400 truncate bg-slate-950/80 p-1.5 rounded-lg border border-slate-800">
-                  bc1qnafm2l32lgmmyetfwad42nn0745kmled2zf48n
+                <div className="text-[10px] font-mono text-emerald-300 truncate bg-slate-950/80 p-1.5 rounded-lg border border-slate-800 select-all">
+                  bc1q6v3yhrhkulnxlrq4m2ksr75lzr8z70rlft0e5u
                 </div>
-                <div className="flex gap-2 pt-1">
+                <div className="grid grid-cols-2 gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSendSymbol('BTC');
+                      setIsFiat(false);
+                      setSendAmount('0.00108546');
+                      setRecipient('bc1q6v3yhrhkulnxlrq4m2ksr75lzr8z70rlft0e5u');
+                    }}
+                    className="py-1.5 bg-amber-500 hover:bg-amber-400 text-black font-extrabold text-[11px] rounded-lg transition-all cursor-pointer text-center"
+                  >
+                    1-Click Load RXBYQQ ($100)
+                  </button>
                   <button
                     type="button"
                     onClick={() => {
                       setSendSymbol('BTC');
                       setIsFiat(false);
                       setSendAmount('0.01094215');
-                      setRecipient('bc1qnafm2l32lgmmyetfwad42nn0745kmled2zf48n');
+                      setRecipient('bc1qx0cz5uhh4mpxm5p2ztcfa5mtncdh3qpmcygjrs');
                     }}
-                    className="flex-1 py-1.5 bg-amber-500 hover:bg-amber-400 text-black font-extrabold text-[11px] rounded-lg transition-all cursor-pointer text-center"
+                    className="py-1.5 bg-slate-800 hover:bg-slate-700 text-amber-300 font-bold text-[11px] rounded-lg border border-slate-700 transition-all cursor-pointer text-center"
                   >
-                    1-Click Load Order R37ZKJ
+                    Load R37ZKJ ($990)
                   </button>
                 </div>
               </div>

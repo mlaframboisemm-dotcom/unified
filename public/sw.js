@@ -1,4 +1,4 @@
-const CACHE_NAME = 'sovereign-live-v3';
+const CACHE_NAME = 'sovereign-live-v4';
 const ASSETS = [
   '/manifest.json',
   '/icon-192.png',

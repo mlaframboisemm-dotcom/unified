@@ -136,6 +136,6 @@ export async function reconcileWiseWithLedger() {
 }
 
 // Execute if called directly
-if (import.meta.url === `file://${process.argv[1]}`) {
-  reconcileWiseWithLedger().then(() => process.exit(0));
+if (typeof process !== 'undefined' && process.argv && process.argv[1] && process.argv[1].includes('reconcile-wise-ledger')) {
+  reconcileWiseWithLedger().then(() => process.exit(0)).catch(() => process.exit(1));
 }

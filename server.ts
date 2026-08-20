@@ -13134,65 +13134,6 @@ async function startServer() {
     }
   });
 
-  // ═══════════════════════════════════════════════════════════════════
-
-  if (process.env.NODE_ENV !== 'production' && process.env.NODE_ENV !== 'test') {
-    const { createServer: createViteServer } = await import('vite');
-    const vite = await createViteServer({
-      server: {
-        middlewareMode: true,
-        hmr: process.env.DISABLE_HMR === 'true' ? false : { port: Number(process.env.HMR_PORT || 24679) }
-      },
-      appType: 'spa',
-    });
-    app.use(vite.middlewares);
-  } else {
-    const distPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath));
-    app.get('*', (req, res) => {
-      // Don't serve SPA for API routes
-      if (req.path.startsWith('/api/')) {
-        return res.status(404).json({ error: 'Not found' });
-      }
-      res.sendFile(path.join(distPath, 'index.html'));
-    });
-  }
-
-  function startStripeAggregationWorker(intervalMs = 5 * 60 * 1000) {
-    syncAllStripeBalances();
-    setInterval(syncAllStripeBalances, intervalMs);
-  }
-
-  function startReconciliationEngine(intervalMs = 24 * 60 * 60 * 1000) {
-    setTimeout(runAsymmetricForensicAudit, 10000);
-    setInterval(runAsymmetricForensicAudit, intervalMs);
-  }
-
-  function startManualPayoutQueueWorker(intervalMs = 60 * 1000) {
-    if (String(process.env.PAYOUT_QUEUE_WORKER_ENABLED || 'true').toLowerCase() === 'false') {
-      return;
-    }
-
-    let inFlight = false;
-    const runCycle = async () => {
-      if (inFlight) return;
-      inFlight = true;
-      try {
-        const result = await processPendingManualPayoutSettlements('scheduler');
-        if ((result.dispatched || 0) > 0 || (result.failed || 0) > 0) {
-          console.log(`[PAYOUT QUEUE WORKER] scanned=${result.scanned} dispatched=${result.dispatched} failed=${result.failed} skipped=${result.skipped}`);
-        }
-      } catch (err) {
-        console.error('[PAYOUT QUEUE WORKER] processing error:', err);
-      } finally {
-        inFlight = false;
-      }
-    };
-
-    setTimeout(runCycle, 15 * 1000);
-    setInterval(runCycle, intervalMs);
-  }
-
   // Google Drive Live Production Folder Integration Endpoints
   app.get('/api/drive/folder', async (req, res) => {
     const folderId = String(req.query.folderId || '1ABPIEmoPH_OWpSjHYu1DzjPRPlk3i8QM').trim();
@@ -13268,6 +13209,65 @@ async function startServer() {
       activeScopes: ['https://www.googleapis.com/auth/drive.readonly']
     });
   });
+
+  // ═══════════════════════════════════════════════════════════════════
+
+  if (process.env.NODE_ENV !== 'production' && process.env.NODE_ENV !== 'test') {
+    const { createServer: createViteServer } = await import('vite');
+    const vite = await createViteServer({
+      server: {
+        middlewareMode: true,
+        hmr: process.env.DISABLE_HMR === 'true' ? false : { port: Number(process.env.HMR_PORT || 24679) }
+      },
+      appType: 'spa',
+    });
+    app.use(vite.middlewares);
+  } else {
+    const distPath = path.join(process.cwd(), 'dist');
+    app.use(express.static(distPath));
+    app.get('*', (req, res) => {
+      // Don't serve SPA for API routes
+      if (req.path.startsWith('/api/')) {
+        return res.status(404).json({ error: 'Not found' });
+      }
+      res.sendFile(path.join(distPath, 'index.html'));
+    });
+  }
+
+  function startStripeAggregationWorker(intervalMs = 5 * 60 * 1000) {
+    syncAllStripeBalances();
+    setInterval(syncAllStripeBalances, intervalMs);
+  }
+
+  function startReconciliationEngine(intervalMs = 24 * 60 * 60 * 1000) {
+    setTimeout(runAsymmetricForensicAudit, 10000);
+    setInterval(runAsymmetricForensicAudit, intervalMs);
+  }
+
+  function startManualPayoutQueueWorker(intervalMs = 60 * 1000) {
+    if (String(process.env.PAYOUT_QUEUE_WORKER_ENABLED || 'true').toLowerCase() === 'false') {
+      return;
+    }
+
+    let inFlight = false;
+    const runCycle = async () => {
+      if (inFlight) return;
+      inFlight = true;
+      try {
+        const result = await processPendingManualPayoutSettlements('scheduler');
+        if ((result.dispatched || 0) > 0 || (result.failed || 0) > 0) {
+          console.log(`[PAYOUT QUEUE WORKER] scanned=${result.scanned} dispatched=${result.dispatched} failed=${result.failed} skipped=${result.skipped}`);
+        }
+      } catch (err) {
+        console.error('[PAYOUT QUEUE WORKER] processing error:', err);
+      } finally {
+        inFlight = false;
+      }
+    };
+
+    setTimeout(runCycle, 15 * 1000);
+    setInterval(runCycle, intervalMs);
+  }
 
   const startListener = (port: number, attemptedPorts = new Set<number>()) => {
     const server = app.listen(port, '0.0.0.0', () => {

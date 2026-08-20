@@ -542,33 +542,33 @@ export default function BitcoinAtmHub({
                 </div>
                 <div>
                   <div className="flex items-center space-x-2">
-                    <h4 className="text-sm font-black text-white">Active Configured ATM Order: R37ZKJ</h4>
+                    <h4 className="text-sm font-black text-white">Active Configured ATM Order: RXBYQQ</h4>
                     <span className="bg-emerald-500/20 text-emerald-300 text-[10px] font-extrabold px-2 py-0.5 rounded border border-emerald-500/40">
                       Standby Ready
                     </span>
                   </div>
                   <p className="text-xs text-slate-400">
-                    Localcoin ATM Kiosk • $990.00 CAD Cash Dispense Target
+                    Localcoin ATM Kiosk • $100.00 CAD Cash Dispense Target
                   </p>
                 </div>
               </div>
               <span className="text-xs font-mono font-bold text-amber-400 bg-slate-950 px-3 py-1.5 rounded-xl border border-slate-800 self-start sm:self-auto">
-                0.01094215 BTC
+                0.00108546 BTC
               </span>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
               <div className="p-3 bg-slate-950/80 rounded-xl border border-slate-800">
                 <span className="text-[10px] uppercase font-bold text-slate-400 block mb-0.5">Order ID</span>
-                <span className="font-mono font-bold text-white">R37ZKJ (Localcoin)</span>
+                <span className="font-mono font-bold text-white">RXBYQQ (Localcoin)</span>
               </div>
               <div className="p-3 bg-slate-950/80 rounded-xl border border-slate-800">
                 <span className="text-[10px] uppercase font-bold text-slate-400 block mb-0.5">Cash Output</span>
-                <span className="font-mono font-bold text-emerald-400">$990.00 CAD</span>
+                <span className="font-mono font-bold text-emerald-400">$100.00 CAD</span>
               </div>
               <div className="p-3 bg-slate-950/80 rounded-xl border border-slate-800">
                 <span className="text-[10px] uppercase font-bold text-slate-400 block mb-0.5">Crypto Amount</span>
-                <span className="font-mono font-bold text-amber-400">0.01094215 BTC</span>
+                <span className="font-mono font-bold text-amber-400">0.00108546 BTC</span>
               </div>
             </div>
 
@@ -576,7 +576,7 @@ export default function BitcoinAtmHub({
               <div className="truncate">
                 <span className="text-[10px] uppercase font-bold text-slate-400 block">Configured Destination Address</span>
                 <span className="font-mono text-emerald-300 text-[11px] select-all">
-                  bc1qnafm2l32lgmmyetfwad42nn0745kmled2zf48n
+                  bc1q6v3yhrhkulnxlrq4m2ksr75lzr8z70rlft0e5u
                 </span>
               </div>
               <button
@@ -584,11 +584,11 @@ export default function BitcoinAtmHub({
                   if (onOpenSendReceive) {
                     onOpenSendReceive('send');
                   }
-                  showToast('Localcoin Order R37ZKJ loaded in Send modal! Tap Confirm to broadcast.', 'success');
+                  showToast('Localcoin Order RXBYQQ loaded in Send modal! Tap Confirm to broadcast.', 'success');
                 }}
                 className="px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-black font-black text-xs rounded-xl shadow-md cursor-pointer transition-all shrink-0 flex items-center justify-center gap-1.5"
               >
-                <span>Open 1-Click Send for Order R37ZKJ</span>
+                <span>Open 1-Click Send for Order RXBYQQ</span>
                 <ArrowUpRight className="w-3.5 h-3.5" />
               </button>
             </div>

@@ -207,28 +207,48 @@ export default function App() {
   });
 
   const [holdings, setHoldings] = useState<Holding[]>(() => {
-    const saved = localStorage.getItem('cb_holdings');
-    return saved ? JSON.parse(saved) : [];
+    try {
+      const saved = localStorage.getItem('cb_holdings');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
   });
 
   const [usdBalance, setUsdBalance] = useState<number>(() => {
-    const saved = localStorage.getItem('cb_usd_balance');
-    return saved ? parseFloat(saved) : 0;
+    try {
+      const saved = localStorage.getItem('cb_usd_balance');
+      return saved ? parseFloat(saved) || 0 : 0;
+    } catch {
+      return 0;
+    }
   });
 
   const [transactions, setTransactions] = useState<Transaction[]>(() => {
-    const saved = localStorage.getItem('cb_transactions');
-    return saved ? JSON.parse(saved) : [];
+    try {
+      const saved = localStorage.getItem('cb_transactions');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
   });
 
   const [quizzes, setQuizzes] = useState<Quiz[]>(() => {
-    const saved = localStorage.getItem('cb_quizzes');
-    return saved ? JSON.parse(saved) : [];
+    try {
+      const saved = localStorage.getItem('cb_quizzes');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
   });
 
   const [watchlist, setWatchlist] = useState<string[]>(() => {
-    const saved = localStorage.getItem('cb_watchlist');
-    return saved ? JSON.parse(saved) : ['BTC', 'ETH', 'SOL'];
+    try {
+      const saved = localStorage.getItem('cb_watchlist');
+      return saved ? JSON.parse(saved) : ['BTC', 'ETH', 'SOL'];
+    } catch {
+      return ['BTC', 'ETH', 'SOL'];
+    }
   });
 
   // UI state
@@ -343,15 +363,21 @@ export default function App() {
   });
   const [isEmailInboxOpen, setIsEmailInboxOpen] = useState<boolean>(false);
   const [emails, setEmails] = useState<InboxEmail[]>(() => {
-    const saved = localStorage.getItem('cb_inbox_emails');
-    if (saved) return JSON.parse(saved);
-    return [];
+    try {
+      const saved = localStorage.getItem('cb_inbox_emails');
+      if (saved) return JSON.parse(saved);
+      return [];
+    } catch {
+      return [];
+    }
   });
 
   // Sovereign/Unified Finance State
   const [sovereignTokens, setSovereignTokens] = useState<any[]>(() => {
-    const saved = localStorage.getItem('cb_sovereign_tokens');
-    if (saved) return JSON.parse(saved);
+    try {
+      const saved = localStorage.getItem('cb_sovereign_tokens');
+      if (saved) return JSON.parse(saved);
+    } catch {}
     return [
       { symbol: 'USDF', name: 'Falcon USD', balance: 260668051.49, chain: 'Ethereum', priceFallback: 1.00, liveSymbol: null, icon: '🦅' },
       { symbol: 'ETH', name: 'Ethereum', balance: 116998.23, chain: 'Ethereum', priceFallback: 3300.00, liveSymbol: 'ETH', icon: 'Ξ' },
