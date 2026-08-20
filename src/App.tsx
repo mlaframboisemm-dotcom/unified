@@ -38,6 +38,7 @@ import { AndroidInstallPromptBanner } from './components/AndroidInstallPromptBan
 import UserProfileHub from './components/UserProfileHub';
 import BitcoinAtmHub from './components/BitcoinAtmHub';
 import CameraQrScannerModal from './components/CameraQrScannerModal';
+import AtmOrderRecoveryModal from './components/AtmOrderRecoveryModal';
 import { parseQrOrDeepLink, ParsedQrResult } from './lib/qrProtocolParser';
 import { SettlementConfirmationDialog, SettlementConfirmationData } from './components/SettlementConfirmationDialog';
 import { ErrorBoundary } from './components/ErrorBoundary';
@@ -268,6 +269,8 @@ export default function App() {
     memo?: string;
   } | null>(null);
   const [isGlobalCameraScannerOpen, setIsGlobalCameraScannerOpen] = useState(false);
+  const [isAtmRecoveryModalOpen, setIsAtmRecoveryModalOpen] = useState(false);
+  const [selectedAtmRecoveryTx, setSelectedAtmRecoveryTx] = useState<Transaction | undefined>(undefined);
   const [isCashModalOpen, setIsCashModalOpen] = useState(false);
   const [cashModalAction, setCashModalAction] = useState<'deposit' | 'withdraw'>('deposit');
   const [isQrPayOpen, setIsQrPayOpen] = useState(false);
@@ -3047,6 +3050,7 @@ export default function App() {
                 btcAddress={PUBLISHED_BTC_ADDRESS}
                 coins={coins}
                 holdings={holdings}
+                transactions={transactions}
                 userEmail={userEmail || 'mlaframboisemm@gmail.com'}
                 userName={userName || 'Marcel Laframboise'}
                 citizenship={citizenship}
@@ -3092,6 +3096,10 @@ export default function App() {
               onFilterChange={setLedgerFilter}
               searchQuery={ledgerSearchQuery}
               onSearchChange={setLedgerSearchQuery}
+              onOpenAtmRecovery={(tx) => {
+                setSelectedAtmRecoveryTx(tx);
+                setIsAtmRecoveryModalOpen(true);
+              }}
             />
 
             <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-xs">
@@ -4482,6 +4490,18 @@ export default function App() {
           }
         }}
         showToast={showToast}
+      />
+
+      {/* --- ATM & LOCALCOIN ORDER RECOVERY & MEMPOOL RECONCILIATION MODAL --- */}
+      <AtmOrderRecoveryModal
+        isOpen={isAtmRecoveryModalOpen}
+        onClose={() => {
+          setIsAtmRecoveryModalOpen(false);
+          setSelectedAtmRecoveryTx(undefined);
+        }}
+        showToast={showToast}
+        transactions={transactions}
+        activeTx={selectedAtmRecoveryTx}
       />
     </div>
   );

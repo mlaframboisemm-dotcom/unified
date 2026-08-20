@@ -24,17 +24,21 @@ import {
   Shield,
   Layers,
   ChevronRight,
-  Camera
+  Camera,
+  Timer,
+  LifeBuoy
 } from 'lucide-react';
 import QRCode from 'qrcode';
-import { Coin, Holding } from '../types';
+import { Coin, Holding, Transaction } from '../types';
 import CameraQrScannerModal from './CameraQrScannerModal';
+import AtmOrderRecoveryModal from './AtmOrderRecoveryModal';
 
 interface BitcoinAtmHubProps {
   btcBalance?: number;
   btcAddress?: string;
   coins: Coin[];
   holdings: Holding[];
+  transactions?: Transaction[];
   userEmail?: string;
   userName?: string;
   citizenship?: string;
@@ -63,6 +67,7 @@ export default function BitcoinAtmHub({
   btcAddress = 'bc1qz8w9j7k6m5n4p3r2t1v0x9y8z7w6v5u',
   coins,
   holdings,
+  transactions = [],
   userEmail = 'mlaframboisemm@gmail.com',
   userName = 'Marcel Laframboise',
   citizenship = 'CA',
@@ -73,6 +78,8 @@ export default function BitcoinAtmHub({
   const [copiedAddress, setCopiedAddress] = useState(false);
   const [qrCodeDataUrl, setQrCodeDataUrl] = useState<string>('');
   const [isScannerOpen, setIsScannerOpen] = useState(false);
+  const [isRecoveryModalOpen, setIsRecoveryModalOpen] = useState(false);
+  const [recoveryTargetTx, setRecoveryTargetTx] = useState<Transaction | undefined>(undefined);
 
   const handleAtmScanSuccess = (data: {
     raw: string;
@@ -321,7 +328,15 @@ export default function BitcoinAtmHub({
             </div>
           </div>
 
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-2 shrink-0 flex-wrap">
+            <button
+              onClick={() => setIsRecoveryModalOpen(true)}
+              className="px-3.5 py-2.5 bg-orange-600/90 hover:bg-orange-600 text-white font-bold text-xs rounded-xl shadow-md cursor-pointer transition-all flex items-center gap-1.5 border border-orange-500/50"
+              title="Resolve expired Localcoin ATM or e-Transfer orders"
+            >
+              <LifeBuoy className="w-4 h-4 text-orange-200" />
+              <span>Order Expired / Help</span>
+            </button>
             <button
               onClick={() => setIsScannerOpen(true)}
               className="px-4 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-black font-black text-xs rounded-xl shadow-md cursor-pointer transition-all flex items-center gap-1.5"
@@ -602,11 +617,30 @@ export default function BitcoinAtmHub({
             <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
               <div className="truncate">
                 <span className="text-[10px] uppercase font-bold text-slate-400 block">Localcoin Receiving Address</span>
-                <span className="font-mono text-emerald-300 text-[11px] select-all">
-                  bc1q8yyl8yq9np33jfxlhds6tl836rn3trl0762qsd
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="font-mono text-emerald-300 text-[11px] select-all">
+                    bc1q8yyl8yq9np33jfxlhds6tl836rn3trl0762qsd
+                  </span>
+                  <a
+                    href="https://mempool.space/address/bc1q8yyl8yq9np33jfxlhds6tl836rn3trl0762qsd"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-[10px] text-amber-400 hover:text-amber-300 underline font-mono flex items-center gap-0.5"
+                  >
+                    <span>Mempool</span>
+                    <ExternalLink className="w-2.5 h-2.5" />
+                  </a>
+                </div>
               </div>
-              <div className="flex items-center gap-2 shrink-0">
+              <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                <button
+                  onClick={() => setIsRecoveryModalOpen(true)}
+                  className="px-3 py-2 bg-orange-500/20 hover:bg-orange-500/30 text-orange-300 font-bold text-xs rounded-xl border border-orange-500/40 cursor-pointer transition-all flex items-center gap-1"
+                  title="If Localcoin says order expired after sending"
+                >
+                  <LifeBuoy className="w-3.5 h-3.5" />
+                  <span>Order Expired?</span>
+                </button>
                 <a
                   href="https://localcoinatm.com/e-transfer?orderId=RGVTQ6&phoneNumber=9057184275"
                   target="_blank"
@@ -894,6 +928,18 @@ export default function BitcoinAtmHub({
         onScanSuccess={handleAtmScanSuccess}
         title="Scan Physical Bitcoin ATM Screen"
         instruction="Hold your camera up to the QR code displayed on the physical ATM screen to automatically scan and send Bitcoin on-chain."
+      />
+
+      {/* ATM / Localcoin Expired Order & Mempool Reconciliation Recovery Modal */}
+      <AtmOrderRecoveryModal
+        isOpen={isRecoveryModalOpen}
+        onClose={() => {
+          setIsRecoveryModalOpen(false);
+          setRecoveryTargetTx(undefined);
+        }}
+        showToast={showToast}
+        transactions={transactions}
+        activeTx={recoveryTargetTx}
       />
     </div>
   );

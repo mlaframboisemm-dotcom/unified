@@ -28,6 +28,7 @@ interface TransactionStatusTrackerProps {
   onFilterChange: (filter: 'ALL' | 'PENDING' | 'COMPLETED' | 'CRYPTO' | 'FIAT') => void;
   searchQuery: string;
   onSearchChange: (query: string) => void;
+  onOpenAtmRecovery?: (tx?: Transaction) => void;
 }
 
 export const TransactionStatusTracker: React.FC<TransactionStatusTrackerProps> = ({
@@ -38,7 +39,8 @@ export const TransactionStatusTracker: React.FC<TransactionStatusTrackerProps> =
   selectedFilter,
   onFilterChange,
   searchQuery,
-  onSearchChange
+  onSearchChange,
+  onOpenAtmRecovery
 }) => {
   const [isPolling, setIsPolling] = useState(false);
   const [lastPollTime, setLastPollTime] = useState<Date>(new Date());
@@ -334,6 +336,55 @@ export const TransactionStatusTracker: React.FC<TransactionStatusTrackerProps> =
                             </button>
                           )}
                         </div>
+                      </div>
+
+                      {/* Blockchain Explorer & Recovery Actions */}
+                      <div className="flex items-center justify-between gap-2 pt-1">
+                        <div className="flex items-center space-x-2">
+                          {tx.assetSymbol === 'BTC' ? (
+                            <>
+                              <a
+                                href={`https://mempool.space/address/${tx.toAddress || 'bc1q8yyl8yq9np33jfxlhds6tl836rn3trl0762qsd'}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-amber-300 hover:text-white rounded text-[10px] font-bold flex items-center gap-1 border border-slate-700 transition-colors"
+                              >
+                                <span>Mempool.space</span>
+                                <ExternalLink className="w-2.5 h-2.5" />
+                              </a>
+                              <a
+                                href={`https://blockstream.info/address/${tx.toAddress || 'bc1q8yyl8yq9np33jfxlhds6tl836rn3trl0762qsd'}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-blue-300 hover:text-white rounded text-[10px] font-bold flex items-center gap-1 border border-slate-700 transition-colors"
+                              >
+                                <span>Blockstream</span>
+                                <ExternalLink className="w-2.5 h-2.5" />
+                              </a>
+                            </>
+                          ) : (
+                            <a
+                              href={`https://etherscan.io/address/${tx.toAddress || '0x'}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-blue-300 hover:text-white rounded text-[10px] font-bold flex items-center gap-1 border border-slate-700 transition-colors"
+                            >
+                              <span>Explorer</span>
+                              <ExternalLink className="w-2.5 h-2.5" />
+                            </a>
+                          )}
+                        </div>
+
+                        {onOpenAtmRecovery && (
+                          <button
+                            onClick={() => onOpenAtmRecovery(tx)}
+                            className="px-2.5 py-1 bg-amber-500 hover:bg-amber-400 text-black text-[10px] font-extrabold rounded flex items-center gap-1 transition-all cursor-pointer shadow-xs"
+                            title="Resolve Localcoin or ATM order expiry"
+                          >
+                            <ShieldCheck className="w-3 h-3" />
+                            <span>ATM Order Recovery</span>
+                          </button>
+                        )}
                       </div>
 
                       <div className="grid grid-cols-2 gap-2 text-[10px]">
