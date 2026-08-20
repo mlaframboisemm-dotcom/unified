@@ -15,7 +15,8 @@ import {
   ShieldCheck, 
   ArrowUpRight,
   ArrowDownLeft,
-  Timer
+  Timer,
+  QrCode
 } from 'lucide-react';
 import { Transaction } from '../types';
 
@@ -29,6 +30,7 @@ interface TransactionStatusTrackerProps {
   searchQuery: string;
   onSearchChange: (query: string) => void;
   onOpenAtmRecovery?: (tx?: Transaction) => void;
+  onOpenQrModal?: (tx: Transaction) => void;
 }
 
 export const TransactionStatusTracker: React.FC<TransactionStatusTrackerProps> = ({
@@ -40,7 +42,8 @@ export const TransactionStatusTracker: React.FC<TransactionStatusTrackerProps> =
   onFilterChange,
   searchQuery,
   onSearchChange,
-  onOpenAtmRecovery
+  onOpenAtmRecovery,
+  onOpenQrModal
 }) => {
   const [isPolling, setIsPolling] = useState(false);
   const [lastPollTime, setLastPollTime] = useState<Date>(new Date());
@@ -256,6 +259,16 @@ export const TransactionStatusTracker: React.FC<TransactionStatusTrackerProps> =
                     </div>
 
                     <div className="flex items-center space-x-2 shrink-0 self-end sm:self-center">
+                      {onOpenQrModal && (
+                        <button
+                          onClick={() => onOpenQrModal(tx)}
+                          className="px-2.5 py-1 bg-blue-600/30 hover:bg-blue-600/50 border border-blue-500/40 text-blue-300 hover:text-white text-[11px] font-bold rounded-lg flex items-center gap-1 transition-all cursor-pointer shadow-xs"
+                          title="Generate shareable verification QR code for secondary device"
+                        >
+                          <QrCode className="w-3 h-3 text-blue-400" />
+                          <span>Verify QR</span>
+                        </button>
+                      )}
                       <button
                         onClick={() => handleSpeedUp(tx.id)}
                         disabled={speedingUpId === tx.id}
@@ -375,16 +388,28 @@ export const TransactionStatusTracker: React.FC<TransactionStatusTrackerProps> =
                           )}
                         </div>
 
-                        {onOpenAtmRecovery && (
-                          <button
-                            onClick={() => onOpenAtmRecovery(tx)}
-                            className="px-2.5 py-1 bg-amber-500 hover:bg-amber-400 text-black text-[10px] font-extrabold rounded flex items-center gap-1 transition-all cursor-pointer shadow-xs"
-                            title="Resolve Localcoin or ATM order expiry"
-                          >
-                            <ShieldCheck className="w-3 h-3" />
-                            <span>ATM Order Recovery</span>
-                          </button>
-                        )}
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {onOpenQrModal && (
+                            <button
+                              onClick={() => onOpenQrModal(tx)}
+                              className="px-2.5 py-1 bg-blue-600/40 hover:bg-blue-600/60 text-blue-200 hover:text-white text-[10px] font-bold rounded flex items-center gap-1 transition-all cursor-pointer shadow-xs border border-blue-500/30"
+                              title="Generate shareable verification QR code for secondary device"
+                            >
+                              <QrCode className="w-3 h-3 text-blue-300" />
+                              <span>Share QR</span>
+                            </button>
+                          )}
+                          {onOpenAtmRecovery && (
+                            <button
+                              onClick={() => onOpenAtmRecovery(tx)}
+                              className="px-2.5 py-1 bg-amber-500 hover:bg-amber-400 text-black text-[10px] font-extrabold rounded flex items-center gap-1 transition-all cursor-pointer shadow-xs"
+                              title="Resolve Localcoin or ATM order expiry"
+                            >
+                              <ShieldCheck className="w-3 h-3" />
+                              <span>ATM Order Recovery</span>
+                            </button>
+                          )}
+                        </div>
                       </div>
 
                       <div className="grid grid-cols-2 gap-2 text-[10px]">

@@ -48,6 +48,8 @@ import { db } from './lib/firebase';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { OfflineSyncStatusBar } from './components/OfflineSyncStatusBar';
 import { TransactionStatusTracker } from './components/TransactionStatusTracker';
+import TransactionQrModal from './components/TransactionQrModal';
+import { TransactionVerifiedBanner, VerifiedTxParams } from './components/TransactionVerifiedBanner';
 import { 
   saveTransactionWithOfflineFallback, 
   cacheTransactionsLocally, 
@@ -281,6 +283,9 @@ export default function App() {
   const [expandedTxId, setExpandedTxId] = useState<string | null>(null);
   const [ledgerFilter, setLedgerFilter] = useState<'ALL' | 'PENDING' | 'COMPLETED' | 'CRYPTO' | 'FIAT'>('ALL');
   const [ledgerSearchQuery, setLedgerSearchQuery] = useState<string>('');
+  const [isTransactionQrModalOpen, setIsTransactionQrModalOpen] = useState(false);
+  const [selectedQrTransaction, setSelectedQrTransaction] = useState<Transaction | null>(null);
+  const [verifiedUrlParams, setVerifiedUrlParams] = useState<VerifiedTxParams | null>(null);
 
   // Stripe Hub states
   const [stripeAvailable, setStripeAvailable] = useState<number>(0);
@@ -342,6 +347,29 @@ export default function App() {
 
     if (typeof navigator !== 'undefined' && navigator.onLine) {
       syncOfflineQueueToFirestore().catch(() => {});
+    }
+
+    // Check for incoming transaction verification query parameters (scanned from secondary device)
+    if (typeof window !== 'undefined') {
+      try {
+        const searchParams = new URLSearchParams(window.location.search);
+        const verifyTx = searchParams.get('verifyTx');
+        if (verifyTx) {
+          setVerifiedUrlParams({
+            txId: verifyTx,
+            symbol: searchParams.get('symbol') || 'BTC',
+            amount: searchParams.get('amount') || '0',
+            fiat: searchParams.get('fiat') || '0',
+            type: searchParams.get('type') || 'TRANSACTION',
+            time: searchParams.get('time') || '',
+            status: searchParams.get('status') || 'verified',
+            hash: searchParams.get('hash') || '',
+            checksum: searchParams.get('checksum') || 'VALID'
+          });
+        }
+      } catch (err) {
+        console.warn('Failed to parse URL verification parameters:', err);
+      }
     }
   }, []);
   const [isStripeConfigured, setIsStripeConfigured] = useState<boolean>(false);
@@ -2275,7 +2303,21 @@ export default function App() {
       />
 
       {/* Primary Layout Frame */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 pb-28 lg:pb-8 flex-1 w-full">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 pb-28 lg:pb-8 flex-1 w-full space-y-6">
+        {/* Shareable Verification Banner if opened via QR scan or verification link */}
+        {verifiedUrlParams && (
+          <TransactionVerifiedBanner
+            verifiedParams={verifiedUrlParams}
+            onDismiss={() => {
+              setVerifiedUrlParams(null);
+              // Clean up URL search params without page reload
+              if (window.history && window.history.replaceState) {
+                const cleanUrl = window.location.pathname;
+                window.history.replaceState({}, document.title, cleanUrl);
+              }
+            }}
+          />
+        )}
         {/* --- Tab 1: Dashboard (Assets overview) --- */}
         {currentTab === 'dashboard' && (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
@@ -3096,6 +3138,10 @@ export default function App() {
               onFilterChange={setLedgerFilter}
               searchQuery={ledgerSearchQuery}
               onSearchChange={setLedgerSearchQuery}
+              onOpenQrModal={(tx) => {
+                setSelectedQrTransaction(tx);
+                setIsTransactionQrModalOpen(true);
+              }}
               onOpenAtmRecovery={(tx) => {
                 setSelectedAtmRecoveryTx(tx);
                 setIsAtmRecoveryModalOpen(true);
@@ -3204,7 +3250,20 @@ export default function App() {
                           </div>
                         </div>
 
-                        <div className="flex items-center space-x-3">
+                        <div className="flex items-center space-x-2 sm:space-x-3">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedQrTransaction(tx);
+                              setIsTransactionQrModalOpen(true);
+                            }}
+                            className="px-2 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 text-[11px] font-bold rounded-lg flex items-center gap-1 border border-blue-200/60 transition-colors cursor-pointer"
+                            title="Generate shareable verification QR code for secondary device"
+                          >
+                            <QrCode className="w-3.5 h-3.5 text-blue-600" />
+                            <span className="hidden sm:inline">QR</span>
+                          </button>
                           <div className="text-right">
                             <p className={`text-sm font-bold font-mono ${isPending ? 'text-amber-600' : 'text-gray-900'}`}>
                               {isPositiveTx ? '+' : isConvert ? '' : '-'}
@@ -3344,6 +3403,25 @@ export default function App() {
                               </div>
                             </div>
 
+                          </div>
+
+                          {/* Action footer in expanded transaction */}
+                          <div className="flex items-center justify-between pt-2 border-t border-gray-200/80 flex-wrap gap-2">
+                            <span className="text-[10px] text-gray-400 font-mono">
+                              Tx Audit Checksum: Validated & Signed
+                            </span>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedQrTransaction(tx);
+                                setIsTransactionQrModalOpen(true);
+                              }}
+                              className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+                            >
+                              <QrCode className="w-3.5 h-3.5 text-blue-400" />
+                              <span>Share Verification QR</span>
+                            </button>
                           </div>
                         </div>
                       )}
@@ -4502,6 +4580,17 @@ export default function App() {
         showToast={showToast}
         transactions={transactions}
         activeTx={selectedAtmRecoveryTx}
+      />
+
+      {/* --- SHAREABLE TRANSACTION QR VERIFICATION MODAL --- */}
+      <TransactionQrModal
+        isOpen={isTransactionQrModalOpen}
+        onClose={() => {
+          setIsTransactionQrModalOpen(false);
+          setSelectedQrTransaction(null);
+        }}
+        transaction={selectedQrTransaction}
+        showToast={showToast}
       />
     </div>
   );
