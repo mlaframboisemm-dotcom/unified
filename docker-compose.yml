@@ -5,9 +5,9 @@ services:
     image: kallerosen/bitcoin-core:latest
     container_name: unified-bitcoind
     restart: unless-stopped
-    ports:
-      - "8332:8332"
-      - "8333:8333"
+    expose:
+      - "8332"
+      - "8333"
     volumes:
       - bitcoin_data:/home/bitcoin/.bitcoin
     command:
