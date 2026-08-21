@@ -12,3 +12,8 @@
 - [ ] Add documented provider integrations only after official credentials and endpoints are available.
 - [ ] Test read-only quote/order/status flows without submitting or broadcasting funds.
 - [ ] Do not create regulated provider accounts or accept KYC/terms on the user’s behalf.
+
+- [ ] Configure Stripe test mode dashboard & webhooks
+- [ ] Integrate Stripe crypto payout and payment methods in gateway code
+- [ ] Verify test-mode transaction flows and crypto routing
+- [ ] Prepare live-mode switch upon final confirmation
