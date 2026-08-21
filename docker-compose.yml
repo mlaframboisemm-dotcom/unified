@@ -1,0 +1,36 @@
+version: '3.8'
+
+services:
+  bitcoind:
+    image: kallerosen/bitcoin-core:latest
+    container_name: unified-bitcoind
+    restart: unless-stopped
+    ports:
+      - "8332:8332"
+      - "8333:8333"
+    volumes:
+      - bitcoin_data:/home/bitcoin/.bitcoin
+    command:
+      - -server=1
+      - -rpcuser=bitcoinrpc
+      - -rpcpassword=local_secure_rpc_pass
+      - -rpcallowip=0.0.0.0/0
+      - -rpcbind=0.0.0.0
+      - -txindex=1
+
+  unified-gateway:
+    build: .
+    container_name: unified-financial-gateway
+    restart: unless-stopped
+    ports:
+      - "10000:10000"
+    environment:
+      - PORT=10000
+      - BITCOIN_RPC_URL=http://bitcoind:8332
+      - BITCOIN_RPC_USER=bitcoinrpc
+      - BITCOIN_RPC_PASSWORD=local_secure_rpc_pass
+    depends_on:
+      - bitcoind
+
+volumes:
+  bitcoin_data:
