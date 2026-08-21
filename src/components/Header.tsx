@@ -25,7 +25,8 @@ import {
   ShieldAlert,
   TrendingUp,
   Landmark,
-  Camera
+  Camera,
+  Bot
 } from 'lucide-react';
 import { Coin } from '../types';
 
@@ -94,9 +95,11 @@ export default function Header({
 
   const primaryNavItems = [
     { id: 'dashboard', label: 'Assets', icon: Wallet },
+    { id: 'copilot', label: 'Copilot AI', badge: 'Agent', icon: Bot },
     { id: 'yield', label: 'Yield Optimization', badge: 'APY', icon: TrendingUp },
     { id: 'wallet', label: 'Web3 Wallet', badge: 'Live', icon: Wallet },
     { id: 'trade', label: 'Trade', icon: Compass },
+    { id: 'integrations', label: 'Integrations', badge: 'AI/Git', icon: Sparkles },
     { id: 'sovereign', label: 'Sovereign Hub', icon: ShieldCheck },
     { id: 'wise-card', label: 'Wise Card', badge: 'API', icon: CreditCard },
     { id: 'google-pay', label: 'Google Pay & Pass', badge: 'Tap', icon: Smartphone }
@@ -114,7 +117,10 @@ export default function Header({
     { id: 'stripe', label: 'Stripe Hub', icon: CreditCard, desc: 'Stripe balance & payouts' }
   ];
 
-  const allNavItems = [...primaryNavItems, ...secondaryNavItems];
+  // Safely deduplicate allNavItems by ID to prevent any duplicate key errors in React
+  const allNavItems = Array.from(
+    new Map([...primaryNavItems, ...secondaryNavItems].map((item) => [item.id, item])).values()
+  );
 
   const isSecondaryActive = secondaryNavItems.some(item => item.id === currentTab);
 
@@ -360,6 +366,19 @@ export default function Header({
                 <span>App</span>
               </button>
             )}
+            <button
+              onClick={() => setCurrentTab('copilot')}
+              className={`px-2.5 py-1.5 text-xs font-black rounded-xl flex items-center space-x-1.5 transition-all cursor-pointer shadow-2xs ${
+                currentTab === 'copilot'
+                  ? 'bg-purple-600 text-white shadow-purple-500/20'
+                  : 'text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200/80'
+              }`}
+              id="header-copilot-agent-btn"
+              title="Open GitHub Copilot In-App Agent & Autonomous Controls"
+            >
+              <Bot className="h-3.5 w-3.5 text-purple-600" />
+              <span>Copilot AI</span>
+            </button>
           </div>
 
           {/* Quick Balance Indicator */}
@@ -521,6 +540,16 @@ export default function Header({
                     >
                       <CreditCard className="h-4 w-4 text-[#635BFF]" />
                       <span>Stripe Hub & Payouts</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        setCurrentTab('copilot');
+                        setShowProfileMenu(false);
+                      }}
+                      className="w-full px-4 py-2 text-xs text-purple-700 hover:bg-purple-50 flex items-center space-x-2.5 cursor-pointer text-left font-black"
+                    >
+                      <Bot className="h-4 w-4 text-purple-600" />
+                      <span>Copilot AI Agent & GitHub</span>
                     </button>
                     <button
                       onClick={() => {

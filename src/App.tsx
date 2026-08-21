@@ -22,6 +22,8 @@ import CashTransferModal from './components/CashTransferModal';
 import AddressHub from './components/AddressHub';
 import BlockchainWalletComponent from './components/BlockchainWalletComponent';
 import DeveloperHub from './components/DeveloperHub';
+import IntegrationsHub from './components/IntegrationsHub';
+import CopilotHub from './components/CopilotHub';
 import OnboardingKyc from './components/OnboardingKyc';
 import AuthScreen from './components/AuthScreen';
 import EmailInbox, { InboxEmail } from './components/EmailInbox';
@@ -3116,6 +3118,44 @@ export default function App() {
                 usdBalance={liveCashBalance}
                 showToast={showToast}
                 onRefreshBalances={syncCoinbaseBalances}
+              />
+            </ErrorBoundary>
+          </div>
+        )}
+
+        {/* --- Tab: Copilot AI Agent & GitHub Full In-App Control --- */}
+        {currentTab === 'copilot' && (
+          <div className="max-w-7xl mx-auto">
+            <ErrorBoundary name="CopilotHubTab">
+              <CopilotHub
+                coins={coins}
+                holdings={holdings}
+                usdBalance={liveCashBalance}
+                transactions={transactions}
+                onUpdateHoldings={setHoldings}
+                onUpdateUsdBalance={setUsdBalance}
+                onAddTransaction={(tx) => setTransactions((prev) => [tx, ...prev])}
+                showToast={showToast}
+                onNavigateTab={(tab) => setCurrentTab(tab)}
+              />
+            </ErrorBoundary>
+          </div>
+        )}
+
+        {/* --- Tab: Integrations Hub (GitHub, Google Cloud, Copilot, Webhooks & Custom APIs) --- */}
+        {currentTab === 'integrations' && (
+          <div className="max-w-7xl mx-auto">
+            <ErrorBoundary name="IntegrationsHubTab">
+              <IntegrationsHub
+                coins={coins}
+                holdings={holdings}
+                usdBalance={liveCashBalance}
+                transactions={transactions}
+                onUpdateHoldings={setHoldings}
+                onUpdateUsdBalance={setUsdBalance}
+                onAddTransaction={(tx) => setTransactions((prev) => [tx, ...prev])}
+                showToast={showToast}
+                onNavigateTab={(tab) => setCurrentTab(tab)}
               />
             </ErrorBoundary>
           </div>
