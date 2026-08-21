@@ -1,0 +1,31 @@
+name: Unified Gateway Security CI & Daily Regression
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    - cron: '0 8 * * *' # Daily at 08:00 UTC
+
+jobs:
+  security-and-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Run Vulnerability Audit
+        run: npm audit --audit-level=high || true
+
+      - name: Run Security Regression Tests
+        run: npx tsx scripts/test-unified-health.mjs
