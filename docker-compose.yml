@@ -10,10 +10,13 @@ services:
       - "8333"
     volumes:
       - bitcoin_data:/home/bitcoin/.bitcoin
+    environment:
+      - BITCOIN_RPC_USER=${BITCOIN_RPC_USER:-bitcoinrpc}
+      - BITCOIN_RPC_PASSWORD=${BITCOIN_RPC_PASSWORD}
     command:
       - -server=1
-      - -rpcuser=bitcoinrpc
-      - -rpcpassword=local_secure_rpc_pass
+      - -rpcuser=${BITCOIN_RPC_USER:-bitcoinrpc}
+      - -rpcpassword=${BITCOIN_RPC_PASSWORD}
       - -rpcallowip=0.0.0.0/0
       - -rpcbind=0.0.0.0
       - -txindex=1
@@ -27,8 +30,8 @@ services:
     environment:
       - PORT=10000
       - BITCOIN_RPC_URL=http://bitcoind:8332
-      - BITCOIN_RPC_USER=bitcoinrpc
-      - BITCOIN_RPC_PASSWORD=local_secure_rpc_pass
+      - BITCOIN_RPC_USER=${BITCOIN_RPC_USER:-bitcoinrpc}
+      - BITCOIN_RPC_PASSWORD=${BITCOIN_RPC_PASSWORD}
     depends_on:
       - bitcoind
 
