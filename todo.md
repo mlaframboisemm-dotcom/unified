@@ -6,3 +6,9 @@
 - [ ] Verify expected Render environment-variable names without exposing secret values.
 - [ ] Run only read-only connection and code-path checks; do not broadcast, dispense, or create a withdrawal.
 - [ ] Report a precise connected/not-connected status and keep GitHub unchanged unless explicitly approved.
+
+- [ ] Verify official Transak and comparable on-ramp/off-ramp provider APIs and account requirements.
+- [ ] Map provider webhooks, KYC states, order states, fees, limits, and supported networks into unified.
+- [ ] Add documented provider integrations only after official credentials and endpoints are available.
+- [ ] Test read-only quote/order/status flows without submitting or broadcasting funds.
+- [ ] Do not create regulated provider accounts or accept KYC/terms on the user’s behalf.
