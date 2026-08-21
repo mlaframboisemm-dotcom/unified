@@ -1,7 +1,6 @@
 import crypto from 'crypto';
 import fs from 'fs';
 import { exec } from 'child_process';
-import fetch from 'node-fetch';
 
 export interface IKilnBridge {
   signPayload(payload: string): Promise<string>;
@@ -14,7 +13,11 @@ class HttpKilnBridge implements IKilnBridge {
     this.url = url;
   }
   async signPayload(payload: string): Promise<string> {
-    const res = await fetch(this.url, { method: 'POST', body: JSON.stringify({ payload }), headers: { 'Content-Type': 'application/json' } });
+    const res = await globalThis.fetch(this.url, {
+      method: 'POST',
+      body: JSON.stringify({ payload }),
+      headers: { 'Content-Type': 'application/json' }
+    });
     if (!res.ok) throw new Error(`Kiln HTTP bridge responded ${res.status}`);
     const json = (await res.json()) as { signature?: unknown };
     if (!json?.signature) throw new Error('Kiln HTTP bridge returned no signature');
@@ -93,4 +96,3 @@ export function getKilnBridge(): IKilnBridge {
   // default shim
   return new ShimKilnBridge();
 }
-

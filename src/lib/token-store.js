@@ -1,6 +1,5 @@
 import fs from 'fs';
 import path from 'path';
-import fetch from 'node-fetch';
 import { LedgerMutex } from './ledger-mutex.js';
 
 // token-store abstraction. If VAULT_URL set, this will POST tokens to VAULT_URL
@@ -11,7 +10,7 @@ const VAULT_URL = process.env.TOKEN_VAULT_URL || '';
 export async function storeTokens(transferId, tokenPayload) {
   if (VAULT_URL) {
     try {
-      const res = await fetch(VAULT_URL + '/store', {
+      const res = await globalThis.fetch(VAULT_URL + '/store', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: transferId, tokens: tokenPayload })

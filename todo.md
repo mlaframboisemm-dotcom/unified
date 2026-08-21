@@ -17,3 +17,14 @@
 - [ ] Integrate Stripe crypto payout and payment methods in gateway code
 - [ ] Verify test-mode transaction flows and crypto routing
 - [ ] Prepare live-mode switch upon final confirmation
+
+- [x] Verify Docker and Bitcoin Core daemon availability in the current execution environment.
+- [x] Verify Bitcoin Core RPC credentials, endpoint wiring, and live `getblockchaininfo` response.
+- [x] Verify whether the production server mounts the Bitcoin Core client and unified health audit.
+- [x] Verify gateway build and automated test status after connectivity inspection.
+- [x] Document confirmed connections, disconnected services, and required local-machine actions.
+
+- [x] Mount a read-only Bitcoin Core health endpoint into the production server.
+- [x] Add tests for Bitcoin Core health success and unavailable-node failure behavior.
+- [x] Tighten Docker Bitcoin Core RPC allowlist and document the internal network assumption.
+- [x] Re-run build and test suites and update the connectivity audit with the new status.

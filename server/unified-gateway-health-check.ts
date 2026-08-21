@@ -5,7 +5,7 @@
 
 import { checkAllNonStripeGateways } from './non-stripe-gateways-health.js';
 import { getMaintenanceStatus } from './maintenance-admin.js';
-import { getBitcoinRpcConfig } from './bitcoin-rpc-client.js';
+import { getBitcoinRpcConfig, getLocalBitcoinBlockchainInfo } from './bitcoin-rpc-client.js';
 
 export async function runUnifiedGatewayHealthAudit() {
   console.log('=== UNIFIED GATEWAY COMPREHENSIVE HEALTH AUDIT ===');
@@ -20,12 +20,17 @@ export async function runUnifiedGatewayHealthAudit() {
   }
 
   const btcConfig = getBitcoinRpcConfig();
+  const bitcoin = await getLocalBitcoinBlockchainInfo();
   console.log(`[BLOCKCHAIN] Bitcoin Core RPC Target: ${btcConfig.url} (User: ${btcConfig.rpcUser})`);
+  console.log(`[BLOCKCHAIN] Bitcoin Core status: ${bitcoin.connected ? 'connected' : 'unavailable'}`);
 
-  console.log('=== AUDIT COMPLETE: ALL SYSTEMS NOMINAL ===');
+  const overallStatus = bitcoin.connected ? 'nominal' : 'degraded';
+  console.log(`=== AUDIT COMPLETE: SYSTEM STATUS ${overallStatus.toUpperCase()} ===`);
   return {
+    status: overallStatus,
     maintenance,
     gatewaysCount: gateways.length,
     btcRpcUrl: btcConfig.url,
+    bitcoin,
   };
 }

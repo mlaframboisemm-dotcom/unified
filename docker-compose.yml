@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   bitcoind:
     image: kallerosen/bitcoin-core:latest
@@ -12,14 +10,16 @@ services:
       - bitcoin_data:/home/bitcoin/.bitcoin
     environment:
       - BITCOIN_RPC_USER=${BITCOIN_RPC_USER:-bitcoinrpc}
-      - BITCOIN_RPC_PASSWORD=${BITCOIN_RPC_PASSWORD}
+      - BITCOIN_RPC_PASSWORD=${BITCOIN_RPC_PASSWORD:?BITCOIN_RPC_PASSWORD must be set}
     command:
       - -server=1
       - -rpcuser=${BITCOIN_RPC_USER:-bitcoinrpc}
       - -rpcpassword=${BITCOIN_RPC_PASSWORD}
-      - -rpcallowip=0.0.0.0/0
+      - -rpcallowip=172.28.0.0/16
       - -rpcbind=0.0.0.0
       - -txindex=1
+    networks:
+      - unified_internal
 
   unified-gateway:
     build: .
@@ -31,10 +31,22 @@ services:
       - PORT=10000
       - BTC_NETWORK=mainnet
       - BTC_RPC_URL=http://bitcoind:8332
-      - BTC_RPC_USER=${BTC_RPC_USER:-${BITCOIN_RPC_USER:-bitcoinrpc}}
-      - BTC_RPC_PASSWORD=${BTC_RPC_PASSWORD:-${BITCOIN_RPC_PASSWORD}}
+      - BTC_RPC_USER=${BITCOIN_RPC_USER:-bitcoinrpc}
+      - BTC_RPC_PASSWORD=${BITCOIN_RPC_PASSWORD:?BITCOIN_RPC_PASSWORD must be set}
+      - BITCOIN_RPC_URL=http://bitcoind:8332
+      - BITCOIN_RPC_USER=${BITCOIN_RPC_USER:-bitcoinrpc}
+      - BITCOIN_RPC_PASSWORD=${BITCOIN_RPC_PASSWORD:?BITCOIN_RPC_PASSWORD must be set}
     depends_on:
       - bitcoind
+    networks:
+      - unified_internal
 
 volumes:
   bitcoin_data:
+
+networks:
+  unified_internal:
+    internal: true
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
