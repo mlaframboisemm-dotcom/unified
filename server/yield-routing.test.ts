@@ -4,6 +4,7 @@ import {
   validateDestinationAddress,
   verifyEvmDestinationOwnership
 } from '../src/lib/yield-routing';
+import { deriveMarshallAddress, getMarshallConfigSnapshot } from '../src/lib/marshall-config';
 
 describe('live-only yield routing configuration', () => {
   it('returns no sources when no provider configuration is present', () => {
@@ -43,5 +44,16 @@ describe('live-only yield routing configuration', () => {
       address: '0x0000000000000000000000000000000000000001',
       signature: 'invalid-signature'
     })).toBe(false);
+  });
+
+  it('requires explicit runtime configuration instead of hardcoded Marshall defaults', () => {
+    expect(deriveMarshallAddress({})).toBe('');
+
+    const snapshot = getMarshallConfigSnapshot({});
+    expect(snapshot.address).toBe('');
+    expect(snapshot.ledgerBalance).toBeNull();
+    expect(snapshot.baseline).toBeNull();
+    expect(snapshot.status).toBe('UNCONFIGURED');
+    expect(snapshot.hasPrivateKey).toBe(false);
   });
 });

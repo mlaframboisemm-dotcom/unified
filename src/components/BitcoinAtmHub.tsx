@@ -43,7 +43,7 @@ interface BitcoinAtmHubProps {
   userName?: string;
   citizenship?: string;
   showToast: (msg: string, type?: 'success' | 'error' | 'info') => void;
-  onOpenSendReceive?: (action: 'send' | 'receive') => void;
+  onOpenSendReceive?: (action: 'send' | 'receive', prefill?: { recipientAddress?: string; amountBtc?: number }) => void;
 }
 
 interface AtmLocation {
@@ -80,6 +80,8 @@ export default function BitcoinAtmHub({
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [isRecoveryModalOpen, setIsRecoveryModalOpen] = useState(false);
   const [recoveryTargetTx, setRecoveryTargetTx] = useState<Transaction | undefined>(undefined);
+  const [atmLiveReady, setAtmLiveReady] = useState(false);
+  const [orderReview, setOrderReview] = useState<{ address: string; amountBtc: number; memo?: string } | null>(null);
 
   const handleAtmScanSuccess = (data: {
     raw: string;
@@ -102,13 +104,20 @@ export default function BitcoinAtmHub({
         }
         return;
       }
-    } else {
-      showToast(`Scanned ATM QR: ${data.address.slice(0, 12)}...`, 'success');
+      if (parsed.address && parsed.amount) {
+        setOrderReview({ address: parsed.address, amountBtc: parsed.amount, memo: parsed.memo });
+      }
+      return;
     }
 
-    if (onOpenSendReceive) {
-      onOpenSendReceive('send');
+    const isBitcoinAddress = /^(bc1|[13])[a-zA-Z0-9]{20,90}$/.test(data.address);
+    if (!isBitcoinAddress || !data.amount || !Number.isFinite(data.amount) || data.amount <= 0) {
+      showToast('The scanned Localcoin request is missing a valid Bitcoin address or amount.', 'error');
+      return;
     }
+
+    setOrderReview({ address: data.address, amountBtc: data.amount, memo: data.memo });
+    showToast('Localcoin payment request loaded for review. Nothing was sent.', 'info');
   };
 
   // Deposit (Cash -> BTC) Calculator
@@ -132,6 +141,21 @@ export default function BitcoinAtmHub({
   // Locator Filter
   const [locatorFilter, setLocatorFilter] = useState<'all' | '2way' | 'coinflip' | 'localcoin'>('all');
   const [searchLocation, setSearchLocation] = useState<string>('');
+
+  useEffect(() => {
+    let active = true;
+    fetch('/api/atm/status', { credentials: 'include' })
+      .then((response) => response.ok ? response.json() : null)
+      .then((status: { ready?: boolean } | null) => {
+        if (active) setAtmLiveReady(status?.ready === true);
+      })
+      .catch(() => {
+        if (active) setAtmLiveReady(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const btcPrice = useMemo(() => {
     const coin = coins.find((c) => c.symbol === 'BTC');
@@ -173,7 +197,23 @@ export default function BitcoinAtmHub({
     setTimeout(() => setCopiedAddress(false), 2500);
   };
 
+  const openReviewedOrder = () => {
+    if (!orderReview) return;
+    onOpenSendReceive?.('send', {
+      recipientAddress: orderReview.address,
+      amountBtc: orderReview.amountBtc
+    });
+  };
+
   const handleGenerateCashoutVoucher = () => {
+    if (!atmLiveReady) {
+      showToast('Localcoin ATM provider is not connected. No voucher was created.', 'info');
+      return;
+    }
+    if (!cashoutPhoneNumber.trim()) {
+      showToast('Enter the verified phone number used for Localcoin withdrawal codes.', 'error');
+      return;
+    }
     const btcNeeded = cashoutAmountFiat / effectiveBtcPriceFiat;
     const voucherId = `ATM-SOV-${Math.floor(100000 + Math.random() * 900000)}`;
     const pin = Math.floor(1000 + Math.random() * 9000).toString();
@@ -198,7 +238,7 @@ export default function BitcoinAtmHub({
       ...activeVoucher,
       status: 'DISPENSED'
     });
-    showToast(`$${activeVoucher.amountFiat} ${activeVoucher.currency} physical cash dispensed from ATM vault!`, 'success');
+    showToast('Local ATM UI test completed. No physical cash was dispensed.', 'info');
   };
 
   // Mock ATM Locations
@@ -390,6 +430,24 @@ export default function BitcoinAtmHub({
             <span>ATM Locator</span>
           </button>
         </div>
+
+        {orderReview && (
+          <div className="mt-4 max-w-2xl rounded-2xl border border-amber-400/50 bg-slate-950/90 p-4 text-xs text-slate-200">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="font-black uppercase tracking-wider text-amber-300">Localcoin payment request review</p>
+                <p className="mt-1 text-slate-400">Nothing has been sent. Review the destination and amount in your wallet before confirming.</p>
+              </div>
+              <button type="button" onClick={() => setOrderReview(null)} className="text-slate-400 hover:text-white" aria-label="Dismiss payment request">Dismiss</button>
+            </div>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              <div><span className="text-slate-500">Amount</span><div className="font-mono font-bold text-white">{orderReview.amountBtc.toFixed(8)} BTC</div></div>
+              <div><span className="text-slate-500">Destination</span><div className="break-all font-mono text-amber-200">{orderReview.address}</div></div>
+            </div>
+            {orderReview.memo && <p className="mt-2 text-slate-400">Memo: {orderReview.memo}</p>}
+            <button type="button" onClick={openReviewedOrder} className="mt-3 rounded-xl bg-amber-500 px-4 py-2 font-black text-black hover:bg-amber-400">Review in wallet send screen</button>
+          </div>
+        )}
       </div>
 
       {/* MODE 1: DEPOSIT (BUY BITCOIN WITH PHYSICAL CASH AT ATM) */}
@@ -735,10 +793,11 @@ export default function BitcoinAtmHub({
 
               <button
                 onClick={handleGenerateCashoutVoucher}
-                className="w-full py-3.5 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 text-white font-black text-xs rounded-xl shadow-md cursor-pointer transition-all flex items-center justify-center gap-2"
+                disabled={!atmLiveReady}
+                className="w-full py-3.5 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 disabled:from-gray-400 disabled:to-gray-500 disabled:cursor-not-allowed text-white font-black text-xs rounded-xl shadow-md cursor-pointer transition-all flex items-center justify-center gap-2"
               >
                 <Banknote className="w-4 h-4" />
-                <span>Generate ATM Cash Redemption Voucher</span>
+                <span>{atmLiveReady ? 'Generate ATM Cash Redemption Voucher' : 'Localcoin ATM Connection Required'}</span>
               </button>
             </div>
           </div>
@@ -789,11 +848,11 @@ export default function BitcoinAtmHub({
                     className="w-full py-3 bg-emerald-500 hover:bg-emerald-400 text-black font-black text-xs rounded-xl shadow-md cursor-pointer transition-all flex items-center justify-center gap-1.5"
                   >
                     <CheckCircle2 className="w-4 h-4" />
-                    <span>Simulate ATM Cash Dispense Test</span>
+                    <span>Run Local ATM UI Test</span>
                   </button>
                 ) : (
                   <div className="p-3 bg-emerald-950/60 border border-emerald-800 text-emerald-300 rounded-xl text-xs font-bold text-center">
-                    ✓ Physical Cash Dispense Complete from ATM Vault
+                    Local ATM UI test complete. No physical cash was dispensed.
                   </div>
                 )}
               </div>

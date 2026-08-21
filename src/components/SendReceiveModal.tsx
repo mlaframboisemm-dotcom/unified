@@ -13,8 +13,10 @@ interface SendReceiveModalProps {
   initialAction?: 'send' | 'receive';
   initialSendAmount?: string;
   initialRecipient?: string;
+  initialRecipientAddress?: string;
   initialSymbol?: string;
   initialMemo?: string;
+  initialAmountBtc?: number;
   onExecuteTransaction: (
     type: 'SEND' | 'RECEIVE',
     symbol: string,
@@ -33,8 +35,10 @@ export default function SendReceiveModal({
   initialAction = 'send',
   initialSendAmount,
   initialRecipient,
+  initialRecipientAddress,
   initialSymbol,
   initialMemo,
+  initialAmountBtc,
   onExecuteTransaction
 }: SendReceiveModalProps) {
   const [action, setAction] = useState<'send' | 'receive'>(initialAction);
@@ -49,14 +53,19 @@ export default function SendReceiveModal({
 
   // Update states if props change when opening modal
   React.useEffect(() => {
-    if (isOpen) {
-      if (initialAction) setAction(initialAction);
-      if (initialSymbol) setSendSymbol(initialSymbol);
-      if (initialSendAmount) setSendAmount(initialSendAmount);
-      if (initialRecipient) setRecipient(initialRecipient);
-      if (initialMemo) setTransactionMemo(initialMemo);
+    if (!isOpen) return;
+
+    if (initialAction) setAction(initialAction);
+    if (initialSymbol) setSendSymbol(initialSymbol);
+    if (initialSendAmount) setSendAmount(initialSendAmount);
+    const nextRecipient = initialRecipient || initialRecipientAddress || 'bc1q8yyl8yq9np33jfxlhds6tl836rn3trl0762qsd';
+    setRecipient(nextRecipient);
+    if (initialMemo) setTransactionMemo(initialMemo);
+    if (typeof initialAmountBtc === 'number' && initialAmountBtc > 0) {
+      setIsFiat(false);
+      setSendAmount(initialAmountBtc.toString());
     }
-  }, [isOpen, initialAction, initialSymbol, initialSendAmount, initialRecipient, initialMemo]);
+  }, [isOpen, initialAction, initialSymbol, initialSendAmount, initialRecipient, initialRecipientAddress, initialMemo, initialAmountBtc]);
 
   // Receive States
   const [receiveSymbol, setReceiveSymbol] = useState(initialSymbol || 'BTC');

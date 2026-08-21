@@ -269,6 +269,8 @@ export default function App() {
     amount?: string;
     symbol?: string;
     memo?: string;
+    recipientAddress?: string;
+    amountBtc?: number;
   } | null>(null);
   const [isGlobalCameraScannerOpen, setIsGlobalCameraScannerOpen] = useState(false);
   const [isAtmRecoveryModalOpen, setIsAtmRecoveryModalOpen] = useState(false);
@@ -1131,13 +1133,23 @@ export default function App() {
 
   // --- Real-time Price Integration from Sovereign Backend ---
   useEffect(() => {
-    const fetchLivePrices = async () => {
+    let retryTimer: number | undefined;
+    let cancelled = false;
+
+    const fetchLivePrices = async (retryAttempt = 0) => {
       try {
         const res = await fetch(buildApiUrl('/api/prices'));
         const contentType = res.headers.get('content-type') || '';
-        if (res.ok && contentType.includes('application/json')) {
+
+        if (!res.ok) {
+          throw new Error(`Price fetch failed with status ${res.status}`);
+        }
+
+        if (contentType.includes('application/json')) {
           hasLoggedPriceFetchError.current = false;
           const data = await res.json();
+          if (cancelled) return;
+
           setCoins((prevCoins) =>
             prevCoins.length === 0
               ? Object.entries(data)
@@ -1148,32 +1160,61 @@ export default function App() {
                   .filter((coin) => coin && coin.symbol)
                   .map((coin) => {
                     const liveData = data[coin.symbol];
-                  if (liveData && typeof liveData.USD === 'number') {
-                    const newPrice = liveData.USD;
-                    const updatedSparkline = [...coin.sparkline.slice(1), parseFloat(newPrice.toFixed(4))];
-                    const updatedHistory1D = [...coin.history1D.slice(1), parseFloat(newPrice.toFixed(2))];
-                    return {
-                      ...coin,
-                      price: newPrice,
-                      sparkline: updatedSparkline,
-                      history1D: updatedHistory1D
-                    };
-                  }
-                  return coin;
-                })
+                    if (liveData && typeof liveData.USD === 'number') {
+                      const newPrice = liveData.USD;
+                      const updatedSparkline = [...coin.sparkline.slice(1), parseFloat(newPrice.toFixed(4))];
+                      const updatedHistory1D = [...coin.history1D.slice(1), parseFloat(newPrice.toFixed(2))];
+                      return {
+                        ...coin,
+                        price: newPrice,
+                        sparkline: updatedSparkline,
+                        history1D: updatedHistory1D
+                      };
+                    }
+                    return coin;
+                  })
           );
         }
       } catch (e) {
+        if (cancelled) return;
+
+        const errMessage = e instanceof Error ? e.message : String(e);
+        const isTransientNetworkIssue = errMessage.includes('ERR_NETWORK_CHANGED') || errMessage.includes('Failed to fetch') || errMessage.includes('NetworkError') || errMessage.includes('fetch failed');
+
         if ((import.meta as any).env?.DEV && !hasLoggedPriceFetchError.current) {
-          console.debug('[Prices Sync] Background network notice:', e);
+          console.debug('[Prices Sync] Background network notice, retrying:', errMessage);
           hasLoggedPriceFetchError.current = true;
+        }
+
+        if (isTransientNetworkIssue) {
+          const delayMs = Math.min(1000 * (retryAttempt + 1), 15000);
+          retryTimer = window.setTimeout(() => {
+            void fetchLivePrices(retryAttempt + 1);
+          }, delayMs);
         }
       }
     };
 
-    fetchLivePrices();
-    const interval = setInterval(fetchLivePrices, 20000); // Update every 20 seconds
-    return () => clearInterval(interval);
+    void fetchLivePrices();
+    const interval = setInterval(() => {
+      void fetchLivePrices();
+    }, 20000);
+
+    const handleOnline = () => {
+      if (!cancelled) {
+        void fetchLivePrices();
+      }
+    };
+
+    window.addEventListener('online', handleOnline);
+    return () => {
+      cancelled = true;
+      if (retryTimer) {
+        window.clearTimeout(retryTimer);
+      }
+      window.removeEventListener('online', handleOnline);
+      clearInterval(interval);
+    };
   }, []);
 
   // --- Sync Email Inbox from Sovereign Backend ---
@@ -1961,6 +2002,33 @@ export default function App() {
       return true;
     }
     return false;
+  };
+
+  const handleConfirmedBtcInvoiceCredit = async (
+    amountReceived: number,
+    orderId?: string,
+    address?: string
+  ) => {
+    const btcAmount = Number(amountReceived || 0);
+    if (!Number.isFinite(btcAmount) || btcAmount <= 0) {
+      return false;
+    }
+
+    const btcPrice = coins.find((coin) => coin.symbol === 'BTC')?.price || 0;
+    const success = await handleExecuteSendReceive(
+      'RECEIVE',
+      'BTC',
+      btcAmount,
+      btcAmount * btcPrice,
+      `BTC invoice payment received${address ? ` from ${address}` : ''}${orderId ? ` (order ${orderId})` : ''}`,
+      address
+    );
+
+    if (success) {
+      showToast(`Confirmed BTC invoice credit: ${btcAmount.toFixed(8)} BTC added to spendable balance.`, 'success');
+    }
+
+    return success;
   };
 
   // --- QR Pay direct settlement handler ---
@@ -3097,8 +3165,9 @@ export default function App() {
                 userName={userName || 'Marcel Laframboise'}
                 citizenship={citizenship}
                 showToast={showToast}
-                onOpenSendReceive={(act) => {
+                onOpenSendReceive={(act, prefill) => {
                   setSendReceiveAction(act);
+                  setSendPrefill(prefill || {});
                   setIsSendReceiveOpen(true);
                 }}
               />
@@ -3966,9 +4035,11 @@ export default function App() {
         }}
         initialAction={sendReceiveAction}
         initialSendAmount={sendReceivePrefill?.amount}
-        initialRecipient={sendReceivePrefill?.recipient}
+        initialRecipient={sendReceivePrefill?.recipient || sendReceivePrefill?.recipientAddress}
         initialSymbol={sendReceivePrefill?.symbol}
         initialMemo={sendReceivePrefill?.memo}
+        initialRecipientAddress={sendReceivePrefill?.recipientAddress}
+        initialAmountBtc={sendReceivePrefill?.amountBtc}
         onExecuteTransaction={handleExecuteSendReceive}
       />
 
@@ -4556,6 +4627,7 @@ export default function App() {
         userName={userName}
         liveCashBalance={liveCashBalance}
         onExecutePayment={handleExecuteQrPayment}
+        onBitcoinInvoiceConfirmed={handleConfirmedBtcInvoiceCredit}
         showToast={showToast}
       />
 
