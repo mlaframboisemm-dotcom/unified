@@ -16,6 +16,7 @@ import YieldOptimizationView from './components/YieldOptimizationView';
 import AssetDetailModal from './components/AssetDetailModal';
 import EarnRewards from './components/EarnRewards';
 import CoinbaseCard from './components/CoinbaseCard';
+import DeploymentDashboard from './pages/DeploymentDashboard';
 import SendReceiveModal from './components/SendReceiveModal';
 import CoinChart from './components/CoinChart';
 import CashTransferModal from './components/CashTransferModal';
@@ -2321,7 +2322,8 @@ export default function App() {
           />
         )}
         {/* --- Tab 1: Dashboard (Assets overview) --- */}
-        {currentTab === 'dashboard' && (
+          {currentTab === 'deployment-dashboard' && <DeploymentDashboard />}
+          {currentTab === 'dashboard' && (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
             
             {/* Left wide content: Portfolio details & market tickers */}
