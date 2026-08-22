@@ -38,7 +38,7 @@ export default function OnboardingKyc({
   const [selectedProvince, setSelectedProvince] = useState('ON');
   const [postalCode, setPostalCode] = useState('94111');
   const [taxId, setTaxId] = useState('9812'); // Last 4 digits of SSN/SIN
-  const [phone, setPhone] = useState('(555) 302-8391');
+  const [phone, setPhone] = useState('9057184275');
 
   // Verify modal state
   const [isVerifying, setIsVerifying] = useState(false);
