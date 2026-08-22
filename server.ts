@@ -6380,6 +6380,15 @@ app.post('/api/auth/auto-login', async (req, res) => {
       );
       users = db.execute('SELECT * FROM users WHERE id = ?', [userId]) as any[];
       user = users && users[0];
+
+      // Ensure default wallets exist for the newly provisioned user
+      const walletSymbols = ['USD', 'USDC', 'ETH', 'BTC'];
+      for (const sym of walletSymbols) {
+        db.execute(
+          'INSERT INTO wallets (id, user_id, asset_symbol, balance, public_address_ethereum, public_address_bitcoin, identityLocked, productionMode, blockchainLinked, lockedToEmail) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+          [`wallet-${userId}-${sym.toLowerCase()}`, userId, sym, 0, '', '', true, 'live', true, email]
+        );
+      }
     }
 
     if (Number(user.kycLevel || 0) < 3) {

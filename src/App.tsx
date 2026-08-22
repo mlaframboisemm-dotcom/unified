@@ -626,9 +626,13 @@ export default function App() {
 
     try {
       const scopedHoldings = read('cb_holdings');
-      if (scopedHoldings) setHoldings(mergePublishedBitcoinHolding(JSON.parse(scopedHoldings), normalizedEmail));
+      if (scopedHoldings) {
+        setHoldings(mergePublishedBitcoinHolding(JSON.parse(scopedHoldings), normalizedEmail));
+      } else {
+        setHoldings((prev) => mergePublishedBitcoinHolding(prev, normalizedEmail));
+      }
     } catch {
-      // keep existing state on parse failure
+      setHoldings((prev) => mergePublishedBitcoinHolding(prev, normalizedEmail));
     }
 
     const scopedUsdBalance = read('cb_usd_balance');
@@ -876,8 +880,9 @@ export default function App() {
       const balContentType = balRes.headers.get('content-type') || '';
       if (balRes.ok && balContentType.includes('application/json')) {
         const balData = await balRes.json();
+        const activeEmail = userEmail || localStorage.getItem('cb_auth_email') || '';
         if (balData.holdings) {
-          setHoldings(mergePublishedBitcoinHolding(balData.holdings, userEmail));
+          setHoldings(mergePublishedBitcoinHolding(balData.holdings, activeEmail));
         }
         if (!config.stripeConfigured && typeof balData.usdBalance === 'number') {
           setUsdBalance(balData.usdBalance);
