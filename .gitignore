@@ -6,6 +6,10 @@ coverage/
 *.log
 .env*
 !.env.example
+*-service-account.json
+sovereign-wallet-key.json
+src/db/database.json
+unified/src/db/database.json
 *.zip
 *.bin
 downloaded_hub/

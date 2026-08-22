@@ -69,9 +69,8 @@ export default function QrPayModal({
   const [posQrUrl, setPosQrUrl] = useState<string>('');
   const [posStatus, setPosStatus] = useState<'awaiting' | 'scanned' | 'settled'>('awaiting');
 
-  // Default Receive Wallet Addresses
-  const btcWalletAddress = 'bc1qz8w9j7k6m5n4p3r2t1v0x9y8z7w6v5u';
-  const defaultWalletAddress = '0x58b178f7eee92fe888c0a1684d5fe6b78c0ff99f';
+  const btcWalletAddress = '';
+  const defaultWalletAddress = '';
 
   // Generate QR code for Receive tab
   useEffect(() => {
@@ -81,6 +80,10 @@ export default function QrPayModal({
     const amt = parseFloat(receiveAmount);
 
     const generateStandardQr = async () => {
+      if (!btcWalletAddress && selectedReceiveAsset === 'BTC') {
+        setQrCodeDataUrl('');
+        return;
+      }
       let uri = '';
 
       if (selectedReceiveAsset === 'USD' || selectedReceiveAsset === 'CAD') {

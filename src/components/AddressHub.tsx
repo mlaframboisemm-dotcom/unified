@@ -51,28 +51,7 @@ export default function AddressHub({
         return [];
       }
     }
-    return [
-      {
-        id: 'addr-btc-primary',
-        coinSymbol: 'BTC',
-        address: 'bc1qz8w9j7k6m5n4p3r2t1v0x9y8z7w6v5u',
-        label: 'Primary Bitcoin Native SegWit Vault',
-        createdAt: Date.now() - 30 * 24 * 60 * 60 * 1000,
-        isGenerated: true,
-        seedPhrase: 'abandon ability able about above absent absorb abstract absurd abuse access accident',
-        privateKey: 'KxZ...[Configured in Vault]',
-        balance: 1280.50
-      },
-      {
-        id: 'addr-2',
-        coinSymbol: 'ETH',
-        address: '0x71C7656EC7ab88b098defB751B7401B5f6d1476B',
-        label: 'Primary Ethereum Web3 Account',
-        createdAt: Date.now() - 15 * 24 * 60 * 60 * 1000,
-        isGenerated: true,
-        balance: 2.12
-      }
-    ];
+    return [];
   });
 
   // Save changes

@@ -67,6 +67,9 @@ function loadSqliteAdapter(): any {
   try {
     return require('sqlite3');
   } catch (nativeErr: any) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error(`SQLite native adapter is required in production: ${nativeErr?.message || nativeErr}`);
+    }
     console.warn('[SQLite] Native sqlite3 unavailable; falling back to non-native adapter.', nativeErr?.message || nativeErr);
     class FallbackDatabase {
       private filePath: string;

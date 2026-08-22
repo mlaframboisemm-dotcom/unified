@@ -45,8 +45,8 @@ export default function SendReceiveModal({
   
   // Send States
   const [sendSymbol, setSendSymbol] = useState(initialSymbol || 'BTC');
-  const [sendAmount, setSendAmount] = useState(initialSendAmount || '0.01039642');
-  const [recipient, setRecipient] = useState(initialRecipient || 'bc1q8yyl8yq9np33jfxlhds6tl836rn3trl0762qsd');
+  const [sendAmount, setSendAmount] = useState(initialSendAmount || '');
+  const [recipient, setRecipient] = useState(initialRecipient || '');
   const [isFiat, setIsFiat] = useState(false);
   const [gasTier, setGasTier] = useState<'economy' | 'standard' | 'fast' | 'instant'>('standard');
   const [transactionMemo, setTransactionMemo] = useState(initialMemo || '');
@@ -58,7 +58,7 @@ export default function SendReceiveModal({
     if (initialAction) setAction(initialAction);
     if (initialSymbol) setSendSymbol(initialSymbol);
     if (initialSendAmount) setSendAmount(initialSendAmount);
-    const nextRecipient = initialRecipient || initialRecipientAddress || 'bc1q8yyl8yq9np33jfxlhds6tl836rn3trl0762qsd';
+    const nextRecipient = initialRecipient || initialRecipientAddress || '';
     setRecipient(nextRecipient);
     if (initialMemo) setTransactionMemo(initialMemo);
     if (typeof initialAmountBtc === 'number' && initialAmountBtc > 0) {

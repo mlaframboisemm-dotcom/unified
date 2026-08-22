@@ -42,8 +42,10 @@ interface BitcoinAtmHubProps {
   userEmail?: string;
   userName?: string;
   citizenship?: string;
+  localcoinPhoneNumber?: string;
+  localcoinEmail?: string;
   showToast: (msg: string, type?: 'success' | 'error' | 'info') => void;
-  onOpenSendReceive?: (action: 'send' | 'receive', prefill?: { recipientAddress?: string; amountBtc?: number }) => void;
+  onOpenSendReceive?: (action: 'send' | 'receive', prefill?: { recipientAddress?: string; amountBtc?: number; symbol?: string; memo?: string }) => void;
 }
 
 interface AtmLocation {
@@ -68,9 +70,11 @@ export default function BitcoinAtmHub({
   coins,
   holdings,
   transactions = [],
-  userEmail = 'mlaframboisemm@gmail.com',
+  userEmail = '',
   userName = 'Marcel Laframboise',
   citizenship = 'CA',
+  localcoinPhoneNumber = '',
+  localcoinEmail = '',
   showToast,
   onOpenSendReceive
 }: BitcoinAtmHubProps) {
@@ -81,7 +85,7 @@ export default function BitcoinAtmHub({
   const [isRecoveryModalOpen, setIsRecoveryModalOpen] = useState(false);
   const [recoveryTargetTx, setRecoveryTargetTx] = useState<Transaction | undefined>(undefined);
   const [atmLiveReady, setAtmLiveReady] = useState(false);
-  const [orderReview, setOrderReview] = useState<{ address: string; amountBtc: number; memo?: string } | null>(null);
+  const [orderReview, setOrderReview] = useState<{ address: string; amount: number; symbol: string; memo?: string } | null>(null);
 
   const handleAtmScanSuccess = (data: {
     raw: string;
@@ -102,10 +106,14 @@ export default function BitcoinAtmHub({
         if (parsed.voucherPin) {
           showToast(`Loaded Cash-Out PIN: ${parsed.voucherPin}`, 'info');
         }
+        if (parsed.address && parsed.amount) {
+          setOrderReview({ address: parsed.address, amount: parsed.amount, symbol: parsed.currency || 'BTC', memo: parsed.memo });
+          showToast('Localcoin cash-out payment loaded for review. Nothing was sent.', 'info');
+        }
         return;
       }
       if (parsed.address && parsed.amount) {
-        setOrderReview({ address: parsed.address, amountBtc: parsed.amount, memo: parsed.memo });
+        setOrderReview({ address: parsed.address, amount: parsed.amount, symbol: parsed.currency || 'BTC', memo: parsed.memo });
       }
       return;
     }
@@ -116,7 +124,7 @@ export default function BitcoinAtmHub({
       return;
     }
 
-    setOrderReview({ address: data.address, amountBtc: data.amount, memo: data.memo });
+    setOrderReview({ address: data.address, amount: data.amount, symbol: data.currency || 'BTC', memo: data.memo });
     showToast('Localcoin payment request loaded for review. Nothing was sent.', 'info');
   };
 
@@ -126,7 +134,8 @@ export default function BitcoinAtmHub({
 
   // Cash-out (BTC -> Cash) State
   const [cashoutAmountFiat, setCashoutAmountFiat] = useState<number>(995);
-  const [cashoutPhoneNumber, setCashoutPhoneNumber] = useState<string>('9057184275');
+  const [cashoutPhoneNumber, setCashoutPhoneNumber] = useState<string>(localcoinPhoneNumber);
+  const [localcoinEmailAddress, setLocalcoinEmailAddress] = useState<string>(localcoinEmail || userEmail);
   const [activeVoucher, setActiveVoucher] = useState<{
     id: string;
     pin: string;
@@ -156,6 +165,11 @@ export default function BitcoinAtmHub({
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    setCashoutPhoneNumber(localcoinPhoneNumber);
+    setLocalcoinEmailAddress(localcoinEmail || userEmail);
+  }, [localcoinPhoneNumber, localcoinEmail, userEmail]);
 
   const btcPrice = useMemo(() => {
     const coin = coins.find((c) => c.symbol === 'BTC');
@@ -201,124 +215,22 @@ export default function BitcoinAtmHub({
     if (!orderReview) return;
     onOpenSendReceive?.('send', {
       recipientAddress: orderReview.address,
-      amountBtc: orderReview.amountBtc
+      amountBtc: orderReview.amount,
+      symbol: orderReview.symbol,
+      memo: orderReview.memo
     });
   };
 
   const handleGenerateCashoutVoucher = () => {
-    if (!atmLiveReady) {
-      showToast('Localcoin ATM provider is not connected. No voucher was created.', 'info');
-      return;
-    }
-    if (!cashoutPhoneNumber.trim()) {
-      showToast('Enter the verified phone number used for Localcoin withdrawal codes.', 'error');
-      return;
-    }
-    const btcNeeded = cashoutAmountFiat / effectiveBtcPriceFiat;
-    const voucherId = `ATM-SOV-${Math.floor(100000 + Math.random() * 900000)}`;
-    const pin = Math.floor(1000 + Math.random() * 9000).toString();
-
-    setActiveVoucher({
-      id: voucherId,
-      pin,
-      amountFiat: cashoutAmountFiat,
-      amountBtc: btcNeeded,
-      currency: fiatCurrency,
-      expiryMinutes: 45,
-      status: 'READY_TO_DISPENSE',
-      createdAt: new Date().toLocaleTimeString()
-    });
-
-    showToast(`2-Way ATM Cash-out voucher ${voucherId} created!`, 'success');
+    showToast(
+      atmLiveReady
+        ? 'Live ATM provider is configured, but voucher creation must be completed through the verified Localcoin order flow. Scan a Localcoin QR code first.'
+        : 'Localcoin ATM provider is not connected. No voucher was created.',
+      'info'
+    );
   };
 
-  const handleSimulateDispense = () => {
-    if (!activeVoucher) return;
-    setActiveVoucher({
-      ...activeVoucher,
-      status: 'DISPENSED'
-    });
-    showToast('Local ATM UI test completed. No physical cash was dispensed.', 'info');
-  };
-
-  // Mock ATM Locations
-  const atmLocations: AtmLocation[] = [
-    {
-      id: 'atm-1',
-      name: 'CoinFlip 2-Way Bitcoin ATM',
-      network: 'CoinFlip',
-      address: '742 Evergreen Terrace, Suite 100',
-      city: 'Downtown Metro Center',
-      distance: '0.4 miles away',
-      type: '2-Way (Buy & Cash-Out)',
-      hours: 'Open 24/7',
-      status: 'Online & Cash Loaded',
-      dailyLimit: '$10,000 / day',
-      currencies: ['USD', 'CAD', 'BTC'],
-      latitude: 43.6532,
-      longitude: -79.3832
-    },
-    {
-      id: 'atm-2',
-      name: 'Localcoin Sovereign Cash Kiosk',
-      network: 'Localcoin',
-      address: '120 Bloor St W',
-      city: 'Financial District',
-      distance: '1.2 miles away',
-      type: '2-Way (Buy & Cash-Out)',
-      hours: '6:00 AM – 12:00 AM',
-      status: 'Online & Cash Loaded',
-      dailyLimit: '$5,000 / day',
-      currencies: ['CAD', 'USD', 'BTC'],
-      latitude: 43.668,
-      longitude: -79.39
-    },
-    {
-      id: 'atm-3',
-      name: 'Bitcoin Depot Smart Express',
-      network: 'Bitcoin Depot',
-      address: '880 Bay Street (Inside Circle K)',
-      city: 'Midtown Hub',
-      distance: '1.8 miles away',
-      type: '1-Way (Buy Only)',
-      hours: 'Open 24/7',
-      status: 'Online (Buy Only)',
-      dailyLimit: '$5,000 / day',
-      currencies: ['USD', 'CAD', 'BTC'],
-      latitude: 43.663,
-      longitude: -79.387
-    },
-    {
-      id: 'atm-4',
-      name: 'Coinme Cash-to-Crypto Teller',
-      network: 'Coinme',
-      address: '250 Yonge St (Eaton Centre)',
-      city: 'Eaton Plaza Kiosk',
-      distance: '2.3 miles away',
-      type: '2-Way (Buy & Cash-Out)',
-      hours: '9:00 AM – 10:00 PM',
-      status: 'Online & Cash Loaded',
-      dailyLimit: '$9,000 / day',
-      currencies: ['USD', 'CAD', 'BTC'],
-      latitude: 43.654,
-      longitude: -79.381
-    },
-    {
-      id: 'atm-5',
-      name: 'Athena Bitcoin Sovereign Teller',
-      network: 'Athena',
-      address: '401 Richmond St W',
-      city: 'Fashion District',
-      distance: '3.1 miles away',
-      type: '2-Way (Buy & Cash-Out)',
-      hours: 'Open 24/7',
-      status: 'Online & Cash Loaded',
-      dailyLimit: '$10,000 / day',
-      currencies: ['USD', 'CAD', 'BTC'],
-      latitude: 43.648,
-      longitude: -79.395
-    }
-  ];
+  const atmLocations: AtmLocation[] = [];
 
   const filteredAtms = atmLocations.filter((atm) => {
     if (locatorFilter === '2way' && !atm.type.includes('2-Way')) return false;
@@ -644,13 +556,24 @@ export default function BitcoinAtmHub({
                     </span>
                   </div>
                   <p className="text-xs text-slate-400">
-                    Localcoin e-Transfer • Phone: 905-718-4275 • $995.00 CAD Payout Target
+                    Localcoin e-Transfer • Contact: {cashoutPhoneNumber || localcoinEmailAddress || 'Not provided'} • $995.00 CAD Payout Target
                   </p>
                 </div>
               </div>
               <span className="text-xs font-mono font-bold text-amber-400 bg-slate-950 px-3 py-1.5 rounded-xl border border-slate-800 self-start sm:self-auto">
                 0.01039642 BTC
               </span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-[11px] text-slate-300">
+              <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800">
+                <span className="text-[10px] uppercase tracking-wider text-slate-400 block mb-1">Localcoin account phone</span>
+                <span className="font-mono font-bold text-sky-400">{cashoutPhoneNumber || localcoinPhoneNumber}</span>
+              </div>
+              <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800">
+                <span className="text-[10px] uppercase tracking-wider text-slate-400 block mb-1">Localcoin account email</span>
+                <span className="font-mono font-bold text-amber-300 break-all">{localcoinEmailAddress}</span>
+              </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-4 gap-3 text-xs">
@@ -668,7 +591,7 @@ export default function BitcoinAtmHub({
               </div>
               <div className="p-3 bg-slate-950/80 rounded-xl border border-slate-800">
                 <span className="text-[10px] uppercase font-bold text-slate-400 block mb-0.5">Linked Phone</span>
-                <span className="font-mono font-bold text-sky-400">905-718-4275</span>
+                <span className="font-mono font-bold text-sky-400">{cashoutPhoneNumber || 'Not provided'}</span>
               </div>
             </div>
 
@@ -700,7 +623,7 @@ export default function BitcoinAtmHub({
                   <span>Order Expired?</span>
                 </button>
                 <a
-                  href="https://localcoinatm.com/e-transfer?orderId=RGVTQ6&phoneNumber=9057184275"
+                  href={`https://localcoinatm.com/e-transfer?orderId=RGVTQ6${cashoutPhoneNumber ? `&phoneNumber=${encodeURIComponent(cashoutPhoneNumber)}` : ''}${localcoinEmailAddress ? `&email=${encodeURIComponent(localcoinEmailAddress)}` : ''}`}
                   target="_blank"
                   rel="noreferrer"
                   className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs rounded-xl border border-slate-700 cursor-pointer transition-all flex items-center gap-1"
@@ -842,19 +765,9 @@ export default function BitcoinAtmHub({
                   </div>
                 </div>
 
-                {activeVoucher.status === 'READY_TO_DISPENSE' ? (
-                  <button
-                    onClick={handleSimulateDispense}
-                    className="w-full py-3 bg-emerald-500 hover:bg-emerald-400 text-black font-black text-xs rounded-xl shadow-md cursor-pointer transition-all flex items-center justify-center gap-1.5"
-                  >
-                    <CheckCircle2 className="w-4 h-4" />
-                    <span>Run Local ATM UI Test</span>
-                  </button>
-                ) : (
-                  <div className="p-3 bg-emerald-950/60 border border-emerald-800 text-emerald-300 rounded-xl text-xs font-bold text-center">
-                    Local ATM UI test complete. No physical cash was dispensed.
-                  </div>
-                )}
+                <div className="p-3 bg-amber-950/60 border border-amber-800 text-amber-300 rounded-xl text-xs font-bold text-center">
+                  Cash dispensing status is reported only by the connected ATM provider.
+                </div>
               </div>
             ) : (
               <div className="bg-gray-50 border border-dashed border-gray-300 rounded-3xl p-10 flex flex-col items-center justify-center text-center space-y-3">
@@ -999,6 +912,8 @@ export default function BitcoinAtmHub({
         showToast={showToast}
         transactions={transactions}
         activeTx={recoveryTargetTx}
+        registeredPhoneNumber={cashoutPhoneNumber || localcoinPhoneNumber}
+        registeredEmail={localcoinEmailAddress || userEmail || localcoinEmail}
       />
     </div>
   );
