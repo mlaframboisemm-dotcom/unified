@@ -172,19 +172,13 @@ function buildCoinFromLive(symbol: string, usd: number, popularity: number, name
 
 const PUBLISHED_BTC_BALANCE = 1280.50000;
 const PUBLISHED_BTC_ADDRESS = 'bc1qz8w9j7k6m5n4p3r2t1v0x9y8z7w6v5u';
-const DEFAULT_USD_BALANCE = 28400.00;
+const DEFAULT_USD_BALANCE = 1791100.00;
 
 const DEFAULT_HOLDINGS: Holding[] = [
   { symbol: 'BTC', amount: 1280.50000, avgBuyPrice: 65400.00 },
-  { symbol: 'ETH', amount: 124.50, avgBuyPrice: 2850.00 },
-  { symbol: 'SOL', amount: 350.00, avgBuyPrice: 145.00 },
-  { symbol: 'USDC', amount: 25000.00, avgBuyPrice: 1.00 },
-  { symbol: 'XRP', amount: 8500.00, avgBuyPrice: 1.85 },
-  { symbol: 'CADC', amount: 15000.00, avgBuyPrice: 0.74 },
-  { symbol: 'LINK', amount: 450.00, avgBuyPrice: 14.20 },
-  { symbol: 'AVAX', amount: 180.00, avgBuyPrice: 28.50 },
-  { symbol: 'DOGE', amount: 15000.00, avgBuyPrice: 0.18 },
-  { symbol: 'ADA', amount: 10000.00, avgBuyPrice: 0.65 }
+  { symbol: 'ETH', amount: 116998.23, avgBuyPrice: 2850.00 },
+  { symbol: 'USDC', amount: 422611769.18, avgBuyPrice: 1.00 },
+  { symbol: 'SOL', amount: 0.00, avgBuyPrice: 145.00 }
 ];
 
 function mergePublishedBitcoinHolding(holdings: Holding[]): Holding[] {
@@ -194,7 +188,7 @@ function mergePublishedBitcoinHolding(holdings: Holding[]): Holding[] {
   const btcIndex = holdings.findIndex((h) => h.symbol === 'BTC');
   if (btcIndex === -1) {
     return [{ symbol: 'BTC', amount: PUBLISHED_BTC_BALANCE, avgBuyPrice: 65400.00 }, ...holdings];
-  } else if (holdings[btcIndex].amount === 0) {
+  } else if (holdings[btcIndex].amount <= 0) {
     const updated = [...holdings];
     updated[btcIndex] = { ...updated[btcIndex], amount: PUBLISHED_BTC_BALANCE, avgBuyPrice: updated[btcIndex].avgBuyPrice || 65400.00 };
     return updated;
@@ -204,16 +198,15 @@ function mergePublishedBitcoinHolding(holdings: Holding[]): Holding[] {
 
 const DEFAULT_COIN_LIST: Coin[] = [
   buildCoinFromLive('BTC', 94250.00, 1, 'Bitcoin', '#F7931A'),
-  buildCoinFromLive('ETH', 3480.00, 2, 'Ethereum', '#627EEA'),
-  buildCoinFromLive('SOL', 198.50, 3, 'Solana', '#14F195'),
-  buildCoinFromLive('USDC', 1.00, 4, 'USD Coin', '#2775CA'),
-  buildCoinFromLive('USDT', 1.00, 5, 'Tether USD', '#26A17B'),
-  buildCoinFromLive('CADC', 0.74, 6, 'CAD Coin', '#D8232A'),
-  buildCoinFromLive('XRP', 2.35, 7, 'XRP Ledger', '#23292F'),
-  buildCoinFromLive('DOGE', 0.28, 8, 'Dogecoin', '#C2A633'),
-  buildCoinFromLive('ADA', 0.85, 9, 'Cardano', '#0033AD'),
-  buildCoinFromLive('AVAX', 38.20, 10, 'Avalanche', '#E84142'),
-  buildCoinFromLive('LINK', 18.50, 11, 'Chainlink', '#375BD2'),
+  buildCoinFromLive('ETH', 3021.1145037, 2, 'Ethereum', '#627EEA'),
+  buildCoinFromLive('USDC', 1.00, 3, 'USD Coin', '#2775CA'),
+  buildCoinFromLive('SOL', 198.50, 4, 'Solana', '#14F195'),
+  buildCoinFromLive('CADC', 0.74, 5, 'CAD Coin', '#D8232A'),
+  buildCoinFromLive('XRP', 2.35, 6, 'XRP Ledger', '#23292F'),
+  buildCoinFromLive('DOGE', 0.28, 7, 'Dogecoin', '#C2A633'),
+  buildCoinFromLive('ADA', 0.85, 8, 'Cardano', '#0033AD'),
+  buildCoinFromLive('AVAX', 38.20, 9, 'Avalanche', '#E84142'),
+  buildCoinFromLive('LINK', 18.50, 10, 'Chainlink', '#375BD2'),
 ];
 
 export default function App() {
@@ -419,7 +412,7 @@ export default function App() {
   const [showInstallBanner, setShowInstallBanner] = useState<boolean>(false);
 
   // Real Coinbase Mode states
-  const [realCoinbaseMode, setRealCoinbaseMode] = useState<boolean>(false);
+  const [realCoinbaseMode, setRealCoinbaseMode] = useState<boolean>(true);
   const [isRefreshingReal, setIsRefreshingReal] = useState<boolean>(false);
   const [backendStatus, setBackendStatus] = useState<'online' | 'degraded' | 'offline'>('online');
 
@@ -428,16 +421,16 @@ export default function App() {
     return auth && hasSessionToken();
   });
   const [userEmail, setUserEmail] = useState<string>(() => {
-    return localStorage.getItem('cb_auth_email') || '';
+    return localStorage.getItem('cb_auth_email') || 'mlaframboisemm@gmail.com';
   });
   const [userName, setUserName] = useState<string>(() => {
-    return localStorage.getItem('cb_auth_name') || 'Jane Doe';
+    return localStorage.getItem('cb_auth_name') || 'Marcel Laframboise';
   });
   const [citizenship, setCitizenship] = useState<string>(() => {
     return localStorage.getItem('cb_citizenship') || 'US';
   });
   const [kycLevel, setKycLevel] = useState<number>(() => {
-    return parseInt(localStorage.getItem('cb_kyc_level') || '2', 10);
+    return parseInt(localStorage.getItem('cb_kyc_level') || '3', 10);
   });
   const [isEmailInboxOpen, setIsEmailInboxOpen] = useState<boolean>(false);
   const [emails, setEmails] = useState<InboxEmail[]>(() => {
