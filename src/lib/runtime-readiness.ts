@@ -24,6 +24,17 @@ function hasEmailProviderConfigured(env: NodeJS.ProcessEnv): boolean {
   );
 }
 
+function hasAtmProviderConfigured(env: NodeJS.ProcessEnv): boolean {
+  return Boolean(
+    env.ATM_ENABLE_LIVE_OPERATIONS === 'true' &&
+    env.ATM_NETWORK &&
+    env.ATM_PROVIDER_API_URL &&
+    env.ATM_PROVIDER_API_KEY &&
+    env.ATM_PROVIDER_MERCHANT_ID &&
+    env.ATM_PROVIDER_WEBHOOK_SECRET
+  );
+}
+
 export async function buildRuntimeReadinessReport(env: NodeJS.ProcessEnv): Promise<RuntimeReadinessReport> {
   const missingConfig: string[] = [];
 
@@ -44,6 +55,9 @@ export async function buildRuntimeReadinessReport(env: NodeJS.ProcessEnv): Promi
   }
   if (!env.SOVEREIGN_ADMIN_EMAILS || !env.SOVEREIGN_ADMIN_EMAILS.trim()) {
     missingConfig.push('SOVEREIGN_ADMIN_EMAILS');
+  }
+  if (!hasAtmProviderConfigured(env)) {
+    missingConfig.push('ATM provider configuration (disabled until explicitly enabled)');
   }
 
   const enforcementState = getCriticalOperationsEnforcementState();
@@ -73,6 +87,13 @@ export async function buildRuntimeReadinessReport(env: NodeJS.ProcessEnv): Promi
     {
       name: 'Admin emails',
       status: env.SOVEREIGN_ADMIN_EMAILS && env.SOVEREIGN_ADMIN_EMAILS.trim() ? 'configured' : 'missing'
+    },
+    {
+      name: 'Bitcoin ATM provider',
+      status: hasAtmProviderConfigured(env) ? 'configured' : 'missing',
+      details: hasAtmProviderConfigured(env)
+        ? 'Live ATM operations are explicitly enabled with provider credentials and webhook verification.'
+        : 'ATM live operations are disabled until an operator API, merchant ID, webhook secret, and explicit enablement are configured.'
     },
     {
       name: 'Financial proof enforcement',

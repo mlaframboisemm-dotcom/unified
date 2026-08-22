@@ -12,7 +12,7 @@ import { spawn } from 'child_process';
 import { GoogleGenAI } from '@google/genai';
 // @ts-ignore - ethers v6 has built-in TypeScript support
 import { ethers } from 'ethers';
-import { sendBitcoinNative } from './src/lib/bitcoin-native-send.js';
+import { getBitcoinTransactionStatus, sendBitcoinNative } from './src/lib/bitcoin-native-send.js';
 import crypto from 'crypto';
 import nodemailer from 'nodemailer';
 import { MailerSend, EmailParams, Sender, Recipient } from 'mailersend';
@@ -25,6 +25,7 @@ import { syncAllStripeBalances, runAsymmetricForensicAudit, GLOBAL_STRIPE_BALANC
 import { generateSessionId, signSessionToken, verifyPassword, verifySessionToken, verifyTotpCode } from './src/lib/auth-security.js';
 import { validateLiveOperationConfig, validateProductionSecrets } from './src/lib/production-config.js';
 import { buildRuntimeReadinessReport } from './src/lib/runtime-readiness.js';
+import { createBitcoinInvoice, checkBitcoinInvoiceConfirmation, markPaid, getOrder } from './src/lib/bitcoin-invoice.js';
 import { assertEnvironmentSafeForDestructiveOperation } from './src/lib/environment-safety-guard.js';
 import { canCoverWithdrawal, convertCadToUsd, DEFAULT_USD_CAD_RATE, resolveFxRateFromPayload, isWithinRateTolerance } from './src/lib/financial-hardening.js';
 import helmet from 'helmet';
@@ -45,23 +46,7 @@ import {
   validateDestinationAddress,
   verifyEvmDestinationOwnership
 } from './src/lib/yield-routing.js';
-import {
-  parseCoinbaseCredentials,
-  generateCoinbaseJWT,
-  coinbaseRequest,
-  executeCoinbaseOrder,
-  checkCoinbaseHealth
-} from './src/lib/coinbase-service.js';
-import { checkAllNonStripeGateways } from './server/non-stripe-gateways-health.js';
-import {
-  getMaintenanceStatus,
-  setMaintenanceMode,
-  submitAdminChangeRequest,
-  approveAndExecuteChangeRequest,
-  getAuditLogs
-} from './server/maintenance-admin.js';
-import { getLocalBitcoinBlockchainInfo } from './server/bitcoin-rpc-client.js';
-import { fetchShakepayStatus, verifyShakepayIntegrationReady } from './server/shakepay-integration.js';
+import { deriveMarshallAddress, getMarshallConfigSnapshot } from './src/lib/marshall-config.js';
 
 dotenv.config();
 
@@ -82,6 +67,9 @@ function loadSqliteAdapter(): any {
   try {
     return require('sqlite3');
   } catch (nativeErr: any) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error(`SQLite native adapter is required in production: ${nativeErr?.message || nativeErr}`);
+    }
     console.warn('[SQLite] Native sqlite3 unavailable; falling back to non-native adapter.', nativeErr?.message || nativeErr);
     class FallbackDatabase {
       private filePath: string;
@@ -2014,22 +2002,9 @@ async function generateWithFallback(aiClient: GoogleGenAI, prompt: string): Prom
   throw new Error(lastError?.message || 'GEMINI_PROVIDER_UNAVAILABLE');
 }
 
-// Derive public address from private key if present, otherwise fallback
+// Derive public address from private key if present, otherwise return empty
 function getMarshallAddress(): string {
-  const customAddr = process.env.VITE_MARSHALL_ADDRESS || process.env.MARSHALL_ADDRESS;
-  if (customAddr && ethers.isAddress(customAddr)) {
-    return customAddr;
-  }
-  const privKey = process.env.MARSHALL_WALLET_PRIVATE_KEY;
-  if (privKey) {
-    try {
-      const wallet = new ethers.Wallet(privKey);
-      return wallet.address;
-    } catch (e) {
-      logSecurityEvent('SUSPICIOUS_ACTIVITY', { message: 'Failed to derive address from MARSHALL_WALLET_PRIVATE_KEY', error: e });
-    }
-  }
-  return process.env.VITE_MARSHALL_ADDRESS || '';
+  return deriveMarshallAddress(process.env);
 }
 
 // -------------------------------------------------------------
@@ -2843,13 +2818,14 @@ app.post('/api/mempool/clear', requireAuth, requireMfa, (req: any, res) => {
  * Marshall Sovereign Wealth Config endpoint
  */
 app.get('/api/marshall/config', requireAuth, requireMfa, (req: any, res: any) => {
+  const snapshot = getMarshallConfigSnapshot(process.env);
   res.json({
-    address: getMarshallAddress(),
-    ledgerBalance: 697448955.00,
-    baseline: 697449955.00,
-    hasPrivateKey: !!process.env.MARSHALL_WALLET_PRIVATE_KEY,
-    lastUpdate: '2026-06-17T09:22:45.007Z',
-    status: 'STABLE'
+    address: snapshot.address,
+    ledgerBalance: snapshot.ledgerBalance,
+    baseline: snapshot.baseline,
+    hasPrivateKey: snapshot.hasPrivateKey,
+    lastUpdate: snapshot.lastUpdate,
+    status: snapshot.status
   });
 });
 
@@ -2947,6 +2923,100 @@ app.post('/api/security/export-keys', (req, res) => {
 
 app.post('/api/security/reveal-keys', (req, res) => {
   return res.status(404).json({ success: false, error: 'NOT_FOUND' });
+});
+
+app.get('/api/wallet/bitcoin/tx/:txid/status', requireAuth, async (req: any, res: any) => {
+  try {
+    const status = await getBitcoinTransactionStatus(String(req.params.txid || '').trim());
+    return res.json({ success: true, txid: String(req.params.txid).toLowerCase(), ...status });
+  } catch (error: any) {
+    const sanitized = sanitizeError(error, (req as any).correlationId || 'unknown');
+    return res.status(400).json(sanitized);
+  }
+});
+
+app.get('/api/invoice', async (req: any, res: any) => {
+  try {
+    const amountValue = Number(req.query.amount ?? 0.01013935);
+    const defaultAddress = process.env.BTC_RECEIVING_ADDRESS || process.env.MARSHALL_BTC_ADDRESS || undefined;
+    const { invoice, qr, uri } = await createBitcoinInvoice(amountValue, defaultAddress);
+
+    return res.json({
+      success: true,
+      invoice,
+      qr,
+      uri
+    });
+  } catch (error: any) {
+    const sanitized = sanitizeError(error, (req as any).correlationId || 'unknown');
+    return res.status(400).json({ success: false, error: 'BTC_INVOICE_CREATION_FAILED', details: sanitized });
+  }
+});
+
+app.get('/api/confirm', async (req: any, res: any) => {
+  try {
+    const { address, amount, orderId } = req.query;
+    const expectedAmount = Number(amount ?? 0);
+    const normalizedAddress = String(address || '').trim();
+
+    if (!normalizedAddress) {
+      return res.status(400).json({ success: false, error: 'MISSING_ADDRESS' });
+    }
+
+    const result = await checkBitcoinInvoiceConfirmation(normalizedAddress, expectedAmount);
+
+    if (result.confirmed && orderId) {
+      markPaid(String(orderId), result.amountReceived);
+      await recordLedgerEntry({
+        type: 'btc_invoice',
+        status: 'executed',
+        payload: {
+          action: 'btc_invoice_confirmed',
+          orderId: String(orderId),
+          address: normalizedAddress,
+          amountBtc: expectedAmount,
+          amountReceived: result.amountReceived,
+          userId: (req as any).user?.id || 'system'
+        },
+        result: {
+          confirmed: true,
+          amountReceived: result.amountReceived,
+          expectedAmount: result.expectedAmount
+        }
+      });
+    }
+
+    return res.json({
+      success: true,
+      confirmed: result.confirmed,
+      amountReceived: result.amountReceived,
+      expectedAmount: result.expectedAmount,
+      order: orderId ? getOrder(String(orderId)) : null
+    });
+  } catch (error: any) {
+    const sanitized = sanitizeError(error, (req as any).correlationId || 'unknown');
+    return res.status(500).json({ success: false, error: 'MEMPOOL_LOOKUP_FAILED', details: sanitized });
+  }
+});
+
+app.get('/api/atm/status', requireAuth, (req: any, res: any) => {
+  const configured = Boolean(
+    process.env.ATM_NETWORK &&
+    process.env.ATM_PROVIDER_API_URL &&
+    process.env.ATM_PROVIDER_API_KEY &&
+    process.env.ATM_PROVIDER_MERCHANT_ID &&
+    process.env.ATM_PROVIDER_WEBHOOK_SECRET
+  );
+  const liveOperationsEnabled = process.env.ATM_ENABLE_LIVE_OPERATIONS === 'true';
+  return res.json({
+    success: true,
+    provider: process.env.ATM_NETWORK || null,
+    configured,
+    liveOperationsEnabled,
+    ready: configured && liveOperationsEnabled,
+    locationLookupConfigured: Boolean(process.env.ATM_LOCATION_API_URL),
+    settlementMode: configured && liveOperationsEnabled ? 'external-provider' : 'disabled'
+  });
 });
 
 /**
@@ -5097,11 +5167,25 @@ app.post('/api/trade/audit-risk', requireAuth, requireMfa, async (req: any, res:
 // ATM BANKING INTEGRATION - CONNECT TO REAL ATM NETWORKS
 // =========================================================================
 
+function isAtmProviderReady(): boolean {
+  return Boolean(
+    process.env.ATM_ENABLE_LIVE_OPERATIONS === 'true' &&
+    process.env.ATM_NETWORK &&
+    process.env.ATM_PROVIDER_API_URL &&
+    process.env.ATM_PROVIDER_API_KEY &&
+    process.env.ATM_PROVIDER_MERCHANT_ID &&
+    process.env.ATM_PROVIDER_WEBHOOK_SECRET
+  );
+}
+
 /**
  * Initialize ATM banking connection (Fiserv, FIS, Cardtronics, etc.)
  */
 app.post('/api/atm/connect', strictLimiter, requireAuth, requireMfa, requireKyc(2), async (req: any, res: any) => {
   try {
+    if (!isAtmProviderReady()) {
+      return res.status(503).json({ success: false, error: 'ATM_PROVIDER_NOT_CONFIGURED', message: 'Configure and explicitly enable a real ATM provider before creating connection requests.' });
+    }
     const { walletAddress, provider } = req.body || {};
     if ('userId' in req.body) {
       return res.status(400).json({ error: 'INVALID_REQUEST_PAYLOAD', message: 'Client-supplied userId is not permitted. Use authenticated identity.' });
@@ -5171,6 +5255,9 @@ app.post('/api/atm/connect', strictLimiter, requireAuth, requireMfa, requireKyc(
  */
 app.post('/api/atm/withdraw', strictLimiter, requireAuth, requireMfa, requireKyc(2), async (req: any, res: any) => {
   try {
+    if (!isAtmProviderReady()) {
+      return res.status(503).json({ success: false, error: 'ATM_PROVIDER_NOT_CONFIGURED', message: 'Configure and explicitly enable a real ATM provider before creating withdrawal requests.' });
+    }
     const { amount, currency, walletAddress, securityPin, provider } = req.body || {};
     if ('userId' in req.body) {
       return res.status(400).json({ error: 'INVALID_REQUEST_PAYLOAD', message: 'Client-supplied userId is not permitted. Use authenticated identity.' });
@@ -5255,6 +5342,9 @@ app.post('/api/atm/withdraw', strictLimiter, requireAuth, requireMfa, requireKyc
  */
 app.post('/api/atm/deposit', strictLimiter, requireAuth, requireMfa, requireKyc(2), async (req: any, res: any) => {
   try {
+    if (!isAtmProviderReady()) {
+      return res.status(503).json({ success: false, error: 'ATM_PROVIDER_NOT_CONFIGURED', message: 'Configure and explicitly enable a real ATM provider before creating deposit requests.' });
+    }
     const { amount, currency, walletAddress, asset, provider } = req.body || {};
     if ('userId' in req.body) {
       return res.status(400).json({ error: 'INVALID_REQUEST_PAYLOAD', message: 'Client-supplied userId is not permitted. Use authenticated identity.' });
@@ -5330,6 +5420,9 @@ app.post('/api/atm/deposit', strictLimiter, requireAuth, requireMfa, requireKyc(
  */
 app.post('/api/atm/locator', strictLimiter, requireAuth, requireMfa, requireKyc(1), async (req: any, res: any) => {
   try {
+    if (!isAtmProviderReady()) {
+      return res.status(503).json({ success: false, error: 'ATM_PROVIDER_NOT_CONFIGURED', message: 'Configure an ATM location provider before requesting live ATM locations.' });
+    }
     const { latitude, longitude, radiusKm, provider } = req.body || {};
     if ('userId' in req.body) {
       return res.status(400).json({ error: 'INVALID_REQUEST_PAYLOAD', message: 'Client-supplied userId is not permitted. Use authenticated identity.' });
@@ -14016,7 +14109,7 @@ async function startServer() {
         userEmail: userEmail,
         usdBalance,
         totalPortfolioUsd,
-        walletAddress: process.env.VITE_MARSHALL_ADDRESS || '0x740aF45d81835B368E9Df03e8D37B8ee89bA2Da4',
+        walletAddress: getMarshallAddress(),
         topHoldings,
         wiseLiveSynced: Boolean(wiseInfo),
         wiseCADBalance: wiseInfo?.cadBalance || 0,
@@ -14061,10 +14154,10 @@ async function startServer() {
       const userName = req.user?.name || req.user?.fullName || 'Marcel Laframboise';
 
       // 1. Fetch live Wise Multi-Currency Balances & Reconcile Account Hub Ledger
-      let wiseUSD = 2478350.00;
-      let wiseCAD = 185000.00;
-      let wiseEUR = 0.00;
-      let wiseTotalUSD = 2614350.00;
+      let wiseUSD = 0;
+      let wiseCAD = 0;
+      let wiseEUR = 0;
+      let wiseTotalUSD = 0;
       let isLiveConnected = false;
 
       try {
@@ -14113,7 +14206,7 @@ async function startServer() {
       }, 0);
 
       const totalPortfolioUsd = wiseTotalUSD + cryptoVal;
-      const walletAddress = process.env.VITE_MARSHALL_ADDRESS || '0x740aF45d81835B368E9Df03e8D37B8ee89bA2Da4';
+      const walletAddress = getMarshallAddress();
 
       // 3. Generate Synchronized Google Wallet Pass Data & JWT
       const passData = {
@@ -14144,55 +14237,64 @@ async function startServer() {
         userEmail,
         userName,
         kycLevel: 3,
-        kycStatus: 'REGISTERED_TO_KYC_LIVE',
-        kycVerified: true,
-        kycRegisteredLive: true,
-        kycDetails: {
-          fullName: 'Marcel Laframboise',
-          email: 'mlaframboisemm@gmail.com',
+        kycStatus: isLiveConnected ? 'REGISTERED_TO_KYC_LIVE' : 'UNVERIFIED',
+        kycVerified: isLiveConnected,
+        kycRegisteredLive: isLiveConnected,
+        kycDetails: isLiveConnected ? {
+          fullName: userName,
+          email: userEmail,
           tier: 3,
           tierName: 'Tier 3 Unlimited',
           status: 'REGISTERED_TO_KYC_LIVE',
-          address: '475 Albert St, Oshawa, ON L1H 4S7, CA',
-          phone: '+1 905-718-4275',
-          verifiedAt: new Date().toISOString(),
-          wiseProfileId: '101924589'
-        },
-        oscLicensing: {
-          status: 'REGISTERED_EMD',
-          licenseNo: 'OSC-EMD-784920-ON',
-          jurisdiction: 'Ontario Securities Commission (OSC)',
-          category: 'Exempt Market Dealer & Registered Investment Entity',
-          principal: 'Marcel Laframboise',
-          principalEmail: 'mlaframboisemm@gmail.com',
-          address: '475 Albert St, Oshawa, ON L1H 4S7, CA',
           verifiedAt: new Date().toISOString()
+        } : {
+          fullName: userName,
+          email: userEmail,
+          tier: 0,
+          tierName: 'Unverified',
+          status: 'UNVERIFIED',
+          verifiedAt: null
+        },
+        oscLicensing: isLiveConnected ? {
+          status: 'REGISTERED_EMD',
+          jurisdiction: 'Live provider verification pending',
+          category: 'Unverified',
+          principal: userName,
+          principalEmail: userEmail,
+          verifiedAt: new Date().toISOString()
+        } : {
+          status: 'UNVERIFIED',
+          jurisdiction: 'Not configured',
+          category: 'Unverified',
+          principal: userName,
+          principalEmail: userEmail,
+          verifiedAt: null
         },
         insurances: {
-          cipfProtected: true,
-          cipfLimitCad: 1000000,
-          cipfDetails: 'Canadian Investor Protection Fund - $1,000,000 CAD per account',
-          cdicEligible: true,
-          cdicLimitCad: 100000,
-          cdicDetails: 'Canadian Deposit Insurance Corporation eligible bank settlement accounts',
-          custodialSpecieInsuranceUsd: 250000000,
-          specieUnderwriter: "Lloyd's of London Specie Custody Underwriting",
-          status: 'FULL_COVERAGE_ACTIVE'
+          cipfProtected: false,
+          cipfLimitCad: 0,
+          cipfDetails: 'Insurance coverage is only reported when a live provider or custody policy is configured.',
+          cdicEligible: false,
+          cdicLimitCad: 0,
+          cdicDetails: 'No verified deposit-insurance configuration available.',
+          custodialSpecieInsuranceUsd: 0,
+          specieUnderwriter: 'Unverified',
+          status: isLiveConnected ? 'FULL_COVERAGE_ACTIVE' : 'UNVERIFIED'
         },
         usdBalance: wiseTotalUSD,
         cadBalance: wiseCAD,
         totalPortfolioUsd,
         walletAddress,
         wiseCard: {
-          cardStatus: 'ACTIVE',
+          cardStatus: isLiveConnected ? 'ACTIVE' : 'UNCONFIGURED',
           cardholderName: userName,
-          maskedPan: '4111 •••• •••• 9240',
+          maskedPan: null,
           limits: {
-            dailyContactlessUsd: 500.00,
-            monthlyContactlessUsd: 5000.00,
-            dailyAtmUsd: 1000.00,
-            monthlyAtmUsd: 10000.00,
-            perTransactionCapUsd: 2500.00
+            dailyContactlessUsd: 0,
+            monthlyContactlessUsd: 0,
+            dailyAtmUsd: 0,
+            monthlyAtmUsd: 0,
+            perTransactionCapUsd: 0
           },
           balances: {
             usd: wiseUSD,
@@ -14200,9 +14302,9 @@ async function startServer() {
             eur: wiseEUR,
             totalUSD: wiseTotalUSD
           },
-          sourceAccount: '176576596814061',
+          sourceAccount: isLiveConnected ? 'provider-configured' : '',
           isLiveConnected,
-          lastSyncedAt: nowIso
+          lastSyncedAt: isLiveConnected ? nowIso : null
         },
         googlePayPass: {
           objectId: `3388000000022795875.sovereign_${userId}_sync`,
@@ -14258,7 +14360,7 @@ async function startServer() {
         userEmail: userEmail,
         usdBalance,
         totalPortfolioUsd: usdBalance,
-        walletAddress: process.env.VITE_MARSHALL_ADDRESS || '0x740aF45d81835B368E9Df03e8D37B8ee89bA2Da4',
+        walletAddress: getMarshallAddress(),
         topHoldings: [],
         wiseLiveSynced: Boolean(wiseInfo),
         wiseCADBalance: wiseInfo?.cadBalance || 0,
@@ -14957,13 +15059,13 @@ async function startServer() {
       // 1. Fetch real-time live Wise API response
       const wiseData = await getWiseTotalCashUSD().catch(() => ({
         cadBalance: 0,
-        usdBalance: 2478350.00,
-        totalUSD: 2478350.00,
-        cadRate: 0.7097,
+        usdBalance: 0,
+        totalUSD: 0,
+        cadRate: 0,
         balances: []
       }));
 
-      const wiseTotalUsd = Number(wiseData.totalUSD) || 2478350.00;
+      const wiseTotalUsd = Number(wiseData.totalUSD) || 0;
 
       // 2. Fetch internal database ledger balance
       let ledgerUsdBalance = 0;
@@ -15486,18 +15588,18 @@ async function startServer() {
     try {
       const { getWiseTotalCashUSD } = await import('./src/lib/wise-live-integration.js');
       const wiseData = await getWiseTotalCashUSD().catch(() => null);
-      const totalUSD = wiseData?.totalUSD || 2478350.00;
+      const totalUSD = wiseData?.totalUSD ?? 0;
       return res.json({
         success: true,
-        connected: true,
+        connected: Boolean(wiseData),
         totalBalanceUsd: totalUSD,
-        totalBtc: 12.5,
-        totalEth: 180.2,
-        activeWalletsCount: 4,
-        totalTxCount: 28,
-        status: 'CONNECTED',
-        userEmail: 'mlaframboisemm@gmail.com',
-        kycStatus: 'REGISTERED_TO_KYC_LIVE'
+        totalBtc: 0,
+        totalEth: 0,
+        activeWalletsCount: 0,
+        totalTxCount: 0,
+        status: wiseData ? 'CONNECTED' : 'UNCONFIGURED',
+        userEmail: req.user?.email || null,
+        kycStatus: wiseData ? 'REGISTERED_TO_KYC_LIVE' : 'UNVERIFIED'
       });
     } catch (e: any) {
       return res.status(500).json({ error: 'COINBASE55_SUMMARY_ERROR', message: e.message });
@@ -15507,12 +15609,7 @@ async function startServer() {
   app.get('/api/coinbase55/wallets', async (req: any, res: any) => {
     return res.json({
       success: true,
-      wallets: [
-        { id: 'cb-usd', symbol: 'USD', balance: 2478350.00, usdValue: 2478350.00, address: process.env.VITE_MARSHALL_ADDRESS || '0x740aF45d81835B368E9Df03e8D37B8ee89bA2Da4' },
-        { id: 'cb-btc', symbol: 'BTC', balance: 12.5, usdValue: 825000.00, address: 'bc1q9v8903marcellaframboise' },
-        { id: 'cb-eth', symbol: 'ETH', balance: 180.2, usdValue: 576640.00, address: process.env.VITE_MARSHALL_ADDRESS || '0x740aF45d81835B368E9Df03e8D37B8ee89bA2Da4' },
-        { id: 'cb-cad', symbol: 'CAD', balance: 185000.00, usdValue: 131996.00, address: process.env.VITE_MARSHALL_ADDRESS || '0x740aF45d81835B368E9Df03e8D37B8ee89bA2Da4' }
-      ]
+      wallets: []
     });
   });
 

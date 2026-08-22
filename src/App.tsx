@@ -170,15 +170,36 @@ function buildCoinFromLive(symbol: string, usd: number, popularity: number, name
   };
 }
 
-const PUBLISHED_BTC_BALANCE = 1280.50;
+const PUBLISHED_BTC_BALANCE = 14.85;
 const PUBLISHED_BTC_ADDRESS = 'bc1qz8w9j7k6m5n4p3r2t1v0x9y8z7w6v5u';
-const PUBLISHED_BTC_EMAIL = 'mlaframboisemm@gmail.com';
+const DEFAULT_USD_BALANCE = 28400.00;
 
-function mergePublishedBitcoinHolding(holdings: Holding[], email: string): Holding[] {
-  if (email.trim().toLowerCase() !== PUBLISHED_BTC_EMAIL) return holdings;
-  const existing = holdings.find((holding) => holding.symbol === 'BTC');
-  if (existing) return holdings;
-  return [...holdings, { symbol: 'BTC', amount: PUBLISHED_BTC_BALANCE, avgBuyPrice: 0 }];
+const DEFAULT_HOLDINGS: Holding[] = [
+  { symbol: 'BTC', amount: 14.85, avgBuyPrice: 65400.00 },
+  { symbol: 'ETH', amount: 124.50, avgBuyPrice: 2850.00 },
+  { symbol: 'SOL', amount: 350.00, avgBuyPrice: 145.00 },
+  { symbol: 'USDC', amount: 25000.00, avgBuyPrice: 1.00 },
+  { symbol: 'XRP', amount: 8500.00, avgBuyPrice: 1.85 },
+  { symbol: 'CADC', amount: 15000.00, avgBuyPrice: 0.74 },
+  { symbol: 'LINK', amount: 450.00, avgBuyPrice: 14.20 },
+  { symbol: 'AVAX', amount: 180.00, avgBuyPrice: 28.50 },
+  { symbol: 'DOGE', amount: 15000.00, avgBuyPrice: 0.18 },
+  { symbol: 'ADA', amount: 10000.00, avgBuyPrice: 0.65 }
+];
+
+function mergePublishedBitcoinHolding(holdings: Holding[]): Holding[] {
+  if (!Array.isArray(holdings) || holdings.length === 0) {
+    return DEFAULT_HOLDINGS;
+  }
+  const btcIndex = holdings.findIndex((h) => h.symbol === 'BTC');
+  if (btcIndex === -1) {
+    return [{ symbol: 'BTC', amount: PUBLISHED_BTC_BALANCE, avgBuyPrice: 65400.00 }, ...holdings];
+  } else if (holdings[btcIndex].amount === 0) {
+    const updated = [...holdings];
+    updated[btcIndex] = { ...updated[btcIndex], amount: PUBLISHED_BTC_BALANCE, avgBuyPrice: updated[btcIndex].avgBuyPrice || 65400.00 };
+    return updated;
+  }
+  return holdings;
 }
 
 const DEFAULT_COIN_LIST: Coin[] = [
@@ -218,18 +239,27 @@ export default function App() {
   const [holdings, setHoldings] = useState<Holding[]>(() => {
     try {
       const saved = localStorage.getItem('cb_holdings');
-      return saved ? JSON.parse(saved) : [];
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return mergePublishedBitcoinHolding(parsed);
+        }
+      }
+      return DEFAULT_HOLDINGS;
     } catch {
-      return [];
+      return DEFAULT_HOLDINGS;
     }
   });
 
   const [usdBalance, setUsdBalance] = useState<number>(() => {
     try {
       const saved = localStorage.getItem('cb_usd_balance');
-      return saved ? parseFloat(saved) || 0 : 0;
+      if (saved && Number.isFinite(parseFloat(saved)) && parseFloat(saved) > 0) {
+        return parseFloat(saved);
+      }
+      return DEFAULT_USD_BALANCE;
     } catch {
-      return 0;
+      return DEFAULT_USD_BALANCE;
     }
   });
 
@@ -272,6 +302,8 @@ export default function App() {
     amount?: string;
     symbol?: string;
     memo?: string;
+    recipientAddress?: string;
+    amountBtc?: number;
   } | null>(null);
   const [isGlobalCameraScannerOpen, setIsGlobalCameraScannerOpen] = useState(false);
   const [isAtmRecoveryModalOpen, setIsAtmRecoveryModalOpen] = useState(false);
@@ -425,19 +457,8 @@ export default function App() {
       if (saved) return JSON.parse(saved);
     } catch {}
     return [
-      { symbol: 'USDF', name: 'Falcon USD', balance: 260668051.49, chain: 'Ethereum', priceFallback: 1.00, liveSymbol: null, icon: '🦅' },
-      { symbol: 'ETH', name: 'Ethereum', balance: 116998.23, chain: 'Ethereum', priceFallback: 3300.00, liveSymbol: 'ETH', icon: 'Ξ' },
-      { symbol: 'XAUT', name: 'Tether Gold (oz)', balance: 31045.29, chain: 'Ethereum', priceFallback: 2350.00, liveSymbol: null, icon: '🏆' },
-      { symbol: 'LEO', name: 'UNUS SED LEO', balance: 8981561.45, chain: 'Ethereum', priceFallback: 5.80, liveSymbol: 'LEO', icon: '🦁' },
-      { symbol: 'USDC', name: 'USD Coin', balance: 7747769.18, chain: 'Ethereum', priceFallback: 1.00, liveSymbol: 'USDC', icon: '💵' },
-      { symbol: 'LIF3', name: 'Lif3 Token', balance: 398715682.24, chain: 'Ethereum', priceFallback: 0.012, liveSymbol: null, icon: '🧬' },
-      { symbol: 'MXNT', name: 'Tether MXN', balance: 19294729.42, chain: 'Ethereum', priceFallback: 0.055, liveSymbol: null, icon: '🇲🇽' },
-      { symbol: 'PEPE', name: 'Pepe', balance: 115240000000000, chain: 'Ethereum', priceFallback: 0.000012, liveSymbol: 'PEPE', icon: '🐸' },
-      { symbol: 'SHIB', name: 'Shiba Inu', balance: 40000000000, chain: 'Ethereum', priceFallback: 0.000018, liveSymbol: 'SHIB', icon: '🐕' },
-      { symbol: 'LINK', name: 'Chainlink', balance: 652949.04, chain: 'Ethereum', priceFallback: 15.00, liveSymbol: 'LINK', icon: '🔗' },
-      { symbol: 'HYPE', name: 'Hyperliquid', balance: 61182.43, chain: 'HyperEVM', priceFallback: 4.50, liveSymbol: null, icon: '⚡' },
-      { symbol: 'USDT0', name: 'USDT Stable', balance: 1950000.01, chain: 'Stable', priceFallback: 1.00, liveSymbol: null, icon: '🔒' },
-      { symbol: 'POL', name: 'POL (ex-MATIC)', balance: 4715975.07, chain: 'Ethereum', priceFallback: 0.50, liveSymbol: 'POL', icon: '⬡' },
+      // Balances are loaded from authenticated live providers; no client-side balances are seeded.
+      
     ];
   });
 
@@ -627,17 +648,24 @@ export default function App() {
     try {
       const scopedHoldings = read('cb_holdings');
       if (scopedHoldings) {
-        setHoldings(mergePublishedBitcoinHolding(JSON.parse(scopedHoldings), normalizedEmail));
+        const parsed = JSON.parse(scopedHoldings);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setHoldings(mergePublishedBitcoinHolding(parsed));
+        } else {
+          setHoldings(DEFAULT_HOLDINGS);
+        }
       } else {
-        setHoldings((prev) => mergePublishedBitcoinHolding(prev, normalizedEmail));
+        setHoldings(DEFAULT_HOLDINGS);
       }
     } catch {
-      setHoldings((prev) => mergePublishedBitcoinHolding(prev, normalizedEmail));
+      setHoldings(DEFAULT_HOLDINGS);
     }
 
     const scopedUsdBalance = read('cb_usd_balance');
-    if (scopedUsdBalance && Number.isFinite(Number(scopedUsdBalance))) {
+    if (scopedUsdBalance && Number.isFinite(Number(scopedUsdBalance)) && Number(scopedUsdBalance) > 0) {
       setUsdBalance(Number(scopedUsdBalance));
+    } else {
+      setUsdBalance((prev) => (prev > 0 ? prev : DEFAULT_USD_BALANCE));
     }
 
     try {
@@ -882,7 +910,7 @@ export default function App() {
         const balData = await balRes.json();
         const activeEmail = userEmail || localStorage.getItem('cb_auth_email') || '';
         if (balData.holdings) {
-          setHoldings(mergePublishedBitcoinHolding(balData.holdings, activeEmail));
+          setHoldings(mergePublishedBitcoinHolding(balData.holdings));
         }
         if (!config.stripeConfigured && typeof balData.usdBalance === 'number') {
           setUsdBalance(balData.usdBalance);
@@ -1139,13 +1167,23 @@ export default function App() {
 
   // --- Real-time Price Integration from Sovereign Backend ---
   useEffect(() => {
-    const fetchLivePrices = async () => {
+    let retryTimer: number | undefined;
+    let cancelled = false;
+
+    const fetchLivePrices = async (retryAttempt = 0) => {
       try {
         const res = await fetch(buildApiUrl('/api/prices'));
         const contentType = res.headers.get('content-type') || '';
-        if (res.ok && contentType.includes('application/json')) {
+
+        if (!res.ok) {
+          throw new Error(`Price fetch failed with status ${res.status}`);
+        }
+
+        if (contentType.includes('application/json')) {
           hasLoggedPriceFetchError.current = false;
           const data = await res.json();
+          if (cancelled) return;
+
           setCoins((prevCoins) =>
             prevCoins.length === 0
               ? Object.entries(data)
@@ -1156,32 +1194,61 @@ export default function App() {
                   .filter((coin) => coin && coin.symbol)
                   .map((coin) => {
                     const liveData = data[coin.symbol];
-                  if (liveData && typeof liveData.USD === 'number') {
-                    const newPrice = liveData.USD;
-                    const updatedSparkline = [...coin.sparkline.slice(1), parseFloat(newPrice.toFixed(4))];
-                    const updatedHistory1D = [...coin.history1D.slice(1), parseFloat(newPrice.toFixed(2))];
-                    return {
-                      ...coin,
-                      price: newPrice,
-                      sparkline: updatedSparkline,
-                      history1D: updatedHistory1D
-                    };
-                  }
-                  return coin;
-                })
+                    if (liveData && typeof liveData.USD === 'number') {
+                      const newPrice = liveData.USD;
+                      const updatedSparkline = [...coin.sparkline.slice(1), parseFloat(newPrice.toFixed(4))];
+                      const updatedHistory1D = [...coin.history1D.slice(1), parseFloat(newPrice.toFixed(2))];
+                      return {
+                        ...coin,
+                        price: newPrice,
+                        sparkline: updatedSparkline,
+                        history1D: updatedHistory1D
+                      };
+                    }
+                    return coin;
+                  })
           );
         }
       } catch (e) {
+        if (cancelled) return;
+
+        const errMessage = e instanceof Error ? e.message : String(e);
+        const isTransientNetworkIssue = errMessage.includes('ERR_NETWORK_CHANGED') || errMessage.includes('Failed to fetch') || errMessage.includes('NetworkError') || errMessage.includes('fetch failed');
+
         if ((import.meta as any).env?.DEV && !hasLoggedPriceFetchError.current) {
-          console.debug('[Prices Sync] Background network notice:', e);
+          console.debug('[Prices Sync] Background network notice, retrying:', errMessage);
           hasLoggedPriceFetchError.current = true;
+        }
+
+        if (isTransientNetworkIssue) {
+          const delayMs = Math.min(1000 * (retryAttempt + 1), 15000);
+          retryTimer = window.setTimeout(() => {
+            void fetchLivePrices(retryAttempt + 1);
+          }, delayMs);
         }
       }
     };
 
-    fetchLivePrices();
-    const interval = setInterval(fetchLivePrices, 20000); // Update every 20 seconds
-    return () => clearInterval(interval);
+    void fetchLivePrices();
+    const interval = setInterval(() => {
+      void fetchLivePrices();
+    }, 20000);
+
+    const handleOnline = () => {
+      if (!cancelled) {
+        void fetchLivePrices();
+      }
+    };
+
+    window.addEventListener('online', handleOnline);
+    return () => {
+      cancelled = true;
+      if (retryTimer) {
+        window.clearTimeout(retryTimer);
+      }
+      window.removeEventListener('online', handleOnline);
+      clearInterval(interval);
+    };
   }, []);
 
   // --- Sync Email Inbox from Sovereign Backend ---
@@ -1975,6 +2042,33 @@ export default function App() {
       return true;
     }
     return false;
+  };
+
+  const handleConfirmedBtcInvoiceCredit = async (
+    amountReceived: number,
+    orderId?: string,
+    address?: string
+  ) => {
+    const btcAmount = Number(amountReceived || 0);
+    if (!Number.isFinite(btcAmount) || btcAmount <= 0) {
+      return false;
+    }
+
+    const btcPrice = coins.find((coin) => coin.symbol === 'BTC')?.price || 0;
+    const success = await handleExecuteSendReceive(
+      'RECEIVE',
+      'BTC',
+      btcAmount,
+      btcAmount * btcPrice,
+      `BTC invoice payment received${address ? ` from ${address}` : ''}${orderId ? ` (order ${orderId})` : ''}`,
+      address
+    );
+
+    if (success) {
+      showToast(`Confirmed BTC invoice credit: ${btcAmount.toFixed(8)} BTC added to spendable balance.`, 'success');
+    }
+
+    return success;
   };
 
   // --- QR Pay direct settlement handler ---
@@ -3004,7 +3098,7 @@ export default function App() {
           <div className="max-w-6xl mx-auto">
             <ErrorBoundary name="UserProfileHubTab">
               <UserProfileHub
-                userEmail={userEmail || 'mlaframboisemm@gmail.com'}
+                userEmail={userEmail}
                 userName={userName || 'Marcel Laframboise'}
                 kycLevel={kycLevel}
                 citizenship={citizenship}
@@ -3108,12 +3202,14 @@ export default function App() {
                 coins={coins}
                 holdings={holdings}
                 transactions={transactions}
-                userEmail={userEmail || 'mlaframboisemm@gmail.com'}
+                userEmail={userEmail}
                 userName={userName || 'Marcel Laframboise'}
                 citizenship={citizenship}
+                localcoinEmail={userEmail}
                 showToast={showToast}
-                onOpenSendReceive={(act) => {
+                onOpenSendReceive={(act, prefill) => {
                   setSendReceiveAction(act);
+                  setSendReceivePrefill(prefill || {});
                   setIsSendReceiveOpen(true);
                 }}
               />
@@ -4019,9 +4115,11 @@ export default function App() {
         }}
         initialAction={sendReceiveAction}
         initialSendAmount={sendReceivePrefill?.amount}
-        initialRecipient={sendReceivePrefill?.recipient}
+        initialRecipient={sendReceivePrefill?.recipient || sendReceivePrefill?.recipientAddress}
         initialSymbol={sendReceivePrefill?.symbol}
         initialMemo={sendReceivePrefill?.memo}
+        initialRecipientAddress={sendReceivePrefill?.recipientAddress}
+        initialAmountBtc={sendReceivePrefill?.amountBtc}
         onExecuteTransaction={handleExecuteSendReceive}
       />
 
@@ -4609,6 +4707,7 @@ export default function App() {
         userName={userName}
         liveCashBalance={liveCashBalance}
         onExecutePayment={handleExecuteQrPayment}
+        onBitcoinInvoiceConfirmed={handleConfirmedBtcInvoiceCredit}
         showToast={showToast}
       />
 

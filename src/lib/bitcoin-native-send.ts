@@ -28,6 +28,13 @@ export interface BitcoinSendResult {
   network: BitcoinNetworkName;
 }
 
+export interface BitcoinTransactionStatus {
+  confirmed: boolean;
+  blockHeight?: number;
+  blockHash?: string;
+  blockTime?: number;
+}
+
 function getNetwork(): bitcoin.Network {
   return process.env.BTC_NETWORK === 'testnet' ? bitcoin.networks.testnet : bitcoin.networks.bitcoin;
 }
@@ -42,12 +49,51 @@ function getEsploraBaseUrl(): string {
     : 'https://mempool.space/api';
 }
 
-function getFeeRateSatsPerVbyte(): number {
-  const feeRate = Number(process.env.BTC_FEE_RATE_SAT_VB || 5);
+async function getFeeRateSatsPerVbyte(): Promise<number> {
+  const configuredFeeRate = String(process.env.BTC_FEE_RATE_SAT_VB || '').trim();
+  const feeRate = Number(configuredFeeRate);
+  if (!configuredFeeRate) {
+    try {
+      const response = await fetch(`${getEsploraBaseUrl().replace(/\/api$/, '')}/api/v1/fees/recommended`);
+      if (response.ok) {
+        const payload = await response.json() as { halfHourFee?: number; hourFee?: number };
+        const recommendedFee = Number(payload.halfHourFee ?? payload.hourFee);
+        if (Number.isFinite(recommendedFee) && recommendedFee > 0 && recommendedFee <= 10_000) {
+          return recommendedFee;
+        }
+      }
+    } catch {
+      // Use the conservative local fallback when the public fee service is unavailable.
+    }
+  }
   if (!Number.isFinite(feeRate) || feeRate <= 0 || feeRate > 10_000) {
     return 5;
   }
   return feeRate;
+}
+
+export async function getBitcoinTransactionStatus(txid: string): Promise<BitcoinTransactionStatus> {
+  if (!/^[a-fA-F0-9]{64}$/.test(txid)) {
+    throw new Error('Invalid Bitcoin transaction ID.');
+  }
+
+  const response = await fetch(`${getEsploraBaseUrl()}/tx/${txid}/status`);
+  if (!response.ok) {
+    throw new Error(`Failed to query Bitcoin transaction status (HTTP ${response.status}).`);
+  }
+
+  const status = await response.json() as {
+    confirmed?: boolean;
+    block_height?: number;
+    block_hash?: string;
+    block_time?: number;
+  };
+  return {
+    confirmed: status.confirmed === true,
+    ...(typeof status.block_height === 'number' ? { blockHeight: status.block_height } : {}),
+    ...(typeof status.block_hash === 'string' ? { blockHash: status.block_hash } : {}),
+    ...(typeof status.block_time === 'number' ? { blockTime: status.block_time } : {})
+  };
 }
 
 function btcToSats(amountBtc: number): number {
@@ -198,7 +244,7 @@ export async function sendBitcoinNative(request: BitcoinSendRequest): Promise<Bi
   }
 
   const targetSats = btcToSats(request.amountBtc);
-  const feeRate = getFeeRateSatsPerVbyte();
+  const feeRate = await getFeeRateSatsPerVbyte();
   const utxos = await fetchUtxos(sourceAddress);
   if (!utxos || utxos.length === 0) {
     throw new Error('No confirmed spendable BTC UTXOs were found for BTC_SOURCE_ADDRESS.');

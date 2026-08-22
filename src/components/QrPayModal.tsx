@@ -20,6 +20,11 @@ interface QrPayModalProps {
     assetSymbol: string, 
     note: string
   ) => Promise<boolean>;
+  onBitcoinInvoiceConfirmed?: (
+    amountReceived: number,
+    orderId?: string,
+    address?: string
+  ) => Promise<boolean> | boolean;
   showToast: (msg: string, type?: 'success' | 'error' | 'info') => void;
 }
 
@@ -31,6 +36,7 @@ export default function QrPayModal({
   userName,
   liveCashBalance,
   onExecutePayment,
+  onBitcoinInvoiceConfirmed,
   showToast
 }: QrPayModalProps) {
   const [activeTab, setActiveTab] = useState<'receive' | 'pay' | 'pos'>('receive');
@@ -41,6 +47,8 @@ export default function QrPayModal({
   const [receiveMemo, setReceiveMemo] = useState<string>('');
   const [qrCodeDataUrl, setQrCodeDataUrl] = useState<string>('');
   const [copiedLink, setCopiedLink] = useState(false);
+  const [btcInvoiceMeta, setBtcInvoiceMeta] = useState<{ address: string; amount: number; orderId: string; uri: string } | null>(null);
+  const [btcInvoiceStatus, setBtcInvoiceStatus] = useState<'waiting' | 'confirmed'>('waiting');
 
   // Scan & Pay Tab State
   const [qrInputPayload, setQrInputPayload] = useState<string>('');
@@ -61,36 +69,120 @@ export default function QrPayModal({
   const [posQrUrl, setPosQrUrl] = useState<string>('');
   const [posStatus, setPosStatus] = useState<'awaiting' | 'scanned' | 'settled'>('awaiting');
 
-  // Default Receive Wallet Addresses
-  const btcWalletAddress = 'bc1qz8w9j7k6m5n4p3r2t1v0x9y8z7w6v5u';
-  const defaultWalletAddress = '0x58b178f7eee92fe888c0a1684d5fe6b78c0ff99f';
+  const btcWalletAddress = '';
+  const defaultWalletAddress = '';
 
   // Generate QR code for Receive tab
   useEffect(() => {
     if (!isOpen) return;
 
+    let cancelled = false;
     const amt = parseFloat(receiveAmount);
-    let uri = '';
-    
-    if (selectedReceiveAsset === 'USD' || selectedReceiveAsset === 'CAD') {
-      uri = `paydirect:${userEmail}?amount=${!isNaN(amt) ? amt : 0}&currency=${selectedReceiveAsset}${receiveMemo ? `&memo=${encodeURIComponent(receiveMemo)}` : ''}`;
-    } else if (selectedReceiveAsset === 'BTC') {
-      uri = `bitcoin:${btcWalletAddress}${!isNaN(amt) && amt > 0 ? `?amount=${amt}` : ''}${receiveMemo ? `&message=${encodeURIComponent(receiveMemo)}` : ''}`;
-    } else {
-      uri = `${selectedReceiveAsset.toLowerCase()}:${defaultWalletAddress}${!isNaN(amt) && amt > 0 ? `?amount=${amt}` : ''}${receiveMemo ? `&memo=${encodeURIComponent(receiveMemo)}` : ''}`;
+
+    const generateStandardQr = async () => {
+      if (!btcWalletAddress && selectedReceiveAsset === 'BTC') {
+        setQrCodeDataUrl('');
+        return;
+      }
+      let uri = '';
+
+      if (selectedReceiveAsset === 'USD' || selectedReceiveAsset === 'CAD') {
+        uri = `paydirect:${userEmail}?amount=${!isNaN(amt) ? amt : 0}&currency=${selectedReceiveAsset}${receiveMemo ? `&memo=${encodeURIComponent(receiveMemo)}` : ''}`;
+      } else if (selectedReceiveAsset === 'BTC') {
+        const btcAmount = !isNaN(amt) && amt > 0 ? amt : 0.01013935;
+        uri = `bitcoin:${btcWalletAddress}?amount=${btcAmount}${receiveMemo ? `&message=${encodeURIComponent(receiveMemo)}` : ''}`;
+      } else {
+        uri = `${selectedReceiveAsset.toLowerCase()}:${defaultWalletAddress}${!isNaN(amt) && amt > 0 ? `?amount=${amt}` : ''}${receiveMemo ? `&memo=${encodeURIComponent(receiveMemo)}` : ''}`;
+      }
+
+      const url = await QRCode.toDataURL(uri, {
+        width: 280,
+        margin: 2,
+        color: {
+          dark: '#0f172a',
+          light: '#ffffff'
+        }
+      });
+
+      if (!cancelled) {
+        setQrCodeDataUrl(url);
+      }
+    };
+
+    if (selectedReceiveAsset === 'BTC') {
+      const requestedAmount = !isNaN(amt) && amt > 0 ? amt : 0.01013935;
+      setBtcInvoiceStatus('waiting');
+      fetch(`/api/invoice?amount=${encodeURIComponent(String(requestedAmount))}`, {
+        credentials: 'include'
+      })
+        .then(async (response) => {
+          if (!response.ok) {
+            throw new Error('Invoice request failed');
+          }
+          const data = await response.json();
+          if (cancelled) return;
+
+          const resolvedAddress = data?.invoice?.address || btcWalletAddress;
+          const resolvedAmount = Number(data?.invoice?.amountBTC || requestedAmount);
+          const resolvedUri = data?.uri || `bitcoin:${resolvedAddress}?amount=${resolvedAmount}`;
+
+          setBtcInvoiceMeta({
+            address: resolvedAddress,
+            amount: resolvedAmount,
+            orderId: data?.invoice?.orderId || 'btc-order',
+            uri: resolvedUri
+          });
+          setQrCodeDataUrl(data?.qr || '');
+
+          const pollInvoice = async () => {
+            try {
+              const confirmRes = await fetch(`/api/confirm?address=${encodeURIComponent(resolvedAddress)}&amount=${encodeURIComponent(String(resolvedAmount))}&orderId=${encodeURIComponent(data?.invoice?.orderId || 'btc-order')}`);
+              const confirmData = await confirmRes.json();
+              if (cancelled) return;
+
+              if (confirmData?.confirmed) {
+                setBtcInvoiceStatus('confirmed');
+                await onBitcoinInvoiceConfirmed?.(Number(confirmData.amountReceived || 0), data?.invoice?.orderId || 'btc-order', resolvedAddress);
+                showToast(`BTC invoice confirmed: ${confirmData.amountReceived.toFixed(8)} BTC received.`, 'success');
+                return;
+              }
+
+              setTimeout(pollInvoice, 5000);
+            } catch (e) {
+              if (!cancelled) {
+                setTimeout(pollInvoice, 5000);
+              }
+            }
+          };
+
+          setTimeout(pollInvoice, 5000);
+        })
+        .catch((err) => {
+          console.error('Failed to generate BTC invoice:', err);
+          if (cancelled) return;
+          const fallbackUri = `bitcoin:${btcWalletAddress}?amount=${requestedAmount}`;
+          setBtcInvoiceMeta({
+            address: btcWalletAddress,
+            amount: requestedAmount,
+            orderId: 'fallback-btc-order',
+            uri: fallbackUri
+          });
+          setQrCodeDataUrl('');
+        });
+
+      return () => {
+        cancelled = true;
+      };
     }
 
-    QRCode.toDataURL(uri, {
-      width: 280,
-      margin: 2,
-      color: {
-        dark: '#0f172a',
-        light: '#ffffff'
-      }
-    })
-      .then(url => setQrCodeDataUrl(url))
-      .catch(err => console.error('Failed to generate QR code:', err));
-  }, [isOpen, selectedReceiveAsset, receiveAmount, receiveMemo, userEmail]);
+    generateStandardQr().catch((err) => {
+      console.error('Failed to generate QR code:', err);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, selectedReceiveAsset, receiveAmount, receiveMemo, userEmail, showToast]);
 
   // Generate POS QR Code
   useEffect(() => {
@@ -357,19 +449,34 @@ export default function QrPayModal({
 
               <div className="text-center space-y-1">
                 <span className="text-xs font-mono font-bold text-gray-800 bg-white px-3 py-1 rounded-lg border border-gray-200 inline-block truncate max-w-xs">
-                  {selectedReceiveAsset === 'USD' || selectedReceiveAsset === 'CAD'
-                    ? userEmail
-                    : selectedReceiveAsset === 'BTC'
-                      ? btcWalletAddress
+                  {selectedReceiveAsset === 'BTC'
+                    ? (btcInvoiceMeta?.address || btcWalletAddress)
+                    : selectedReceiveAsset === 'USD' || selectedReceiveAsset === 'CAD'
+                      ? userEmail
                       : defaultWalletAddress}
                 </span>
                 <p className="text-[11px] text-gray-500">
                   {selectedReceiveAsset === 'BTC'
-                    ? 'Scan with any Bitcoin wallet, Cash App, or Strike for BIP-21 instant settlement'
+                    ? btcInvoiceStatus === 'confirmed'
+                      ? 'BTC invoice confirmed and credited to spendable balance.'
+                      : 'Scan with any Bitcoin wallet, Cash App, or Strike for BIP-21 instant settlement'
                     : 'Scan with any camera or QR wallet to initiate instant payment'}
                 </p>
               </div>
             </div>
+
+            {selectedReceiveAsset === 'BTC' && btcInvoiceMeta?.uri && (
+              <div className="flex justify-center">
+                <a
+                  href={btcInvoiceMeta.uri}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center justify-center rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-bold text-amber-800 hover:bg-amber-100"
+                >
+                  Open in wallet app
+                </a>
+              </div>
+            )}
 
             {/* Quick Actions */}
             <div className="flex items-center space-x-3">

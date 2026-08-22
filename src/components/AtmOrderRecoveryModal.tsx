@@ -30,6 +30,8 @@ interface AtmOrderRecoveryModalProps {
   initialTxId?: string;
   initialAddress?: string;
   initialAmount?: number;
+  registeredPhoneNumber?: string;
+  registeredEmail?: string;
   showToast: (msg: string, type?: 'success' | 'error' | 'info') => void;
 }
 
@@ -41,10 +43,13 @@ export const AtmOrderRecoveryModal: React.FC<AtmOrderRecoveryModalProps> = ({
   initialTxId,
   initialAddress,
   initialAmount,
+  registeredPhoneNumber = '',
+  registeredEmail = '',
   showToast
 }) => {
   const [selectedTxId, setSelectedTxId] = useState<string>(activeTx?.id || initialTxId || '');
-  const [phoneNumber, setPhoneNumber] = useState<string>('905-718-4275');
+  const [phoneNumber, setPhoneNumber] = useState<string>(registeredPhoneNumber);
+  const [emailAddress, setEmailAddress] = useState<string>(registeredEmail);
   const [orderRefNumber, setOrderRefNumber] = useState<string>('RGVTQ6');
   const [customAddress, setCustomAddress] = useState<string>(activeTx?.toAddress || initialAddress || '');
   const [customAmount, setCustomAmount] = useState<string>(activeTx?.amount ? activeTx.amount.toString() : initialAmount ? initialAmount.toString() : '');
@@ -60,17 +65,22 @@ export const AtmOrderRecoveryModal: React.FC<AtmOrderRecoveryModalProps> = ({
     }
   }, [activeTx]);
 
+  useEffect(() => {
+    setPhoneNumber(registeredPhoneNumber);
+    setEmailAddress(registeredEmail);
+  }, [registeredPhoneNumber, registeredEmail]);
+
   // Pick transaction
   const selectedTx = transactions.find((t) => t.id === selectedTxId) || transactions.find((t) => t.assetSymbol === 'BTC');
 
   const effectiveAddress = customAddress || selectedTx?.toAddress || 'bc1q8yyl8yq9np33jfxlhds6tl836rn3trl0762qsd';
   const effectiveAmount = customAmount || selectedTx?.amount?.toString() || '0.01039642';
-  const effectiveHash = selectedTx?.hash || '0x' + Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
+  const effectiveHash = selectedTx?.hash || '';
   const effectiveDate = selectedTx?.timestamp ? new Date(selectedTx.timestamp).toLocaleString() : new Date().toLocaleString();
 
   // Mempool explorer URLs
-  const mempoolTxUrl = `https://mempool.space/tx/${effectiveHash}`;
-  const mempoolAddressUrl = `https://mempool.space/address/${effectiveAddress}`;
+  const mempoolTxUrl = effectiveHash ? `https://mempool.space/tx/${effectiveHash}` : '';
+  const mempoolAddressUrl = effectiveAddress ? `https://mempool.space/address/${effectiveAddress}` : '';
   const blockstreamUrl = `https://blockstream.info/address/${effectiveAddress}`;
   const blockchainComUrl = `https://www.blockchain.com/explorer/addresses/btc/${effectiveAddress}`;
 
@@ -110,6 +120,7 @@ The transaction has been successfully broadcasted on the Bitcoin network to the 
 
 === TRANSACTION VERIFICATION DETAILS ===
 • Customer Phone: ${phoneNumber || '[Enter Your Phone Number]'}
+• Customer Email: ${emailAddress || '[Enter Your Email]'}
 • Order Reference / PIN: ${orderRefNumber || 'ATM Screen Order'}
 • Crypto Amount: ${effectiveAmount} BTC
 • Localcoin Target Address: ${effectiveAddress}
@@ -117,10 +128,10 @@ The transaction has been successfully broadcasted on the Bitcoin network to the 
 • Broadcast Timestamp: ${effectiveDate}
 • Mempool Explorer Verification: ${mempoolAddressUrl}
 
-Please match this confirmed on-chain deposit to my phone number and release the Cash-Out voucher PIN, complete the Interac e-Transfer, or credit my account.
+Please match this confirmed on-chain deposit to my phone number or registered email address and release the Cash-Out voucher PIN, complete the Interac e-Transfer, or credit my account.
 
 Thank you,
-${phoneNumber || 'Localcoin Customer'}`;
+${phoneNumber || emailAddress || 'Localcoin Customer'}`;
 
   const emailBody = encodeURIComponent(formattedSupportMessage);
   const smsBody = encodeURIComponent(`Hi Localcoin Support, my order for ${effectiveAmount} BTC to ${effectiveAddress} expired due to mempool delay. TxID: ${effectiveHash}. Phone: ${phoneNumber || 'attached'}. Please verify and release PIN.`);
@@ -216,6 +227,19 @@ ${phoneNumber || 'Localcoin Customer'}`;
                   value={phoneNumber}
                   onChange={(e) => setPhoneNumber(e.target.value)}
                   placeholder="e.g. +1 555-123-4567"
+                  className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-gray-800 text-xs focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-gray-600 mb-1">
+                  Your Localcoin Email / Account Email
+                </label>
+                <input
+                  type="email"
+                  value={emailAddress}
+                  onChange={(e) => setEmailAddress(e.target.value)}
+                  placeholder="you@domain.com"
                   className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-gray-800 text-xs focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 font-mono"
                 />
               </div>
