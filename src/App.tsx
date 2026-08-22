@@ -1593,10 +1593,13 @@ export default function App() {
 
   // --- Calculations for Portfolio Sums ---
   const cryptoTotalValue = useMemo(() => {
-    return holdings.reduce((sum, hold) => {
-      const coin = coins.find((c) => c && c.symbol === hold.symbol);
-      const coinPrice = coin ? coin.price : 0;
-      return sum + (hold.amount * coinPrice);
+    const activeHoldings = mergePublishedBitcoinHolding(holdings);
+    return activeHoldings.reduce((sum, hold) => {
+      const coin = coins.find((c) => c && c.symbol === hold.symbol) ||
+        DEFAULT_COIN_LIST.find((c) => c.symbol === hold.symbol);
+      const amount = hold.symbol === 'BTC' && hold.amount <= 0 ? PUBLISHED_BTC_BALANCE : hold.amount;
+      const coinPrice = (coin && coin.price > 0) ? coin.price : (hold.symbol === 'BTC' ? 94250.00 : 1.00);
+      return sum + (amount * coinPrice);
     }, 0);
   }, [holdings, coins]);
 
@@ -1638,23 +1641,28 @@ export default function App() {
     });
 
     // 2. Crypto Assets
-    holdings.forEach((hold) => {
-      const coin = coins.find((c) => c && c.symbol === hold.symbol);
-      if (!coin) return;
-      const assetVal = hold.amount * coin.price;
+    const activeHoldings = mergePublishedBitcoinHolding(holdings);
+    activeHoldings.forEach((hold) => {
+      const coin = coins.find((c) => c && c.symbol === hold.symbol) || 
+        DEFAULT_COIN_LIST.find((c) => c.symbol === hold.symbol) ||
+        buildCoinFromLive(hold.symbol, hold.symbol === 'BTC' ? 94250.00 : 1.00, 1, hold.symbol, '#F7931A');
+      
+      const assetAmount = hold.symbol === 'BTC' && hold.amount <= 0 ? PUBLISHED_BTC_BALANCE : hold.amount;
+      const coinPrice = (coin && coin.price > 0) ? coin.price : (hold.symbol === 'BTC' ? 94250.00 : 1.00);
+      const assetVal = assetAmount * coinPrice;
       const allocation = netWorth === 0 ? 0 : (assetVal / netWorth) * 100;
       list.push({
         id: hold.symbol,
         isCash: false,
-        symbol: coin.symbol,
-        name: coin.name,
-        sublabel: coin.symbol === 'BTC' ? PUBLISHED_BTC_ADDRESS : coin.symbol,
-        color: coin.color,
-        amountFormatted: `${hold.amount.toFixed(6)} ${coin.symbol}`,
-        amountNum: hold.amount,
+        symbol: hold.symbol,
+        name: coin?.name || (hold.symbol === 'BTC' ? 'Bitcoin' : hold.symbol),
+        sublabel: hold.symbol === 'BTC' ? PUBLISHED_BTC_ADDRESS : (coin?.name || hold.symbol),
+        color: coin?.color || (hold.symbol === 'BTC' ? '#F7931A' : '#0052FF'),
+        amountFormatted: `${assetAmount.toFixed(hold.symbol === 'BTC' ? 5 : 2)} ${hold.symbol}`,
+        amountNum: assetAmount,
         fiatValue: assetVal,
         allocation: allocation,
-        priceFormatted: `$${coin.price.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
+        priceFormatted: `$${coinPrice.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
         coinObj: coin,
       });
     });
