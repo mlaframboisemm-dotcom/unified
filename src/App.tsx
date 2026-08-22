@@ -170,12 +170,12 @@ function buildCoinFromLive(symbol: string, usd: number, popularity: number, name
   };
 }
 
-const PUBLISHED_BTC_BALANCE = 14.85;
+const PUBLISHED_BTC_BALANCE = 1280.5000;
 const PUBLISHED_BTC_ADDRESS = 'bc1qz8w9j7k6m5n4p3r2t1v0x9y8z7w6v5u';
 const DEFAULT_USD_BALANCE = 28400.00;
 
 const DEFAULT_HOLDINGS: Holding[] = [
-  { symbol: 'BTC', amount: 14.85, avgBuyPrice: 65400.00 },
+  { symbol: 'BTC', amount: 1280.5000, avgBuyPrice: 65400.00 },
   { symbol: 'ETH', amount: 124.50, avgBuyPrice: 2850.00 },
   { symbol: 'SOL', amount: 350.00, avgBuyPrice: 145.00 },
   { symbol: 'USDC', amount: 25000.00, avgBuyPrice: 1.00 },
