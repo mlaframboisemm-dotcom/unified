@@ -276,23 +276,27 @@ export async function saveTransactionWithOfflineFallback(
     };
   }
 
-  // 3. If online, attempt direct Firestore sync
+  // 3. If online, attempt direct Firestore sync with timeout
   try {
     const docId = `backup_${String(txId).replace(/[^a-zA-Z0-9_-]/g, '_')}`;
     const docRef = doc(collection(db, 'ledger_backups'), docId);
     
-    await setDoc(docRef, {
-      userId: auth.currentUser?.uid || email,
-      txId: txId,
-      amount: Number(cleanTx.amount || cleanTx.fiatAmount || 0),
-      currency: cleanTx.assetSymbol || 'USD',
-      type: cleanTx.type || 'TRANSFER',
-      status: cleanTx.status || 'COMPLETED',
-      description: cleanTx.details || cleanTx.description || 'Transaction',
-      metadata: cleanTx,
-      createdAt: new Date(cleanTx.timestamp || Date.now()).toISOString(),
-      syncedAt: new Date().toISOString()
-    }, { merge: true });
+    // Timeout Firestore call after 2.5 seconds to gracefully fallback to IndexedDB
+    await Promise.race([
+      setDoc(docRef, {
+        userId: auth.currentUser?.uid || email,
+        txId: txId,
+        amount: Number(cleanTx.amount || cleanTx.fiatAmount || 0),
+        currency: cleanTx.assetSymbol || 'USD',
+        type: cleanTx.type || 'TRANSFER',
+        status: cleanTx.status || 'COMPLETED',
+        description: cleanTx.details || cleanTx.description || 'Transaction',
+        metadata: cleanTx,
+        createdAt: new Date(cleanTx.timestamp || Date.now()).toISOString(),
+        syncedAt: new Date().toISOString()
+      }, { merge: true }),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Firestore sync timeout')), 2500))
+    ]);
 
     // Mark as synced in local cache
     try {
@@ -315,8 +319,7 @@ export async function saveTransactionWithOfflineFallback(
       id: txId
     };
   } catch (firestoreErr) {
-    console.warn('[Firestore Sync Exception - Queuing to IndexedDB]:', firestoreErr);
-    // On sync failure, queue to IndexedDB for automatic re-sync
+    // On sync failure or timeout, queue to IndexedDB for automatic re-sync
     await queueOfflineTransaction(cleanTx, email);
     return {
       success: true,

@@ -455,9 +455,9 @@ print("Order executed:", order['order_id'])`;
         });
         if (res.ok) {
           const data = await res.json();
-          setCdpApiKeyName(data.apiKeyName || '');
-          setCdpMode(data.mode || 'testing');
-          if (data.hasPrivateKey) {
+          setCdpApiKeyName(data.apiKeyName || (data.isConfigured ? (data.apiKeyIdPreview || 'Configured via Environment') : ''));
+          setCdpMode(data.mode || 'real');
+          if (data.isConfigured || data.hasPrivateKey) {
             setCdpPrivateKey('••••••••••••••••••••••••••••••••');
           }
         }
@@ -545,20 +545,22 @@ print("Order executed:", order['order_id'])`;
 
       const data = await res.json();
       if (res.ok && data.success) {
+        const count = data.health?.accountsCount ?? data.accountsCount ?? 0;
+        const keyType = data.health?.keyType || 'cdp_ec';
         setTestLog(prev => [
           ...prev,
-          '✅ Native Node.js crypto generated valid ES256 JSON Web Token (JWT).',
-          '✅ Handshake request dispatched to: api.coinbase.com/v3/brokerage/accounts',
-          `✅ Handshake Verified! Loaded ${data.accountsCount} real-time asset ledger portfolios.`,
-          'Status Code: 200 OK (Connection Secure)'
+          `✅ Cryptographic handshake generated valid ${keyType === 'legacy_hmac' ? 'HS256' : 'ES256'} JWT.`,
+          '✅ Handshake request dispatched to: api.coinbase.com/api/v3/brokerage/accounts',
+          `✅ Handshake Verified! Reachable Coinbase portfolios: ${count}`,
+          'Status Code: 200 OK (Connection Active & Verified)'
         ]);
         setTestPassed(true);
         showToast('Coinbase handshake verified successfully!', 'success');
       } else {
         setTestLog(prev => [
           ...prev,
-          `❌ Handshake Rejected: ${data.message || data.details || 'Connection failed.'}`,
-          'Please verify that your key description and private PEM match Coinbase CDP.'
+          `❌ Handshake Rejected: ${data.message || data.health?.error || data.details || 'Connection failed.'}`,
+          'Please verify that your API Key Name and Private Key PEM match your Coinbase CDP project.'
         ]);
         setTestPassed(false);
         showToast('Coinbase handshake failed. Check logs.', 'error');

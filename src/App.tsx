@@ -1448,8 +1448,11 @@ export default function App() {
     const syncFromFirestore = async () => {
       try {
         const userDocRef = doc(db, 'users', userEmail);
-        const docSnap = await getDoc(userDocRef);
-        if (docSnap.exists()) {
+        const docSnap: any = await Promise.race([
+          getDoc(userDocRef),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('Firestore read timeout')), 2500))
+        ]);
+        if (docSnap && docSnap.exists()) {
           const data = docSnap.data();
           if (typeof data.usdBalance === 'number') {
             setUsdBalance(data.usdBalance);
@@ -1482,14 +1485,17 @@ export default function App() {
     const saveToFirestore = async () => {
       try {
         const userDocRef = doc(db, 'users', userEmail);
-        await setDoc(userDocRef, {
-          email: userEmail,
-          name: userName,
-          usdBalance: usdBalance,
-          citizenship: citizenship,
-          kycLevel: kycLevel,
-          lastUpdated: new Date().toISOString()
-        }, { merge: true });
+        await Promise.race([
+          setDoc(userDocRef, {
+            email: userEmail,
+            name: userName,
+            usdBalance: usdBalance,
+            citizenship: citizenship,
+            kycLevel: kycLevel,
+            lastUpdated: new Date().toISOString()
+          }, { merge: true }),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('Firestore save timeout')), 2500))
+        ]);
       } catch (err) {
         firestoreDisabledRef.current = true;
         if ((import.meta as any).env?.DEV) {

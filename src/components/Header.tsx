@@ -26,7 +26,8 @@ import {
   TrendingUp,
   Landmark,
   Camera,
-  Bot
+  Bot,
+  Server
 } from 'lucide-react';
 import { Coin } from '../types';
 
@@ -114,7 +115,8 @@ export default function Header({
     { id: 'history', label: 'Transactions', icon: Clock, desc: 'Audit log & transaction history' },
     { id: 'address', label: 'Address Hub', icon: Wallet, desc: 'Deposit & vault addresses' },
     { id: 'api', label: 'Developer Hub', icon: Layers, desc: 'CDP API keys & Webhooks' },
-    { id: 'stripe', label: 'Stripe Hub', icon: CreditCard, desc: 'Stripe balance & payouts' }
+    { id: 'stripe', label: 'Stripe Hub', icon: CreditCard, desc: 'Stripe balance & payouts' },
+    { id: 'deployment-dashboard', label: 'Deployment & Telemetry', badge: '17 Rails', icon: Server, desc: 'Live Gateway Telemetry & Bitcoin RPC' }
   ];
 
   // Safely deduplicate allNavItems by ID to prevent any duplicate key errors in React
