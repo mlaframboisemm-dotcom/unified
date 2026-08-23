@@ -836,12 +836,22 @@ export default function App() {
     showToast('Session expired. Please sign in again.', 'info');
   };
 
+  const shouldSuppressBackgroundProviderError = (status?: number) => {
+    return status === 429 || status === 502 || status === 503;
+  };
+
   const syncWiseLiveBalance = async () => {
     try {
       const res = await fetch(buildApiUrl('/api/wise/balances'), {
         headers: buildAuthHeaders(),
-        credentials: 'include'
+        credentials: 'include',
+        signal: AbortSignal.timeout(5000)
       });
+
+      if (shouldSuppressBackgroundProviderError(res.status)) {
+        return;
+      }
+
       if (res.ok) {
         const data = await res.json();
         if (data && typeof data.totalUSD === 'number') {
@@ -859,7 +869,7 @@ export default function App() {
         }
       }
     } catch (e) {
-      console.warn('Failed to sync Wise live balance:', e);
+      // Quietly suppress transient backend/provider outage noise in background polling.
     }
   };
 
@@ -872,10 +882,14 @@ export default function App() {
       syncWiseLiveBalance();
       const configRes = await fetch(buildApiUrl('/api/coinbase/config'), {
         headers: buildAuthHeaders(),
-        credentials: 'include'
+        credentials: 'include',
+        signal: AbortSignal.timeout(5000)
       });
       if (configRes.status === 401) {
         handleAuthExpired();
+        return;
+      }
+      if (shouldSuppressBackgroundProviderError(configRes.status)) {
         return;
       }
       if (!configRes.ok) return;
@@ -893,10 +907,14 @@ export default function App() {
       setIsRefreshingReal(true);
       const balRes = await fetch(buildApiUrl('/api/coinbase/balances'), {
         headers: buildAuthHeaders(),
-        credentials: 'include'
+        credentials: 'include',
+        signal: AbortSignal.timeout(5000)
       });
       if (balRes.status === 401) {
         handleAuthExpired();
+        return;
+      }
+      if (shouldSuppressBackgroundProviderError(balRes.status)) {
         return;
       }
 
@@ -1167,14 +1185,23 @@ export default function App() {
   useEffect(() => {
     let retryTimer: number | undefined;
     let cancelled = false;
+    let retryAttempt = 0;
 
-    const fetchLivePrices = async (retryAttempt = 0) => {
+    const fetchLivePrices = async (attempt = 0) => {
       try {
         const res = await fetch(buildApiUrl('/api/prices'));
         const contentType = res.headers.get('content-type') || '';
 
         if (!res.ok) {
-          throw new Error(`Price fetch failed with status ${res.status}`);
+          const status = res.status;
+          if (status === 429 || status === 502 || status === 503) {
+            if ((import.meta as any).env?.DEV && !hasLoggedPriceFetchError.current) {
+              console.debug('[Prices Sync] Upstream rate-limited or unavailable; backing off and suppressing retry storm.', { status });
+              hasLoggedPriceFetchError.current = true;
+            }
+            return;
+          }
+          throw new Error(`Price fetch failed with status ${status}`);
         }
 
         if (contentType.includes('application/json')) {
@@ -1218,10 +1245,11 @@ export default function App() {
           hasLoggedPriceFetchError.current = true;
         }
 
-        if (isTransientNetworkIssue) {
-          const delayMs = Math.min(1000 * (retryAttempt + 1), 15000);
+        if (isTransientNetworkIssue && attempt < 2) {
+          retryAttempt = attempt + 1;
+          const delayMs = Math.min(1000 * retryAttempt, 15000);
           retryTimer = window.setTimeout(() => {
-            void fetchLivePrices(retryAttempt + 1);
+            void fetchLivePrices(retryAttempt);
           }, delayMs);
         }
       }
@@ -1230,7 +1258,7 @@ export default function App() {
     void fetchLivePrices();
     const interval = setInterval(() => {
       void fetchLivePrices();
-    }, 20000);
+    }, 30000);
 
     const handleOnline = () => {
       if (!cancelled) {

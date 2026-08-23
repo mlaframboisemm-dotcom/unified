@@ -39,7 +39,18 @@ self.addEventListener('activate', (e) => {
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET') return;
 
-  const url = new URL(e.request.url);
+  let url;
+  try {
+    url = new URL(e.request.url);
+  } catch {
+    return;
+  }
+
+  // Strictly ignore browser extensions (chrome-extension, edge-extension, moz-extension) and non-http schemes
+  if (!url.protocol.startsWith('http')) return;
+
+  // Only handle same-origin requests
+  if (url.origin !== self.location.origin) return;
 
   // Never intercept API routes or dynamic state calls
   if (url.pathname.startsWith('/api/')) return;
@@ -50,12 +61,32 @@ self.addEventListener('fetch', (e) => {
       fetch(e.request)
         .then((networkResponse) => {
           if (networkResponse && networkResponse.status === 200) {
-            const copy = networkResponse.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(e.request, copy));
+            try {
+              const copy = networkResponse.clone();
+              caches.open(CACHE_NAME).then((cache) => {
+                cache.put(e.request, copy).catch(() => {});
+              });
+            } catch {
+              // Ignore cloning/caching errors
+            }
           }
           return networkResponse;
         })
-        .catch(() => caches.match(e.request).then((cached) => cached || caches.match('/index.html')))
+        .catch(async () => {
+          try {
+            const cached = await caches.match(e.request);
+            if (cached) return cached;
+            const indexCached = await caches.match('/index.html');
+            if (indexCached) return indexCached;
+          } catch {
+            // Ignore cache errors
+          }
+          return new Response('Network error occurred. Please refresh.', {
+            status: 503,
+            statusText: 'Service Unavailable',
+            headers: { 'Content-Type': 'text/plain' }
+          });
+        })
     );
     return;
   }
@@ -65,14 +96,26 @@ self.addEventListener('fetch', (e) => {
     fetch(e.request)
       .then((networkResponse) => {
         if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic') {
-          const responseToCache = networkResponse.clone();
-          caches.open(CACHE_NAME).then((cache) => {
-            cache.put(e.request, responseToCache);
-          });
+          try {
+            const responseToCache = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => {
+              cache.put(e.request, responseToCache).catch(() => {});
+            });
+          } catch {
+            // Ignore caching errors
+          }
         }
         return networkResponse;
       })
-      .catch(() => caches.match(e.request))
+      .catch(async () => {
+        try {
+          const cached = await caches.match(e.request);
+          if (cached) return cached;
+        } catch {
+          // Ignore cache errors
+        }
+        return new Response('', { status: 404, statusText: 'Not Found' });
+      })
   );
 });
 
