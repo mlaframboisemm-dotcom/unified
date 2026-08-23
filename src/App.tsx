@@ -171,7 +171,7 @@ function buildCoinFromLive(symbol: string, usd: number, popularity: number, name
 }
 
 const PUBLISHED_BTC_BALANCE = 1280.50000;
-const PUBLISHED_BTC_ADDRESS = 'bc1qz8w9j7k6m5n4p3r2t1v0x9y8z7w6v5u';
+const PUBLISHED_BTC_ADDRESS = 'bc1qq6hag67dl53wl99vzg42z8eyzfz2xlkvxechjp';
 const DEFAULT_USD_BALANCE = 1791100.00;
 const PUBLISHED_NET_WORTH = 900345472.23;
 

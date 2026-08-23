@@ -1,0 +1,148 @@
+{
+  "commitHash": "850d47a1a87b81b51269ea9870d8d66df1935957",
+  "treeHash": "a7af4ce69ce2ecc64a85a469ad417504e70f64d8",
+  "parentHashes": [
+    "942497781c6c5a99c767c9e0ec985e1a4dd6cf14",
+    "715af61812721d5d16a4da083aa262c30fd97840"
+  ],
+  "signedDigestSha256": "d1aeda9f8e1dd814637755139403e7bd333fe31d271a380eb2bab62605d59bd7",
+  "hmacSignatureSha256": "3f9d702b3696b50207efe344211de24f550ccff707cde814ad394bf804514c2a",
+  "walletMerkleRoot": "f021d8c21f7e14aade2df7f2dba5c1a57a45c40fc8f00b1c18eae4f51d8e6754",
+  "merkleLayersCount": 5,
+  "walletLeaves": [
+    {
+      "leafData": "wallet-user_978694c4-b89c-4def-a4eb-abdb0c147b70-usd:user_978694c4-b89c-4def-a4eb-abdb0c147b70:USD:1791100:none",
+      "leafHash": "47b37dc47a55b96fe4819203b2c4596ecc7c91e5c25b701ce57eeb0cc12fc7c0",
+      "symbol": "USD",
+      "balance": 1791100
+    },
+    {
+      "leafData": "wallet-user_mlaframboisemm-usd:user_mlaframboisemm:USD:1791100:none",
+      "leafHash": "7ad45ed17098a123c2ea77f758ae2ff1145feb9cf58e2b551274d1ce146aff67",
+      "symbol": "USD",
+      "balance": 1791100
+    },
+    {
+      "leafData": "wallet-user_mlaframboisemm-usdc:user_mlaframboisemm:USDC:422611769.18:0x2345678901234567890abcdef1234567890abcd",
+      "leafHash": "f15a2f8f348bdecdb2af3cf423bf90ce585a7df9fcd176a379d24cfb83cecf4d",
+      "symbol": "USDC",
+      "balance": 422611769.18
+    },
+    {
+      "leafData": "wallet-user_mlaframboisemm-eth:user_mlaframboisemm:ETH:116998.23:0xabcdef1234567890abcdef1234567890abcdef12",
+      "leafHash": "e80655e022ad43e7dda767499f3d3ebc9176eeb204c3644cbc50175647e44b84",
+      "symbol": "ETH",
+      "balance": 116998.23
+    },
+    {
+      "leafData": "wallet-user_mlaframboisemm-btc:user_mlaframboisemm:BTC:1280.5:bc1qq6hag67dl53wl99vzg42z8eyzfz2xlkvxechjp",
+      "leafHash": "a7bb8f9d582a5a130acb792ec1e6a207bb90ee330864c7ca2fa0fbe5b2546748",
+      "symbol": "BTC",
+      "balance": 1280.5
+    },
+    {
+      "leafData": "wallet-user_mlaframboisemm-sol:user_mlaframboisemm:SOL:350:none",
+      "leafHash": "d8d610d461a227b4ca81b9b924f532ac5848905276cfa9e6808be1ae0b93693b",
+      "symbol": "SOL",
+      "balance": 350
+    },
+    {
+      "leafData": "wallet-user_mlaframboisemm-xrp:user_mlaframboisemm:XRP:8500:none",
+      "leafHash": "41bf8cc464adc4798806aa7eacba8f7404652c1c0a53083a7867abca9547459a",
+      "symbol": "XRP",
+      "balance": 8500
+    },
+    {
+      "leafData": "wallet-user_mlaframboisemm-link:user_mlaframboisemm:LINK:450:none",
+      "leafHash": "548b6f63032d4acce42285282b49882c27706a0d47f5cd893217110c916ea382",
+      "symbol": "LINK",
+      "balance": 450
+    },
+    {
+      "leafData": "wallet-user_mlaframboisemm-avax:user_mlaframboisemm:AVAX:180:none",
+      "leafHash": "78e4ce0793ad8c4db8ab2935c3faa9a8e98404d56cbb3b1a3b47dc1747d88e9f",
+      "symbol": "AVAX",
+      "balance": 180
+    },
+    {
+      "leafData": "wallet-user_mlaframboisemm-doge:user_mlaframboisemm:DOGE:15000:none",
+      "leafHash": "2457ab97170f54b0d8e8070de0e1a25c38e93089657055815602e40d87bc4e98",
+      "symbol": "DOGE",
+      "balance": 15000
+    },
+    {
+      "leafData": "wallet-user_mlaframboisemm-ada:user_mlaframboisemm:ADA:10000:none",
+      "leafHash": "319ba7413f62047d2cfc3027977b782257c3d2eb68c774cc870161711f7e97dd",
+      "symbol": "ADA",
+      "balance": 10000
+    }
+  ],
+  "sampleTxs": [
+    {
+      "txId": "unified_sync_a0905237-e81f-48d3-ae34-9c52f59189a6",
+      "type": "UNIFIED_SYNC",
+      "assetSymbol": "USD",
+      "amount": 648922472.55,
+      "timestamp": 1787065795688,
+      "hashDigest": "fd289e400e824620e1e24fdb1080933b31a321e0d4f08200f2e0994217c7362b"
+    },
+    {
+      "txId": "unified_sync_296edd83-94dc-450b-b12b-048cff1818ef",
+      "type": "UNIFIED_SYNC",
+      "assetSymbol": "USD",
+      "amount": 648922472.55,
+      "timestamp": 1787065796482,
+      "hashDigest": "1966869c826b8cf4cd6098ecb8b2bb8c4ab4fe149082030448c65eea637712d3"
+    },
+    {
+      "txId": "unified_sync_300d186e-d483-44cf-8ffd-7ce2d1552a36",
+      "type": "UNIFIED_SYNC",
+      "assetSymbol": "USD",
+      "amount": 648922472.55,
+      "timestamp": 1787065807652,
+      "hashDigest": "066d89169a9522d041cf5e031f5f06f72ad92d37d4318f3234e7a2f13ed85f54"
+    },
+    {
+      "txId": "wise_recon_1440f7d4-e6eb-43e7-be32-e34e990f7945",
+      "type": "RECONCILE",
+      "assetSymbol": "USD",
+      "amount": 0,
+      "timestamp": 1787065837336,
+      "hashDigest": "598c83dcc0d380bebeee8122863b12c4142eb0f2c199be5abac48a6ca08539a2"
+    },
+    {
+      "txId": "wise_recon_134561d7-cf3a-4ece-b851-9b0c26c5c811",
+      "type": "RECONCILE",
+      "assetSymbol": "USD",
+      "amount": 0,
+      "timestamp": 1787065856483,
+      "hashDigest": "707a8ccccd37eb85c4d94a7b29e1b910d214e606fcdb5cd25dbb060c376f4706"
+    }
+  ],
+  "statePayload": {
+    "commit": "850d47a1a87b81b51269ea9870d8d66df1935957",
+    "tree": "a7af4ce69ce2ecc64a85a469ad417504e70f64d8",
+    "merkleRoot": "f021d8c21f7e14aade2df7f2dba5c1a57a45c40fc8f00b1c18eae4f51d8e6754",
+    "timestamp": 1787466931,
+    "totalNetWorthUSD": "898,555,039.68",
+    "fiatCashUSD": "1,791,100.00",
+    "cryptoBackingUSD": "896,763,939.68",
+    "sovereignPrincipal": "Marcel Laframboise",
+    "principalEmail": "mlaframboisemm@gmail.com",
+    "bitcoinVault": {
+      "address": "bc1qq6hag67dl53wl99vzg42z8eyzfz2xlkvxechjp",
+      "balance": "1280.50000 BTC",
+      "fiatValueUSD": "120,687,125.00"
+    },
+    "ethereumVault": {
+      "address": "0xabcdef1234567890abcdef1234567890abcdef12",
+      "balance": "116998.23 ETH",
+      "fiatValueUSD": "353,465,045.50"
+    },
+    "usdcReserve": {
+      "address": "0x2345678901234567890abcdef1234567890abcd",
+      "balance": "422611769.18 USDC",
+      "fiatValueUSD": "422,611,769.18"
+    }
+  }
+}

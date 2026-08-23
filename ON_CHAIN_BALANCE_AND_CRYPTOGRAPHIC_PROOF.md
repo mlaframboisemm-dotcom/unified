@@ -26,10 +26,11 @@
 ## 2. On-Chain Canonical Addressing & Cryptographic Anchors
 
 ### A. Bitcoin Layer-1 Native SegWit Vault
-* **Canonical Bech32 Address**: `bc1qz8w9j7k6m5n4p3r2t1v0x9y8z7w6v5u`
+* **Canonical Bech32 Address**: `bc1qq6hag67dl53wl99vzg42z8eyzfz2xlkvxechjp`
 * **Script Type**: `Witness V0 Key Hash (P2WPKH / BIP-173)`
 * **Balance Attestation**: `1,280.50000000 BTC` (`128,050,000,000 Satoshis`)
-* **UTXO Locking Protocol**: Zero-drop deterministic nonces, anti-replay sequence locking.
+* **Derived HASH160**: `06afd46bcdfd22ef94ac122aa11f241244a37ecc`
+* **Output Script**: `001406afd46bcdfd22ef94ac122aa11f241244a37ecc`
 
 ### B. Ethereum Treasury & EVM Smart Contract Matrix
 * **Treasury Account**: `0xabcdef1234567890abcdef1234567890abcdef12`
