@@ -903,7 +903,10 @@ export default function App() {
         const balData = await balRes.json();
         const activeEmail = userEmail || localStorage.getItem('cb_auth_email') || '';
         if (balData.holdings) {
-          setHoldings(mergePublishedBitcoinHolding(balData.holdings));
+          const syncedHoldings = balData.mode === 'database_reconciled'
+            ? DEFAULT_HOLDINGS
+            : mergePublishedBitcoinHolding(balData.holdings);
+          setHoldings(syncedHoldings);
         }
         if (!config.stripeConfigured && typeof balData.usdBalance === 'number') {
           setUsdBalance(balData.usdBalance);
