@@ -186,15 +186,16 @@ function mergePublishedBitcoinHolding(holdings: Holding[]): Holding[] {
   if (!Array.isArray(holdings) || holdings.length === 0) {
     return DEFAULT_HOLDINGS;
   }
-  const btcIndex = holdings.findIndex((h) => h.symbol === 'BTC');
+  const normalizedHoldings = holdings
+    .filter((holding) => holding && String(holding.symbol || '').toUpperCase() !== 'USD')
+    .map((holding) => ({ ...holding, symbol: String(holding.symbol).toUpperCase() }));
+  const btcIndex = normalizedHoldings.findIndex((h) => h.symbol === 'BTC');
   if (btcIndex === -1) {
-    return [{ symbol: 'BTC', amount: PUBLISHED_BTC_BALANCE, avgBuyPrice: 65400.00 }, ...holdings];
-  } else if (holdings[btcIndex].amount <= 0) {
-    const updated = [...holdings];
-    updated[btcIndex] = { ...updated[btcIndex], amount: PUBLISHED_BTC_BALANCE, avgBuyPrice: updated[btcIndex].avgBuyPrice || 65400.00 };
-    return updated;
+    return [{ symbol: 'BTC', amount: PUBLISHED_BTC_BALANCE, avgBuyPrice: 65400.00 }, ...normalizedHoldings];
   }
-  return holdings;
+  const updated = [...normalizedHoldings];
+  updated[btcIndex] = { ...updated[btcIndex], amount: PUBLISHED_BTC_BALANCE, avgBuyPrice: updated[btcIndex].avgBuyPrice || 65400.00 };
+  return updated;
 }
 
 const DEFAULT_COIN_LIST: Coin[] = [
