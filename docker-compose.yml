@@ -29,9 +29,10 @@ services:
       - "10000:10000"
     environment:
       - PORT=10000
-      - BITCOIN_RPC_URL=http://bitcoind:8332
-      - BITCOIN_RPC_USER=${BITCOIN_RPC_USER:-bitcoinrpc}
-      - BITCOIN_RPC_PASSWORD=${BITCOIN_RPC_PASSWORD}
+      - BTC_NETWORK=mainnet
+      - BTC_RPC_URL=http://bitcoind:8332
+      - BTC_RPC_USER=${BTC_RPC_USER:-${BITCOIN_RPC_USER:-bitcoinrpc}}
+      - BTC_RPC_PASSWORD=${BTC_RPC_PASSWORD:-${BITCOIN_RPC_PASSWORD}}
     depends_on:
       - bitcoind
 

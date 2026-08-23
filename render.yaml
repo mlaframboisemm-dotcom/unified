@@ -4,8 +4,10 @@ services:
     env: node
     plan: starter
     id: srv-d99sus57vvec7386p2p0
+    rootDir: .
     buildCommand: npm run build
     startCommand: PORT=$PORT NODE_ENV=production node dist/server.cjs
+    healthCheckPath: /api/health
     envVars:
       - key: NODE_ENV
         value: production

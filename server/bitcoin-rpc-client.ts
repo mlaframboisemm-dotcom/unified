@@ -12,9 +12,9 @@ export interface BitcoinRpcConfig {
 
 export function getBitcoinRpcConfig(): BitcoinRpcConfig {
   return {
-    url: process.env.BITCOIN_RPC_URL || 'http://127.0.0.1:8332',
-    rpcUser: process.env.BITCOIN_RPC_USER || 'bitcoinrpc',
-    rpcPassword: process.env.BITCOIN_RPC_PASSWORD || 'local_secure_rpc_pass',
+    url: process.env.BTC_RPC_URL || process.env.BITCOIN_RPC_URL || 'http://127.0.0.1:8332',
+    rpcUser: process.env.BTC_RPC_USER || process.env.BITCOIN_RPC_USER || 'bitcoinrpc',
+    rpcPassword: process.env.BTC_RPC_PASSWORD || process.env.BITCOIN_RPC_PASSWORD || 'local_secure_rpc_pass',
   };
 }
 
