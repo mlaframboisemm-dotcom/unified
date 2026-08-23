@@ -32,6 +32,7 @@ import helmet from 'helmet';
 import { rateLimit } from 'express-rate-limit';
 import { createRequire } from 'module';
 import { getKilnBridge } from './server/kiln-bridge';
+import { getBitcoinRpcConfig, getLocalBitcoinBlockchainInfo } from './server/bitcoin-rpc-client.js';
 import { createStructuredLogger } from './src/lib/structured-logger.js';
 import { sanitizeError, sanitizeString } from './src/lib/error-sanitizer.js';
 import { validateRequest, ValidationSchema } from './src/lib/input-validator.js';
@@ -2017,8 +2018,40 @@ app.use('/api/withdrawal', withdrawalRouter); // Test mode: auth disabled
 /**
  * Health check endpoint.
  */
-app.get('/api/health', (req, res) => {
+app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', time: new Date().toISOString() });
+});
+
+/**
+ * Read-only Bitcoin Core connectivity health. This endpoint never broadcasts,
+ * signs, or mutates a transaction and never returns RPC credentials.
+ */
+app.get('/api/health/bitcoin', async (_req, res) => {
+  const config = getBitcoinRpcConfig();
+  const rpcConfigured = Boolean(config.rpcPassword.trim());
+  const info = await getLocalBitcoinBlockchainInfo();
+
+  if (!info.connected) {
+    return res.status(503).json({
+      status: 'unavailable',
+      rpcConfigured,
+      rpcUrl: config.url,
+      error: info.error || 'BITCOIN_RPC_UNAVAILABLE',
+      time: new Date().toISOString()
+    });
+  }
+
+  return res.json({
+    status: 'connected',
+    rpcConfigured,
+    rpcUrl: config.url,
+    chain: info.chain,
+    blocks: info.blocks,
+    headers: info.headers,
+    verificationprogress: info.verificationprogress,
+    pruned: info.pruned,
+    time: new Date().toISOString()
+  });
 });
 
 /**

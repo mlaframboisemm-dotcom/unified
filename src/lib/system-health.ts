@@ -1,8 +1,29 @@
 import { Request, Response } from 'express';
-import axios from 'axios';
+import https from 'https';
 import fs from 'fs';
 import { performance } from 'perf_hooks';
 import { getWiseHttpsAgent } from './wise-live-integration';
+
+function probeHttps(url: string, agent: any, timeoutMs: number): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const request = https.get(url, { agent, timeout: timeoutMs }, response => {
+      const statusCode = response.statusCode ?? 0;
+      response.resume();
+      response.once('end', () => {
+        if (statusCode >= 400) {
+          reject(new Error(`HTTPS probe returned ${statusCode}`));
+          return;
+        }
+        resolve();
+      });
+    });
+
+    request.setTimeout(timeoutMs, () => {
+      request.destroy(new Error('HTTPS probe timed out'));
+    });
+    request.once('error', reject);
+  });
+}
 
 export async function getSystemHealthReport(req: Request, res: Response) {
   const healthReport = {
@@ -19,10 +40,7 @@ export async function getSystemHealthReport(req: Request, res: Response) {
     // 1. Measure live mTLS Handshake latency to Wise Platform
     const startTime = performance.now();
     const httpsAgent = getWiseHttpsAgent();
-    await axios.get('https://wise.com', {
-      timeout: 3000,
-      httpsAgent
-    });
+    await probeHttps('https://wise.com', httpsAgent, 3000);
     healthReport.modules.mtlsHandshake.latencyMs = Math.round(performance.now() - startTime);
     healthReport.modules.mtlsHandshake.status = 'OPERATIONAL';
   } catch (error) {

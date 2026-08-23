@@ -14,12 +14,15 @@ export function getBitcoinRpcConfig(): BitcoinRpcConfig {
   return {
     url: process.env.BTC_RPC_URL || process.env.BITCOIN_RPC_URL || 'http://127.0.0.1:8332',
     rpcUser: process.env.BTC_RPC_USER || process.env.BITCOIN_RPC_USER || 'bitcoinrpc',
-    rpcPassword: process.env.BTC_RPC_PASSWORD || process.env.BITCOIN_RPC_PASSWORD || 'local_secure_rpc_pass',
+    rpcPassword: process.env.BTC_RPC_PASSWORD || process.env.BITCOIN_RPC_PASSWORD || '',
   };
 }
 
 export async function callBitcoinRpc(method: string, params: any[] = []): Promise<any> {
   const config = getBitcoinRpcConfig();
+  if (!config.rpcPassword.trim()) {
+    throw new Error('BITCOIN_RPC_PASSWORD_NOT_CONFIGURED');
+  }
   const credentials = Buffer.from(`${config.rpcUser}:${config.rpcPassword}`).toString('base64');
 
   const res = await fetch(config.url, {
