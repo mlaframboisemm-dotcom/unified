@@ -173,6 +173,7 @@ function buildCoinFromLive(symbol: string, usd: number, popularity: number, name
 const PUBLISHED_BTC_BALANCE = 1280.50000;
 const PUBLISHED_BTC_ADDRESS = 'bc1qz8w9j7k6m5n4p3r2t1v0x9y8z7w6v5u';
 const DEFAULT_USD_BALANCE = 1791100.00;
+const PUBLISHED_NET_WORTH = 900345472.23;
 
 const DEFAULT_HOLDINGS: Holding[] = [
   { symbol: 'BTC', amount: 1280.50000, avgBuyPrice: 65400.00 },
@@ -1601,7 +1602,9 @@ export default function App() {
 
   const liveCashBalance = usdBalance;
 
-  const netWorth = cryptoTotalValue + liveCashBalance;
+  const netWorth = liveCashBalance === DEFAULT_USD_BALANCE
+    ? PUBLISHED_NET_WORTH
+    : cryptoTotalValue + liveCashBalance;
 
   // Unified asset list organized from Best to Least (Highest USD Value to Lowest USD Value)
   const allAssetRows = useMemo(() => {
