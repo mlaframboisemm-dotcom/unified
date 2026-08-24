@@ -43,6 +43,7 @@
     "test:withdrawal:tangerine-fallback-finalize": "tsx scripts/test-tangerine-fallback-finalize-e2e.ts",
     "test:wise-e2e-local": "tsx scripts/test-wise-e2e-local.ts",
     "verify:prod-env": "node scripts/verify-production-env.mjs",
+    "health:check": "tsx scripts/health-check.ts",
     "test": "npm run test:verification && npm run test:auth-security && npm run test:bootstrap-security && npm run test:auth-api-security && npm run test:transaction-security"
   },
   "dependencies": {
@@ -52,6 +53,8 @@
     "@capacitor/core": "^8.4.2",
     "@google-cloud/secret-manager": "^6.3.0",
     "@google/genai": "^2.4.0",
+    "@sentry/node": "^10.0.0",
+    "@sentry/react": "^10.0.0",
     "@stripe/react-stripe-js": "^6.8.1",
     "@stripe/stripe-js": "^9.13.0",
     "@tailwindcss/vite": "^4.1.14",
@@ -79,6 +82,7 @@
     "lucide-react": "^0.546.0",
     "mailersend": "^3.1.0",
     "motion": "^12.23.24",
+    "node-cron": "^4.1.1",
     "nodemailer": "^9.0.3",
     "pg": "^8.22.0",
     "plaid": "^43.0.0",

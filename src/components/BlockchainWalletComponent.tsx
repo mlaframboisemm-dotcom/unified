@@ -1,6 +1,10 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { ethers } from 'ethers';
-import { Link, RefreshCw } from 'lucide-react';
+import {
+  AlertCircle, ArrowDownLeft, ArrowRightLeft, ArrowUpRight, Check, Coins, Copy,
+  ExternalLink, Eye, EyeOff, Fuel, Key, Link, Lock, PlusCircle, QrCode, RefreshCw,
+  Repeat, Send, ShieldCheck, Sparkles, TrendingUp, Wallet
+} from 'lucide-react';
 import { getAssetLegitimacyInfo } from '../lib/assetLegitimacy';
 import RecoveryKeyBackupWizard, { BackupWallet } from './RecoveryKeyBackupWizard';
 import {
@@ -274,6 +278,32 @@ export default function BlockchainWalletComponent({
   const [swapError, setSwapError] = useState<string | null>(null);
 
   const walletIsSpendable = isBrowserWalletConnected || (clientPrivateKey.trim().startsWith('0x') && clientPrivateKey.trim().length === 66);
+
+  // Create the app-owned signer on first use so an injected browser wallet is optional.
+  useEffect(() => {
+    if (initialPrivateKey || clientPrivateKey.trim()) return;
+
+    try {
+      const generatedWallet = ethers.Wallet.createRandom();
+      setClientPrivateKey(generatedWallet.privateKey);
+      setWalletAddress(generatedWallet.address);
+      localStorage.setItem('web3_active_private_key', generatedWallet.privateKey);
+      localStorage.setItem('web3_active_address', generatedWallet.address);
+      localStorage.setItem('web3_last_connected_address', generatedWallet.address);
+      setBackupWalletData({
+        id: `wallet_${Date.now()}`,
+        coinSymbol: selectedNetwork.symbol,
+        address: generatedWallet.address,
+        label: 'Generated Web3 Self-Custody Account',
+        privateKey: generatedWallet.privateKey,
+        seedPhrase: generatedWallet.mnemonic?.phrase,
+        createdAt: Date.now()
+      });
+      setIsBackupWizardOpen(true);
+    } catch (err) {
+      setRpcError('Unable to create the app wallet. Please retry the Web3 Hub.');
+    }
+  }, [clientPrivateKey, initialPrivateKey, selectedNetwork.symbol]);
 
   useEffect(() => {
     onWalletStateChange?.(walletAddress, walletIsSpendable);

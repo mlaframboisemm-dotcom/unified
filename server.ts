@@ -31,6 +31,7 @@ import { canCoverWithdrawal, convertCadToUsd, DEFAULT_USD_CAD_RATE, resolveFxRat
 import helmet from 'helmet';
 import { rateLimit } from 'express-rate-limit';
 import { createRequire } from 'module';
+import cron from 'node-cron';
 import { getKilnBridge } from './server/kiln-bridge';
 import { getBitcoinRpcConfig, getLocalBitcoinBlockchainInfo } from './server/bitcoin-rpc-client.js';
 import { createStructuredLogger } from './src/lib/structured-logger.js';
@@ -13745,7 +13746,33 @@ async function startServer() {
       }
     }, 300000); // 5 minutes (Automated Heartbeat Backup)
 
-    // 3. Liquidity Rails Endpoint Monitoring Job
+    // 3. Scheduled maintenance job using node-cron for deterministic recurring actions
+    cron.schedule('*/5 * * * *', async () => {
+      try {
+        await createAutomatedLedgerBackup();
+        console.log('[Cron Job] Ledger backup maintenance completed.');
+      } catch (e) {
+        console.error('[Cron Job ERROR] Ledger backup maintenance failed:', e);
+      }
+    });
+
+    cron.schedule('*/15 * * * * *', () => {
+      try {
+        const healthMarker = {
+          ok: true,
+          timestamp: new Date().toISOString(),
+          uptimeSeconds: Math.round(process.uptime()),
+          ledgerExists: fs.existsSync(ledgerPath),
+        };
+        if (process.env.NODE_ENV !== 'production') {
+          console.log('[Cron Job] Runtime health pulse:', JSON.stringify(healthMarker));
+        }
+      } catch (e) {
+        console.error('[Cron Job ERROR] Runtime health pulse failed:', e);
+      }
+    });
+
+    // 4. Liquidity Rails Endpoint Monitoring Job
     setInterval(async () => {
       try {
         if (IS_PRODUCTION) {
