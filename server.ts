@@ -36,6 +36,7 @@ import { getKilnBridge } from './server/kiln-bridge';
 import { getBitcoinRpcConfig, getLocalBitcoinBlockchainInfo } from './server/bitcoin-rpc-client.js';
 import { createStructuredLogger } from './src/lib/structured-logger.js';
 import { sanitizeError, sanitizeString } from './src/lib/error-sanitizer.js';
+import { checkCoinbaseHealth, coinbaseRequest, executeCoinbaseOrder, generateCoinbaseJWT, parseCoinbaseCredentials } from './src/lib/coinbase-service.js';
 import { validateRequest, ValidationSchema } from './src/lib/input-validator.js';
 import { recordLoginAttempt, isAccountLocked, getAccountLockStatus, clearLoginAttempts, unlockAccount } from './src/lib/login-protection.js';
 import { initializeLogger, getLogger, logSecurityEvent, logTransactionEvent, logSystemEvent, logProviderEvent, logDatabaseEvent } from './src/lib/logger.js';
