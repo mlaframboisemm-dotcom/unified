@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { ethers } from 'ethers';
+import { Link, RefreshCw } from 'lucide-react';
 import { getAssetLegitimacyInfo } from '../lib/assetLegitimacy';
 import RecoveryKeyBackupWizard, { BackupWallet } from './RecoveryKeyBackupWizard';
 import {
