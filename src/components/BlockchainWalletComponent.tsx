@@ -11,42 +11,8 @@ import {
   RecognizedNetwork,
   GasCalculationResult
 } from '../lib/token-network-gas';
-import {
-  Wallet,
-  ArrowUpRight,
-  ArrowDownLeft,
-  RefreshCw,
-  Copy,
-  Check,
-  ExternalLink,
-  Send,
-  Coins,
-  ShieldCheck,
-  AlertCircle,
-  QrCode,
-  Lock,
-  PlusCircle,
-  Search,
-  SlidersHorizontal,
-  Sparkles,
-  Repeat,
-  ArrowRightLeft,
-  TrendingUp,
-  DollarSign,
-  Key,
-  Eye,
-  EyeOff,
-  Link,
-  CheckCircle2,
-  Download,
-  Globe,
-  Fuel,
-  CheckCircle,
-  FileCheck,
-  Zap
-} from 'lucide-react';
 
-interface TokenBalance {
+export interface TokenBalance {
   symbol: string;
   name: string;
   contractAddress: string | null;
@@ -57,6 +23,18 @@ interface TokenBalance {
   decimals: number;
   icon?: string;
   isDiscovered?: boolean;
+}
+
+export interface BlockchainWalletSnapshot {
+  address: string;
+  networkId: string;
+  native: {
+    symbol: string;
+    amount: number;
+    fiatValueUsd: number;
+  };
+  tokens: TokenBalance[];
+  totalPortfolioUsd: number;
 }
 
 export interface NetworkConfig {
@@ -200,6 +178,8 @@ export interface BlockchainWalletComponentProps {
   customAddress?: string;
   privateKey?: string;
   rpcUrl?: string;
+  onWalletStateChange?: (address: string, spendable: boolean) => void;
+  onBalancesChange?: (snapshot: BlockchainWalletSnapshot) => void;
   onTransactionSuccess?: (txHash: string) => void;
   onRecordTransaction?: (tx: any) => void;
   onAddTransaction?: (type: 'SEND' | 'RECEIVE' | 'BUY' | 'SELL' | 'CONVERT', symbol: string, amount: number, fiatAmount: number, details: string) => void;
@@ -210,6 +190,8 @@ export default function BlockchainWalletComponent({
   customAddress,
   privateKey: initialPrivateKey,
   rpcUrl = 'https://ethereum-rpc.publicnode.com',
+  onWalletStateChange,
+  onBalancesChange,
   onTransactionSuccess,
   onRecordTransaction,
   onAddTransaction,
@@ -290,6 +272,12 @@ export default function BlockchainWalletComponent({
   const [swapSuccessHash, setSwapSuccessHash] = useState<string | null>(null);
   const [swapError, setSwapError] = useState<string | null>(null);
 
+  const walletIsSpendable = isBrowserWalletConnected || (clientPrivateKey.trim().startsWith('0x') && clientPrivateKey.trim().length === 66);
+
+  useEffect(() => {
+    onWalletStateChange?.(walletAddress, walletIsSpendable);
+  }, [walletAddress, walletIsSpendable, onWalletStateChange]);
+
   // ETH Price Reference
   const [ethPriceUsd, setEthPriceUsd] = useState<number>(3350);
 
@@ -348,6 +336,22 @@ export default function BlockchainWalletComponent({
       setIsConnectingBrowser(false);
     }
   };
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !(window as any).ethereum) return;
+
+    const handleAccountsChanged = (accounts: string[]) => {
+      const nextAccount = accounts?.[0] || '';
+      setBrowserWalletAccount(nextAccount || null);
+      setIsBrowserWalletConnected(!!nextAccount);
+      if (nextAccount) setWalletAddress(nextAccount);
+    };
+
+    (window as any).ethereum.on?.('accountsChanged', handleAccountsChanged);
+    return () => {
+      (window as any).ethereum.removeListener?.('accountsChanged', handleAccountsChanged);
+    };
+  }, []);
 
   // Generate a brand new local Web3 Wallet Key pair
   const handleGenerateNewKeypair = () => {
@@ -597,7 +601,19 @@ export default function BlockchainWalletComponent({
 
       // Compute Total Portfolio USD
       const tokensTotal = scannedBalances.reduce((acc, t) => acc + (t.fiatValueUsd || 0), 0);
-      setTotalPortfolioUsd(calculatedEthUsd + tokensTotal);
+      const nextTotalPortfolioUsd = calculatedEthUsd + tokensTotal;
+      setTotalPortfolioUsd(nextTotalPortfolioUsd);
+      onBalancesChange?.({
+        address: walletAddress,
+        networkId: selectedNetwork.id,
+        native: {
+          symbol: selectedNetwork.symbol,
+          amount: parseFloat(formattedEth),
+          fiatValueUsd: calculatedEthUsd
+        },
+        tokens: scannedBalances,
+        totalPortfolioUsd: nextTotalPortfolioUsd
+      });
       setLastRefreshedAt(new Date().toLocaleTimeString());
     } catch (err: any) {
       console.warn('[BlockchainWalletComponent] RPC Error:', err.message);
@@ -605,7 +621,7 @@ export default function BlockchainWalletComponent({
     } finally {
       setIsRefreshing(false);
     }
-  }, [walletAddress, activeRpc, userImportedTokens, selectedNetwork, ethPriceUsd]);
+  }, [walletAddress, activeRpc, userImportedTokens, selectedNetwork, ethPriceUsd, onBalancesChange]);
 
   // Initial Load & Network change reload
   useEffect(() => {
@@ -688,6 +704,25 @@ export default function BlockchainWalletComponent({
     setActiveTab('swap');
   };
 
+  const recordConfirmedWeb3Transfer = (txHash: string, amount: string, symbol: string, recipient: string) => {
+    const amountNumber = Number(amount);
+    const unitPrice = getTokenUnitPrice(symbol);
+    onRecordTransaction?.({
+      id: `web3-${txHash}`,
+      type: 'SEND',
+      assetSymbol: symbol,
+      amount: amountNumber,
+      fiatAmount: amountNumber * unitPrice,
+      timestamp: Date.now(),
+      status: 'completed',
+      hash: txHash,
+      details: `Confirmed on-chain transfer of ${amount} ${symbol} to ${recipient}`,
+      toAddress: recipient,
+      ledgerDebit: `Web3 Wallet (${symbol})`,
+      ledgerCredit: `External Settlement (${symbol})`
+    });
+  };
+
   // Handle Send / Move Asset Transaction
   const handleSendTransaction = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -720,7 +755,10 @@ export default function BlockchainWalletComponent({
             to: recipientAddress,
             value: ethers.parseEther(sendAmount)
           });
+          const receipt = await tx.wait();
+          if (!receipt || receipt.status !== 1) throw new Error('The network rejected this transfer. No spend was confirmed.');
           setTxSuccessHash(tx.hash);
+          recordConfirmedWeb3Transfer(tx.hash, sendAmount, selectedToken, recipientAddress);
           if (onTransactionSuccess) onTransactionSuccess(tx.hash);
         } else {
           const contractAddr = tokenObj?.contractAddress;
@@ -736,7 +774,10 @@ export default function BlockchainWalletComponent({
           const decimals = tokenObj?.decimals || 18;
           const parsedAmount = ethers.parseUnits(sendAmount, decimals);
           const tx = await contract.transfer(recipientAddress, parsedAmount);
+          const receipt = await tx.wait();
+          if (!receipt || receipt.status !== 1) throw new Error('The network rejected this token transfer. No spend was confirmed.');
           setTxSuccessHash(tx.hash);
+          recordConfirmedWeb3Transfer(tx.hash, sendAmount, selectedToken, recipientAddress);
           if (onTransactionSuccess) onTransactionSuccess(tx.hash);
         }
       }
@@ -751,7 +792,10 @@ export default function BlockchainWalletComponent({
             to: recipientAddress,
             value: ethers.parseEther(sendAmount)
           });
+          const receipt = await tx.wait();
+          if (!receipt || receipt.status !== 1) throw new Error('The network rejected this transfer. No spend was confirmed.');
           setTxSuccessHash(tx.hash);
+          recordConfirmedWeb3Transfer(tx.hash, sendAmount, selectedToken, recipientAddress);
           if (onTransactionSuccess) onTransactionSuccess(tx.hash);
         } else {
           // ERC-20 Token Transfer
@@ -770,59 +814,14 @@ export default function BlockchainWalletComponent({
           const decimals = tokenObj?.decimals || 18;
           const parsedAmount = ethers.parseUnits(sendAmount, decimals);
           const tx = await contract.transfer(recipientAddress, parsedAmount);
+          const receipt = await tx.wait();
+          if (!receipt || receipt.status !== 1) throw new Error('The network rejected this token transfer. No spend was confirmed.');
           setTxSuccessHash(tx.hash);
+          recordConfirmedWeb3Transfer(tx.hash, sendAmount, selectedToken, recipientAddress);
           if (onTransactionSuccess) onTransactionSuccess(tx.hash);
         }
       } else {
-        // Option C: Sovereign Send / Server-side Signing
-        const sovSendRes = await fetch('/api/sovereign/send', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            symbol: selectedToken,
-            amount: sendAmount,
-            toAddress: recipientAddress,
-            memo: memoNote || 'On-chain transfer from Blockchain Wallet Hub'
-          })
-        });
-
-        let sovData: any = {};
-        try {
-          sovData = await sovSendRes.json();
-        } catch {
-          // parse fallback
-        }
-
-        if (sovSendRes.ok && sovData.success) {
-          const txHash = sovData.txHash || sovData.txId;
-          if (!txHash) throw new Error('Sovereign provider returned success without a transaction identifier');
-          setTxSuccessHash(txHash);
-          if (onTransactionSuccess) onTransactionSuccess(txHash);
-        } else {
-          // Fall back to /api/wallet/send proxy
-          const response = await fetch('/api/wallet/send', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              assetSymbol: selectedToken,
-              amount: sendAmount,
-              recipientAddress: recipientAddress,
-              memo: memoNote || 'On-chain transfer from Blockchain Wallet Hub'
-            })
-          });
-
-          const data = await response.json();
-          if (!response.ok) {
-            throw new Error(data.message || data.error || sovData.message || sovData.error || 'Transaction execution failed');
-          }
-
-          const txHash = data.txHash || data.hash;
-          if (!txHash) throw new Error('Wallet provider returned success without a transaction identifier');
-          setTxSuccessHash(txHash);
-          if (onTransactionSuccess) {
-            onTransactionSuccess(txHash);
-          }
-        }
+        throw new Error('Connect a browser wallet or provide a valid signing key before sending assets.');
       }
 
       setSendAmount('');

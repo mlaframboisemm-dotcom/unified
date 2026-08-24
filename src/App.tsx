@@ -21,7 +21,7 @@ import SendReceiveModal from './components/SendReceiveModal';
 import CoinChart from './components/CoinChart';
 import CashTransferModal from './components/CashTransferModal';
 import AddressHub from './components/AddressHub';
-import BlockchainWalletComponent from './components/BlockchainWalletComponent';
+import BlockchainWalletComponent, { BlockchainWalletSnapshot } from './components/BlockchainWalletComponent';
 import DeveloperHub from './components/DeveloperHub';
 import IntegrationsHub from './components/IntegrationsHub';
 import CopilotHub from './components/CopilotHub';
@@ -59,6 +59,7 @@ import {
   getCachedTransactions,
   syncOfflineQueueToFirestore 
 } from './lib/indexeddb-offline-sync';
+import { DEFAULT_WEB3_WALLET_ADDRESS, normalizeWalletAddress, hasSpendableWallet } from './lib/web3-wallet';
 
 const configuredApiBase = String(
   (import.meta as any).env?.VITE_API_BASE ||
@@ -422,6 +423,18 @@ export default function App() {
     const auth = localStorage.getItem('cb_auth_authenticated') === 'true';
     return auth && hasSessionToken();
   });
+  const [web3WalletAddress, setWeb3WalletAddress] = useState<string>(() => {
+    return normalizeWalletAddress(localStorage.getItem('web3_active_address') || localStorage.getItem('web3_last_connected_address'));
+  });
+  const [web3WalletSpendable, setWeb3WalletSpendable] = useState<boolean>(() => {
+    const activePrivateKey = localStorage.getItem('web3_active_private_key');
+    return hasSpendableWallet({
+      walletAddress: localStorage.getItem('web3_active_address') || localStorage.getItem('web3_last_connected_address') || web3WalletAddress,
+      browserWalletConnected: !!(window as any)?.ethereum,
+      privateKey: activePrivateKey
+    });
+  });
+  const [web3Snapshot, setWeb3Snapshot] = useState<BlockchainWalletSnapshot | null>(null);
   const [userEmail, setUserEmail] = useState<string>(() => {
     return localStorage.getItem('cb_auth_email') || 'mlaframboisemm@gmail.com';
   });
@@ -565,6 +578,18 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('cb_auth_email', userEmail);
   }, [userEmail]);
+
+  useEffect(() => {
+    const address = normalizeWalletAddress(localStorage.getItem('web3_active_address') || localStorage.getItem('web3_last_connected_address') || web3WalletAddress);
+    setWeb3WalletAddress(address);
+    setWeb3WalletSpendable(
+      hasSpendableWallet({
+        walletAddress: address,
+        browserWalletConnected: !!(window as any)?.ethereum,
+        privateKey: localStorage.getItem('web3_active_private_key')
+      })
+    );
+  }, [web3WalletAddress]);
 
   useEffect(() => {
     localStorage.setItem('cb_auth_name', userName);
@@ -1696,8 +1721,40 @@ export default function App() {
     });
 
     // Sort strictly from Best to Least (highest fiatValue to lowest fiatValue)
+    if (web3Snapshot) {
+      const web3Assets = [
+        ...(web3Snapshot.native.amount > 0 ? [{
+          id: `web3:${web3Snapshot.networkId}:${web3Snapshot.native.symbol}`,
+          isCash: false,
+          symbol: web3Snapshot.native.symbol,
+          name: `${web3Snapshot.native.symbol} Web3 Wallet`,
+          sublabel: `On-chain ${web3Snapshot.address}`,
+          color: '#627EEA',
+          amountFormatted: `${web3Snapshot.native.amount.toFixed(6)} ${web3Snapshot.native.symbol}`,
+          amountNum: web3Snapshot.native.amount,
+          fiatValue: web3Snapshot.native.fiatValueUsd,
+          allocation: netWorth === 0 ? 0 : (web3Snapshot.native.fiatValueUsd / netWorth) * 100,
+          priceFormatted: 'Live RPC',
+        }] : []),
+        ...web3Snapshot.tokens.filter((token) => Number(token.balanceFormatted.replace(/,/g, '')) > 0).map((token) => ({
+          id: `web3:${web3Snapshot.networkId}:${token.contractAddress || token.symbol}`,
+          isCash: false,
+          symbol: token.symbol,
+          name: `${token.name} Web3 Wallet`,
+          sublabel: `On-chain ${web3Snapshot.address}`,
+          color: '#2775CA',
+          amountFormatted: `${token.balanceFormatted} ${token.symbol}`,
+          amountNum: Number(token.balanceFormatted.replace(/,/g, '')),
+          fiatValue: token.fiatValueUsd,
+          allocation: netWorth === 0 ? 0 : (token.fiatValueUsd / netWorth) * 100,
+          priceFormatted: `$${token.unitPriceUsd.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
+        }))
+      ];
+      list.push(...web3Assets);
+    }
+
     return list.sort((a, b) => b.fiatValue - a.fiatValue);
-  }, [liveCashBalance, holdings, coins, netWorth]);
+  }, [liveCashBalance, holdings, coins, netWorth, web3Snapshot]);
 
   // Quick Asset indicator pills sorted from Best to Least
   const sortedHoldingsForPills = useMemo(() => {
@@ -2617,17 +2674,17 @@ export default function App() {
                         <Wallet className="h-4 w-4 text-blue-400" />
                         <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-300">Web3 Wallet</span>
                       </div>
-                      <span className="text-[9px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-extrabold px-1.5 py-0.5 rounded flex items-center gap-1">
-                        <span className="w-1 h-1 rounded-full bg-emerald-400 animate-pulse"></span>
-                        Live RPC
+                      <span className={`text-[9px] ${web3WalletSpendable ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' : 'bg-amber-500/20 text-amber-200 border border-amber-500/40'} font-extrabold px-1.5 py-0.5 rounded flex items-center gap-1`}>
+                        <span className={`w-1 h-1 rounded-full ${web3WalletSpendable ? 'bg-emerald-400 animate-pulse' : 'bg-amber-300'}`}></span>
+                        {web3WalletSpendable ? 'Spendable' : 'Needs Wallet'}
                       </span>
                     </div>
                     <div>
-                      <div className="text-lg font-black text-white font-mono">
-                        0x742d...f44e
+                      <div className="text-lg font-black text-white font-mono truncate">
+                        {web3WalletAddress.slice(0, 6)}...{web3WalletAddress.slice(-4)}
                       </div>
                       <p className="text-[11px] text-slate-300 mt-0.5 font-medium truncate">
-                        Ethereum + ERC-20 Tokens
+                        {web3Snapshot ? `${web3Snapshot.tokens.filter((token) => Number(token.balanceFormatted.replace(/,/g, '')) > 0).length + (web3Snapshot.native.amount > 0 ? 1 : 0)} live on-chain assets` : 'Connect a browser wallet to load live assets'}
                       </p>
                     </div>
                     <button
@@ -3170,7 +3227,16 @@ export default function App() {
           <div className="max-w-7xl mx-auto space-y-6">
             <ErrorBoundary name="Web3WalletTab">
               <BlockchainWalletComponent
-                customAddress="0x742d35cc6634c0532925a3b844bc454e4438f44e"
+                customAddress={web3WalletAddress || DEFAULT_WEB3_WALLET_ADDRESS}
+                onWalletStateChange={(address, spendable) => {
+                  const safeAddress = normalizeWalletAddress(address);
+                  setWeb3WalletAddress(safeAddress);
+                  setWeb3WalletSpendable(spendable);
+                  localStorage.setItem('web3_active_address', safeAddress);
+                  localStorage.setItem('web3_last_connected_address', safeAddress);
+                }}
+                onBalancesChange={setWeb3Snapshot}
+                onRecordTransaction={recordNewTransaction}
                 onTransactionSuccess={(txHash) => {
                   showToast(`Transaction broadcast live to Ethereum network: ${txHash.slice(0, 10)}...`, 'success');
                 }}
