@@ -1804,16 +1804,16 @@ export default function App() {
     }
   ) => {
     const coin = coins.find((c) => c && c.symbol === params.symbol);
-    if (!coin) return;
+    if (!coin) {
+      showToast('The requested asset is unavailable.', 'error');
+      return;
+    }
 
-    let backendSuccess = false;
     try {
-      showToast(`Initiating secure ${type} execution...`, 'info');
-
+      showToast(`Submitting secure ${type} request for provider verification...`, 'info');
       const targetSym = params.targetSymbol || 'ETH';
       const targetCoin = coins.find((c) => c && c.symbol === targetSym);
       const computedTargetAmount = targetCoin && targetCoin.price > 0 ? params.fiatAmount / targetCoin.price : params.amount;
-
       const response = await fetch(buildApiUrl('/api/coinbase/trade'), {
         method: 'POST',
         headers: buildAuthHeaders({
@@ -1830,156 +1830,17 @@ export default function App() {
           targetAmount: computedTargetAmount
         })
       });
-
-      const data = await response.json();
-      if (response.ok && data.success) {
-        backendSuccess = true;
-        
-        // Optimistically apply state changes immediately
-        if (type === 'BUY') {
-          setUsdBalance((prev) => Math.max(0, prev - params.fiatAmount));
-          setHoldings((prev) => {
-            const exists = prev.find((h) => h.symbol === params.symbol);
-            if (exists) {
-              return prev.map((h) =>
-                h.symbol === params.symbol ? { ...h, amount: h.amount + params.amount } : h
-              );
-            } else {
-              return [...prev, { symbol: params.symbol, amount: params.amount, avgBuyPrice: coin.price || 0 }];
-            }
-          });
-        } else if (type === 'SELL') {
-          setHoldings((prev) =>
-            prev
-              .map((h) => (h.symbol === params.symbol ? { ...h, amount: Math.max(0, h.amount - params.amount) } : h))
-              .filter((h) => h.amount > 0)
-          );
-          setUsdBalance((prev) => prev + params.fiatAmount);
-        } else if (type === 'CONVERT') {
-          setHoldings((prev) => {
-            let updated = prev
-              .map((h) => (h.symbol === params.symbol ? { ...h, amount: Math.max(0, h.amount - params.amount) } : h))
-              .filter((h) => h.amount > 0);
-
-            const targetExists = updated.find((h) => h.symbol === targetSym);
-            if (targetExists) {
-              return updated.map((h) => (h.symbol === targetSym ? { ...h, amount: h.amount + computedTargetAmount } : h));
-            } else {
-              return [...updated, { symbol: targetSym, amount: computedTargetAmount, avgBuyPrice: targetCoin?.price || 0 }];
-            }
-          });
-        }
-
-        if (data.transaction) {
-          recordNewTransaction(data.transaction);
-        } else {
-          const generatedTxHash = `0x${Math.random().toString(16).substring(2, 12)}${Date.now().toString(16)}`;
-          const fallbackTx: Transaction = {
-            id: `tx-${type.toLowerCase()}-${Date.now()}`,
-            type,
-            assetSymbol: type === 'CONVERT' ? `${params.symbol} → ${targetSym}` : params.symbol,
-            amount: params.amount,
-            fiatAmount: params.fiatAmount,
-            timestamp: Date.now(),
-            status: 'completed',
-            hash: generatedTxHash,
-            details: type === 'BUY'
-              ? `Purchased ${params.amount.toFixed(6)} ${params.symbol}`
-              : type === 'SELL'
-              ? `Sold ${params.amount.toFixed(6)} ${params.symbol}`
-              : `Converted ${params.amount.toFixed(6)} ${params.symbol} into ${computedTargetAmount.toFixed(6)} ${targetSym}`
-          };
-          recordNewTransaction(fallbackTx);
-        }
-
-        showToast(data.message || `Successfully executed ${type} trade!`, 'success');
-        syncCoinbaseBalances();
-        return;
+      const data = await response.json().catch(() => ({}));
+      const transaction = data?.transaction;
+      if (!response.ok || !data?.success || !transaction?.hash) {
+        throw new Error(data?.message || data?.error || 'The provider did not return a verified transaction reference.');
       }
-    } catch (e: any) {
-      // Fallthrough to local trade state execution
-    }
 
-    if (!backendSuccess) {
-      const generatedTxHash = `0x${Math.random().toString(16).substring(2, 12)}${Date.now().toString(16)}`;
-
-      if (type === 'BUY') {
-        setUsdBalance((prev) => Math.max(0, prev - params.fiatAmount));
-        setHoldings((prev) => {
-          const exists = prev.find((h) => h.symbol === params.symbol);
-          if (exists) {
-            return prev.map((h) =>
-              h.symbol === params.symbol ? { ...h, amount: h.amount + params.amount } : h
-            );
-          } else {
-            return [...prev, { symbol: params.symbol, amount: params.amount, avgBuyPrice: coin.price || 0 }];
-          }
-        });
-        const newTx: Transaction = {
-          id: `tx-buy-${Date.now()}`,
-          type: 'BUY',
-          assetSymbol: params.symbol,
-          amount: params.amount,
-          fiatAmount: params.fiatAmount,
-          timestamp: Date.now(),
-          status: 'completed',
-          hash: generatedTxHash,
-          details: `Purchased ${params.amount.toFixed(6)} ${params.symbol}`
-        };
-        recordNewTransaction(newTx);
-        showToast(`Successfully bought ${params.amount.toFixed(6)} ${params.symbol} for $${params.fiatAmount.toFixed(2)}!`, 'success');
-      } else if (type === 'SELL') {
-        setHoldings((prev) =>
-          prev
-            .map((h) => (h.symbol === params.symbol ? { ...h, amount: Math.max(0, h.amount - params.amount) } : h))
-            .filter((h) => h.amount > 0)
-        );
-        setUsdBalance((prev) => prev + params.fiatAmount);
-        const newTx: Transaction = {
-          id: `tx-sell-${Date.now()}`,
-          type: 'SELL',
-          assetSymbol: params.symbol,
-          amount: params.amount,
-          fiatAmount: params.fiatAmount,
-          timestamp: Date.now(),
-          status: 'completed',
-          hash: generatedTxHash,
-          details: `Sold ${params.amount.toFixed(6)} ${params.symbol}`
-        };
-        recordNewTransaction(newTx);
-        showToast(`Successfully sold ${params.amount.toFixed(6)} ${params.symbol} for $${params.fiatAmount.toFixed(2)}!`, 'success');
-      } else if (type === 'CONVERT') {
-        const targetSym = params.targetSymbol || 'ETH';
-        const targetCoin = coins.find((c) => c && c.symbol === targetSym);
-        const targetAmount = targetCoin && targetCoin.price > 0 ? params.fiatAmount / targetCoin.price : params.amount;
-
-        setHoldings((prev) => {
-          let updated = prev
-            .map((h) => (h.symbol === params.symbol ? { ...h, amount: Math.max(0, h.amount - params.amount) } : h))
-            .filter((h) => h.amount > 0);
-
-          const targetExists = updated.find((h) => h.symbol === targetSym);
-          if (targetExists) {
-            return updated.map((h) => (h.symbol === targetSym ? { ...h, amount: h.amount + targetAmount } : h));
-          } else {
-            return [...updated, { symbol: targetSym, amount: targetAmount, avgBuyPrice: targetCoin?.price || 0 }];
-          }
-        });
-
-        const newTx: Transaction = {
-          id: `tx-convert-${Date.now()}`,
-          type: 'CONVERT',
-          assetSymbol: `${params.symbol} → ${targetSym}`,
-          amount: params.amount,
-          fiatAmount: params.fiatAmount,
-          timestamp: Date.now(),
-          status: 'completed',
-          hash: generatedTxHash,
-          details: `Converted ${params.amount.toFixed(6)} ${params.symbol} to ${targetAmount.toFixed(6)} ${targetSym}`
-        };
-        recordNewTransaction(newTx);
-        showToast(`Successfully converted ${params.amount.toFixed(6)} ${params.symbol} into ${targetAmount.toFixed(6)} ${targetSym}!`, 'success');
-      }
+      recordNewTransaction(transaction);
+      await syncCoinbaseBalances();
+      showToast(data.message || `${type} transaction submitted with provider reference ${transaction.hash}.`, 'success');
+    } catch (error: any) {
+      showToast(error?.message || 'The trade was not executed. Balances were not changed.', 'error');
     }
   };
 
@@ -2093,47 +1954,8 @@ export default function App() {
       showToast(`Broadcast initiated! Tracking real-time progress for ${amount.toFixed(6)} ${symbol} in Ledger...`, 'info');
       return true;
     } else if (type === 'RECEIVE') {
-      const generatedTxHash = `0x${Math.random().toString(16).substring(2, 14)}${Date.now().toString(16)}`;
-      setHoldings((prev) => {
-        const exists = prev.find((h) => h.symbol === symbol);
-        if (exists) {
-          return prev.map((h) => (h.symbol === symbol ? { ...h, amount: h.amount + amount } : h));
-        } else {
-          return [...prev, { symbol, amount, avgBuyPrice: coin?.price || 0 }];
-        }
-      });
-      const newTxId = `tx-receive-${Date.now()}`;
-      const newTx: Transaction = {
-        id: newTxId,
-        type: 'RECEIVE',
-        assetSymbol: symbol,
-        amount: amount,
-        fiatAmount: fiatAmount,
-        timestamp: Date.now(),
-        status: 'pending',
-        stage: 'INITIATED',
-        stageLabel: 'Detecting Inbound Block Transaction',
-        progressPercent: 30,
-        confirmations: 0,
-        requiredConfirmations: 3,
-        estimatedCompletionTime: 45,
-        hash: generatedTxHash,
-        details: details || `Received external deposit`,
-        ledgerDebit: `Inbound Clearing Node`,
-        ledgerCredit: `Asset Holding Account (${symbol})`
-      };
-      recordNewTransaction(newTx);
-
-      // Register with backend status tracking engine
-      fetch('/api/transactions/track', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify(newTx)
-      }).catch(() => {});
-
-      showToast(`Inbound transfer detected! Tracking live confirmations in Ledger...`, 'info');
-      return true;
+      showToast('Incoming balances are updated only after a verified provider or on-chain confirmation is received. No local deposit was recorded.', 'info');
+      return false;
     }
     return false;
   };

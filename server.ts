@@ -4142,6 +4142,7 @@ const PASSWORD_RESETS_FILE = path.join(RUNTIME_DATA_DIR, 'password_resets.json')
 // Memory cache or file sync helper
 function readETransfers(): Record<string, any> {
   try {
+    fs.mkdirSync(RUNTIME_DATA_DIR, { recursive: true });
     if (!fs.existsSync(ETRANSFERS_FILE)) {
       atomicWriteFile(ETRANSFERS_FILE, JSON.stringify({}, null, 2));
       return {};
@@ -4156,6 +4157,7 @@ function readETransfers(): Record<string, any> {
 
 function writeETransfers(records: Record<string, any>) {
   try {
+    fs.mkdirSync(RUNTIME_DATA_DIR, { recursive: true });
     const tempPath = `${ETRANSFERS_FILE}.tmp`;
     fs.writeFileSync(tempPath, JSON.stringify(records, null, 2), 'utf-8');
     fs.renameSync(tempPath, ETRANSFERS_FILE);
@@ -6176,86 +6178,21 @@ app.get('/api/transactions/status', async (req: any, res: any) => {
 });
 
 // POST /api/transactions/track — Explicitly register a transaction for real-time tracking
-app.post('/api/transactions/track', async (req: any, res: any) => {
-  try {
-    const { id, type, assetSymbol, amount, fiatAmount, details, hash, status = 'pending', ledgerDebit, ledgerCredit } = req.body;
-    if (!assetSymbol || typeof amount !== 'number') {
-      return res.status(400).json({ error: 'INVALID_TRANSACTION_PAYLOAD', message: 'assetSymbol and amount are required.' });
-    }
-    const txId = id || `tx-${Date.now()}`;
-    const timestamp = Date.now();
-    const txHash = hash || `0x${Math.random().toString(16).substring(2, 14)}${Date.now().toString(16)}`;
-
-    try {
-      db.execute(
-        'INSERT INTO transactions (id, user_id, type, asset_symbol, amount, fiat_amount, timestamp, details, hash, status, ledger_debit, ledger_credit) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        [
-          txId,
-          req.user?.id || 'usr-default',
-          type || 'SEND',
-          assetSymbol,
-          amount,
-          fiatAmount || 0,
-          timestamp,
-          details || `Tracked ${type} ${assetSymbol}`,
-          txHash,
-          status,
-          ledgerDebit || 'Asset Account',
-          ledgerCredit || 'Settlement Account'
-        ]
-      );
-    } catch (e: any) {
-      console.warn('[TRANSACTION_TRACK] DB insert note:', e?.message);
-    }
-
-    return res.json({
-      success: true,
-      transaction: {
-        id: txId,
-        type: type || 'SEND',
-        assetSymbol,
-        amount,
-        fiatAmount: fiatAmount || 0,
-        timestamp,
-        details: details || `Tracked ${type} ${assetSymbol}`,
-        hash: txHash,
-        status,
-        stage: 'INITIATED',
-        stageLabel: 'Validating Signatures & Preparing Network Broadcast',
-        progressPercent: 20,
-        confirmations: 0,
-        requiredConfirmations: 3,
-        estimatedCompletionTime: 60,
-        lastPolledAt: timestamp
-      }
-    });
-  } catch (err: any) {
-    return res.status(500).json({ error: 'TRANSACTION_TRACK_ERROR', message: err?.message || 'Failed to track transaction.' });
-  }
+app.post('/api/transactions/track', requireAuth, (_req: any, res: any) => {
+  return res.status(501).json({
+    success: false,
+    error: 'VERIFIED_TRANSACTION_INGESTION_NOT_IMPLEMENTED',
+    message: 'Client-submitted transaction tracking is disabled. Transactions must be ingested from a verified provider or chain event.'
+  });
 });
-
 // POST /api/transactions/speed-up — Boost fee and accelerate settlement
-app.post('/api/transactions/speed-up', async (req: any, res: any) => {
-  try {
-    const { id } = req.body;
-    if (!id) return res.status(400).json({ error: 'ID_REQUIRED', message: 'Transaction id is required.' });
-
-    try {
-      db.execute("UPDATE transactions SET status = 'completed' WHERE id = ?", [id]);
-    } catch {}
-
-    return res.json({
-      success: true,
-      id,
-      status: 'completed',
-      message: 'Transaction priority fee boosted. Accelerated to final settlement.',
-      timestamp: Date.now()
-    });
-  } catch (err: any) {
-    return res.status(500).json({ error: 'SPEED_UP_ERROR', message: err?.message });
-  }
+app.post('/api/transactions/speed-up', requireAuth, requireMfa, (_req: any, res: any) => {
+  return res.status(501).json({
+    success: false,
+    error: 'TRANSACTION_REPLACEMENT_NOT_IMPLEMENTED',
+    message: 'Transaction acceleration is disabled until a verified provider replacement or fee-bump workflow is implemented.'
+  });
 });
-
 app.get('/api/transactions/spendability', requireAuth, requireMfa, async (req: any, res) => {
   try {
     const ledgerPath = process.env.SOVEREIGN_LEDGER_PATH || './ledger_db.json';
@@ -8996,135 +8933,31 @@ app.get('/api/wallets/google-pay/config', async (req: any, res) => {
   });
 });
 
-// 2. Google Wallet & Generic Passes Creation API
-app.post('/api/wallets/google-wallet/create-pass', async (req: any, res) => {
-  const { cardId, passType = 'payment_card', holderName = 'MAXIME LAFRAMBOISE' } = req.body || {};
-  const card = virtualCardsStore.find(c => c.id === cardId);
-
-  const issuerId = '3388000000022201991';
-  const classId = `${issuerId}.sovereign_card_class_v1`;
-  const objectId = `${issuerId}.card_${cardId || Date.now()}`;
-
-  const passPayload = {
-    iss: 'sovereign-wallet-issuer@google-wallet.iam.gserviceaccount.com',
-    aud: 'google',
-    typ: 'savetogooglewallet',
-    iat: Math.floor(Date.now() / 1000),
-    origins: ['https://unified-finance.internal', req.headers.origin || 'http://localhost:3000'],
-    payload: {
-      genericObjects: [
-        {
-          id: objectId,
-          classId: classId,
-          logo: {
-            sourceUri: {
-              uri: 'https://images.unsplash.com/photo-1622979135225-d2ba269bc1df?w=128&auto=format&fit=crop&q=80'
-            },
-            contentDescription: {
-              defaultValue: {
-                language: 'en-US',
-                value: 'Sovereign Digital Card Logo'
-              }
-            }
-          },
-          cardTitle: {
-            defaultValue: {
-              language: 'en-US',
-              value: card ? `${card.brand.toUpperCase()} Virtual ${card.currency}` : 'Sovereign Virtual Debit'
-            }
-          },
-          subheader: {
-            defaultValue: {
-              language: 'en-US',
-              value: 'Cardholder'
-            }
-          },
-          header: {
-            defaultValue: {
-              language: 'en-US',
-              value: holderName
-            }
-          },
-          hexBackgroundColor: '#0052FF',
-          barcode: {
-            type: 'QR_CODE',
-            value: `SOV-WALLET-CARD:${card?.id || 'VC-8849'}:${Date.now()}`,
-            alternateText: `•••• ${card?.panLast4 || '8849'}`
-          }
-        }
-      ]
-    }
-  };
-
-  const dummyJwt = `eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.${Buffer.from(JSON.stringify(passPayload)).toString('base64url')}.mockSignatureSovereignEncrypted`;
-
-  if (card) {
-    card.walletsProvisioned.googleWallet = true;
-    card.googleWalletProvisioned = true;
-  }
-
-  res.json({
-    success: true,
-    message: 'Google Wallet Pass payload generated and signed successfully.',
-    jwt: dummyJwt,
-    saveUrl: `https://pay.google.com/gp/v/save/${dummyJwt}`,
-    passDetails: {
-      issuerId,
-      classId,
-      objectId,
-      cardholder: holderName,
-      last4: card?.panLast4 || '8849',
-      provisionedAt: new Date().toISOString()
-    }
+// 2. Google Wallet and Samsung Wallet provisioning
+// Provider tokenization must be performed by a configured issuer integration. This
+// application never fabricates a signed pass, OPC token, or device-bound card token.
+app.post('/api/wallets/google-wallet/create-pass', requireAuth, requireMfa, async (_req: any, res) => {
+  return res.status(501).json({
+    success: false,
+    error: 'GOOGLE_WALLET_PROVISIONING_NOT_IMPLEMENTED',
+    message: 'Google Wallet provisioning is disabled until a verified issuer integration is configured.'
   });
 });
-
-// 3. Samsung Pay & Samsung Wallet Knox Config & In-App Push Provisioning
-app.get('/api/wallets/samsung-pay/config', async (req: any, res) => {
-  res.json({
+app.get('/api/wallets/samsung-pay/config', requireAuth, async (_req: any, res) => {
+  return res.json({
     success: true,
-    serviceId: 'spay_sovereign_live_ca_us',
-    merchantName: 'Unified Finance & Crypto Hub',
-    knoxSecurityLevel: 'CC EAL6+ Certified Hardware Enclave',
-    supportedNetworks: ['VISA', 'MASTERCARD'],
-    supportedCurrencies: ['USD', 'CAD', 'EUR', 'GBP'],
-    pushProvisioningSupported: true,
-    features: ['Biometric Iris / Fingerprint scan', 'Magnetic Secure Transmission (MST)', 'NFC Tap-to-Pay', 'Galaxy Watch NFC synchronization']
+    configured: false,
+    pushProvisioningSupported: false,
+    message: 'Samsung Wallet provisioning is not configured.'
   });
 });
-
-app.post('/api/wallets/samsung-wallet/push-provision', async (req: any, res) => {
-  const { cardId, deviceId = 'samsung_galaxy_knox_dev_01' } = req.body || {};
-  const card = virtualCardsStore.find(c => c.id === cardId);
-
-  if (!card) {
-    return res.status(404).json({ success: false, message: 'Virtual card not found for Samsung Wallet push provisioning.' });
-  }
-
-  // Simulate Samsung Knox In-App Provisioning Tokenization (OPC payload)
-  const tokenRequesterId = '40010075023'; // Samsung Pay TR-ID
-  const cardTokenPayload = {
-    cardId: card.id,
-    tokenRequesterId,
-    deviceId,
-    panLast4: card.panLast4,
-    brand: card.brand,
-    encryptedOpcPayload: `opc_samsung_knox_${Date.now()}_${Buffer.from(card.id + ':' + card.panLast4).toString('base64')}`,
-    provisioningStatus: 'PROVISIONED_READY_FOR_NFC',
-    secureElementBinding: 'SAMSUNG_KNOX_VAULT_BOUND',
-    timestamp: new Date().toISOString()
-  };
-
-  card.walletsProvisioned.samsungWallet = true;
-  card.samsungWalletProvisioned = true;
-
-  res.json({
-    success: true,
-    message: `Virtual Card ${card.brand.toUpperCase()} •••• ${card.panLast4} provisioned to Samsung Wallet!`,
-    provisionData: cardTokenPayload
+app.post('/api/wallets/samsung-wallet/push-provision', requireAuth, requireMfa, async (_req: any, res) => {
+  return res.status(501).json({
+    success: false,
+    error: 'SAMSUNG_WALLET_PROVISIONING_NOT_IMPLEMENTED',
+    message: 'Samsung Wallet provisioning is disabled until a verified issuer integration is configured.'
   });
 });
-
 // 4. Apple Pay Config
 app.get('/api/wallets/apple-pay/config', async (req: any, res) => {
   res.json({
@@ -9139,6 +8972,16 @@ app.get('/api/wallets/apple-pay/config', async (req: any, res) => {
 });
 
 // 5. Virtual Cards CRUD & Issuance Engine
+// Virtual-card issuers must create, tokenize, and authorize cards through a verified provider.
+// Disable the seeded in-memory card surface rather than expose synthetic card data or approvals.
+app.use('/api/virtual-cards', requireAuth, requireMfa, (_req: any, res: any) => {
+  return res.status(501).json({
+    success: false,
+    error: 'VIRTUAL_CARD_ISSUER_NOT_IMPLEMENTED',
+    message: 'Virtual-card operations are disabled until a verified issuer integration with durable per-user state is configured.'
+  });
+});
+
 app.get('/api/virtual-cards', async (req: any, res) => {
   res.json({
     success: true,
@@ -12199,184 +12042,43 @@ async function attachBankTokenToStripeCustomer(bankToken: string, userEmail: str
 }
 
 // Plaid Link & Stripe Integration Endpoints
-app.post('/api/plaid/create-link-token', async (req: any, res: any) => {
-  const plaidClientId = process.env.PLAID_CLIENT_ID;
-  const plaidSecret = process.env.PLAID_SECRET;
-  const plaidEnv = process.env.PLAID_ENV || 'sandbox';
-
-  if (plaidClientId && plaidSecret) {
-    try {
-      const plaidHost = plaidEnv === 'production' 
-        ? 'https://production.plaid.com' 
-        : plaidEnv === 'development' 
-        ? 'https://development.plaid.com' 
-        : 'https://sandbox.plaid.com';
-
-      const response = await fetch(`${plaidHost}/link/token/create`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          client_id: plaidClientId,
-          secret: plaidSecret,
-          client_name: 'Sovereign Finance',
-          country_codes: ['US', 'CA'],
-          language: 'en',
-          user: { client_user_id: req.user?.id ? String(req.user.id) : 'user_sovereign' },
-          products: ['auth', 'transactions']
-        })
-      });
-      const data = await response.json();
-      if (data && data.link_token) {
-        return res.json({ success: true, link_token: data.link_token, expiration: data.expiration });
-      }
-    } catch (e: any) {
-      console.warn('[PLAID LINK] Live token creation error:', e?.message);
-    }
-  }
-
-  return res.json({
-    success: true,
-    link_token: `link-sandbox-${Date.now()}`,
-    expiration: new Date(Date.now() + 3600000).toISOString(),
-    message: 'Plaid Link token ready (Sandbox Mode).'
+app.post('/api/plaid/create-link-token', requireAuth, async (_req: any, res: any) => {
+  return res.status(501).json({
+    success: false,
+    error: 'PLAID_LINK_NOT_IMPLEMENTED',
+    message: 'Plaid account linking is disabled until secure server-side token exchange and encrypted account storage are implemented.'
   });
 });
-
-app.post('/api/plaid/link', async (req: any, res: any) => {
-  const { public_token, account_id } = req.body || {};
-  return res.json({
-    success: true,
-    access_token: `access-sandbox-${Date.now()}`,
-    item_id: `item-sandbox-${Date.now()}`,
-    account_id: account_id || 'acc_sandbox_01',
-    message: 'Plaid bank account linked successfully.'
+app.post('/api/plaid/link', requireAuth, async (_req: any, res: any) => {
+  return res.status(501).json({
+    success: false,
+    error: 'PLAID_LINK_NOT_IMPLEMENTED',
+    message: 'Plaid account linking is disabled until secure server-side token exchange and encrypted account storage are implemented.'
   });
 });
-
-app.post('/api/plaid/stripe-connect', async (req: any, res: any) => {
-  try {
-    const { public_token, access_token, account_id, bank_name, last_four, currency, user_email } = req.body || {};
-
-    const resolvedAccessToken = access_token || `access-live-plaid-${Date.now()}`;
-    const resolvedAccountId = account_id || `acc_plaid_${Date.now().toString(36)}`;
-    const resolvedEmail = user_email || req.user?.email || 'user@sovereigns.ca';
-    const resolvedBankName = bank_name || 'Chase Bank';
-    const resolvedLastFour = last_four || '8329';
-    const resolvedCurrency = currency || 'USD';
-
-    // 1. Generate Plaid Processor Token for Stripe
-    const bankAccountToken = await createPlaidStripeProcessorToken(resolvedAccessToken, resolvedAccountId);
-
-    // 2. Attach Bank Token to Stripe Customer
-    const stripeIntegration = await attachBankTokenToStripeCustomer(bankAccountToken, resolvedEmail, resolvedBankName);
-
-    const record: PlaidStripeConnectedBank = {
-      id: `plaid_stripe_${Date.now()}`,
-      plaidAccessToken: resolvedAccessToken,
-      plaidAccountId: resolvedAccountId,
-      bankName: resolvedBankName,
-      lastFour: resolvedLastFour,
-      currency: resolvedCurrency,
-      stripeCustomerId: stripeIntegration.customerId,
-      stripeBankAccountId: stripeIntegration.sourceId,
-      bankAccountToken,
-      status: 'ACTIVE_STRIPE_ACH',
-      createdAt: new Date().toISOString(),
-      userEmail: resolvedEmail
-    };
-
-    PLAID_STRIPE_CONNECTED_BANKS.unshift(record);
-
-    return res.json({
-      success: true,
-      connected: true,
-      processor: 'plaid_stripe_ach',
-      stripeCustomerId: stripeIntegration.customerId,
-      stripeBankAccountId: stripeIntegration.sourceId,
-      bankAccountToken,
-      bankName: resolvedBankName,
-      lastFour: resolvedLastFour,
-      currency: resolvedCurrency,
-      status: 'ACTIVE_STRIPE_ACH',
-      record,
-      message: `Plaid bank account (${resolvedBankName} ••••${resolvedLastFour}) successfully connected to Stripe for instant ACH payments.`
-    });
-  } catch (err: any) {
-    console.error('[PLAID STRIPE CONNECT ERROR]', err);
-    return res.status(500).json({
-      error: 'PLAID_STRIPE_CONNECT_FAILED',
-      message: err.message || 'Failed to connect Plaid bank account to Stripe.'
-    });
-  }
-});
-
-app.get('/api/plaid/stripe-status', async (req: any, res: any) => {
-  return res.json({
-    success: true,
-    connectedSources: PLAID_STRIPE_CONNECTED_BANKS,
-    totalConnected: PLAID_STRIPE_CONNECTED_BANKS.length,
-    stripeConfigured: Boolean(process.env.STRIPE_SECRET_KEY),
-    plaidConfigured: Boolean(process.env.PLAID_CLIENT_ID && process.env.PLAID_SECRET)
+app.post('/api/plaid/stripe-connect', requireAuth, requireMfa, async (_req: any, res: any) => {
+  return res.status(501).json({
+    success: false,
+    error: 'PLAID_STRIPE_CONNECT_NOT_IMPLEMENTED',
+    message: 'Plaid-to-Stripe bank connection is disabled until a verified provider integration is implemented.'
   });
 });
-
-app.post('/api/stripe/plaid-ach-payment', async (req: any, res: any) => {
-  try {
-    const { amount, currency = 'USD', bankAccountId, description = 'ACH Bank Transfer via Plaid & Stripe' } = req.body || {};
-    const amountNum = parseFloat(amount);
-    if (isNaN(amountNum) || amountNum <= 0) {
-      return res.status(400).json({ error: 'INVALID_AMOUNT', message: 'Positive payment amount is required.' });
-    }
-
-    const stripeKey = process.env.STRIPE_SECRET_KEY;
-    const connectedBank = PLAID_STRIPE_CONNECTED_BANKS.find(b => b.stripeBankAccountId === bankAccountId || b.id === bankAccountId) || PLAID_STRIPE_CONNECTED_BANKS[0];
-
-    let paymentIntentId = `pi_plaid_ach_${Date.now()}`;
-    let paymentStatus = 'succeeded';
-
-    if (stripeKey && connectedBank?.stripeCustomerId) {
-      try {
-        const amountCents = Math.round(amountNum * 100);
-        const piRes = await fetch('https://api.stripe.com/v1/payment_intents', {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${stripeKey}`,
-            'Content-Type': 'application/x-www-form-urlencoded'
-          },
-          body: new URLSearchParams({
-            amount: amountCents.toString(),
-            currency: currency.toLowerCase(),
-            customer: connectedBank.stripeCustomerId,
-            description,
-            payment_method_types: 'us_bank_account',
-            confirm: 'true',
-            off_session: 'true'
-          }).toString()
-        });
-        const piJson = await piRes.json();
-        if (piJson?.id) {
-          paymentIntentId = piJson.id;
-          paymentStatus = piJson.status || 'succeeded';
-        }
-      } catch (stripeErr: any) {
-        console.warn('[STRIPE PLAID ACH PAYMENT NOTE]', stripeErr?.message);
-      }
-    }
-
-    return res.json({
-      success: true,
-      paymentIntentId,
-      status: paymentStatus,
-      amount: amountNum,
-      currency: currency.toUpperCase(),
-      bankAccount: connectedBank ? `${connectedBank.bankName} (••••${connectedBank.lastFour})` : 'Plaid ACH Linked Bank',
-      message: `ACH Payment of $${amountNum.toFixed(2)} ${currency.toUpperCase()} submitted via Stripe from connected Plaid bank account.`
-    });
-  } catch (err: any) {
-    return res.status(500).json({ error: 'PLAID_ACH_PAYMENT_FAILED', message: err.message || 'ACH payment failed.' });
-  }
+app.get('/api/plaid/stripe-status', requireAuth, async (_req: any, res: any) => {
+  return res.json({
+    success: true,
+    configured: false,
+    connectedSources: [],
+    totalConnected: 0,
+    message: 'No verified Plaid-to-Stripe bank connection is configured.'
+  });
 });
-
+app.post('/api/stripe/plaid-ach-payment', requireAuth, requireMfa, async (_req: any, res: any) => {
+  return res.status(501).json({
+    success: false,
+    error: 'PLAID_ACH_PAYMENT_NOT_IMPLEMENTED',
+    message: 'ACH payment submission is disabled until a verified Plaid-to-Stripe provider integration is implemented.'
+  });
+});
 app.post('/api/stripe/create-checkout-session', requireAuth, async (req: any, res) => {
   const { amount, fxRate, origin } = req.body || {};
   const amountCad = parseFloat(amount);
@@ -14333,97 +14035,24 @@ async function startServer() {
   });
 
   // POST /api/sovereign/wallet-pass/scan — Process a QR scan payment & deduct from Wise balance
-  app.post('/api/sovereign/wallet-pass/scan', async (req: any, res: any) => {
-    try {
-      const { qrPayload, qrData, amount, currency = 'USD', merchantName } = req.body;
-      const rawPayload = qrPayload || qrData;
-      let scanData: any = {};
-      try { scanData = typeof rawPayload === 'string' ? JSON.parse(rawPayload) : (rawPayload || {}); } catch { scanData = { raw: rawPayload }; }
-
-      const userId = scanData.userId || req.user?.id || (scanData.email ? (db.execute('SELECT id FROM users WHERE email = ?', [scanData.email]) as any[])[0]?.id : null);
-      if (!userId) {
-        return res.status(400).json({ error: 'USER_NOT_FOUND', message: 'Could not identify user for pass payment' });
-      }
-
-      const amtNum = Number(amount);
-      if (isNaN(amtNum) || amtNum <= 0) {
-        return res.status(400).json({ error: 'INVALID_AMOUNT', message: 'Payment amount must be greater than zero' });
-      }
-
-      const amtUsd = currency === 'CAD' ? amtNum / 1.40895 : amtNum;
-
-      const usdWallets = db.execute('SELECT * FROM wallets WHERE user_id = ? AND asset_symbol = ?', [userId, 'USD']) as any[];
-      let currentBal = usdWallets.length > 0 ? Number(usdWallets[0].balance || 0) : 0;
-
-      // Check Wise live balance if currentBal < amtUsd
-      let wiseLiveSynced = false;
-      try {
-        const { getWiseTotalCashUSD } = await import('./src/lib/wise-live-integration.js');
-        const wiseData = await getWiseTotalCashUSD();
-        if (wiseData && wiseData.totalUSD > 0) {
-          wiseLiveSynced = true;
-          if (currentBal < wiseData.totalUSD) {
-            currentBal = wiseData.totalUSD;
-          }
-        }
-      } catch { /* ignore */ }
-
-      if (currentBal < amtUsd) {
-        return res.status(400).json({ error: 'INSUFFICIENT_BALANCE', message: `Insufficient balance: $${currentBal.toFixed(2)} USD available` });
-      }
-
-      // Execute live Wise payout/deduction
-      let wiseTransferId: number | undefined = undefined;
-      let wiseDeducted = false;
-      try {
-        const { executeWisePayout } = await import('./src/lib/wise-live-integration.js');
-        const recipientId = Number(process.env.WISE_RECIPIENT_CAD_ID || 1504627763);
-        const payoutRes = await executeWisePayout({
-          sourceCurrency: 'USD',
-          targetCurrency: 'CAD',
-          sourceAmount: amtUsd,
-          recipientId,
-          reference: `QR Terminal Pay: ${merchantName || 'Terminal'}`
-        });
-
-        if (payoutRes.success && payoutRes.transferId) {
-          wiseTransferId = payoutRes.transferId;
-          wiseDeducted = true;
-        }
-      } catch (wiseErr: any) {
-        console.warn('[WALLET-PASS-SCAN] Wise auto-deduction:', wiseErr.message);
-      }
-
-      const newBal = currentBal - amtUsd;
-      if (usdWallets.length > 0) {
-      } else {
-        db.execute('INSERT INTO wallets (id, user_id, asset_symbol, balance, public_address_ethereum, public_address_bitcoin, identityLocked, productionMode, blockchainLinked, lockedToEmail) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-          [`wallet-${userId}-usd`, userId, 'USD', newBal, '', '', true, 'live', false, 'mlaframboisemm@gmail.com']);
-      }
-
-      const txId = `scan_${crypto.randomUUID()}`;
-      db.execute('INSERT INTO transactions (id, user_id, type, asset_symbol, amount, fiat_amount, timestamp, details, hash, status, ledger_debit, ledger_credit) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        [txId, userId, 'WALLET_SCAN_PAY', 'USD', amtUsd, amtUsd, Date.now(),
-         `Google Wallet Terminal Pay: ${currency} $${amtNum.toFixed(2)} at ${merchantName || 'Merchant'}${wiseTransferId ? ` (Wise Transfer #${wiseTransferId})` : ''}`,
-         txId, 'completed', 'USD', 'merchant']);
-
-      return res.json({
-        success: true,
-        txId,
-        merchant: merchantName || 'Merchant',
-        amountPaidUsd: amtUsd,
-        currency,
-        remainingUsdBalance: newBal,
-        wiseDeducted,
-        wiseTransferId,
-        message: `Payment of $${amtUsd.toFixed(2)} USD processed via Google Wallet Pass.${wiseTransferId ? ` Deducted from live Wise account (Transfer #${wiseTransferId}).` : ' Ledger updated.'}`
-      });
-    } catch (e: any) {
-      return res.status(500).json({ error: 'SCAN_PAY_ERROR', message: e.message });
-    }
+  app.post('/api/sovereign/wallet-pass/scan', requireAuth, requireMfa, async (_req: any, res: any) => {
+    return res.status(501).json({
+      success: false,
+      error: 'WALLET_PASS_PAYMENT_NOT_IMPLEMENTED',
+      message: 'Wallet-pass payment is disabled until a verified merchant acquirer, card tokenization provider, and per-user settlement mapping are configured.'
+    });
+  });
+  // ═══════════════════════════════════════════════════════════════════
+  // WISE operations require a verified per-user Wise profile mapping. A single deployment-wide
+  // Wise credential must not be treated as the balance or settlement authority for every application user.
+  app.use(['/api/wise/balances', '/api/wise/balances/create', '/api/wise/payout', '/api/wise/reconcile', '/api/balance-verification', '/api/wise/balance-verification', '/api/withdrawal/wise/balance-verification'], requireAuth, requireMfa, (_req: any, res: any) => {
+    return res.status(501).json({
+      success: false,
+      error: 'WISE_PER_USER_ACCOUNT_MAPPING_NOT_IMPLEMENTED',
+      message: 'This Wise operation is disabled until the authenticated user is bound to a verified Wise profile and provider events can be reconciled per account.'
+    });
   });
 
-  // ═══════════════════════════════════════════════════════════════════
   // WISE LIVE INTEGRATION ROUTES
   // ═══════════════════════════════════════════════════════════════════
 
@@ -14674,206 +14303,13 @@ async function startServer() {
   });
 
   // POST /api/webhooks/wise — Async Tracking Webhook Subscription Listener for transfers#state-change, balances#credit, balances#debit
-  app.post('/api/webhooks/wise', async (req: any, res: any) => {
-    try {
-      const { verifyWiseProductionWebhook, verifyWiseWebhookSignature, processWiseWebhookEvent, getWiseTotalCashUSD } = await import('./src/lib/wise-live-integration.js');
-      const sigHeader = req.headers['x-signature-sha256'] || req.headers['X-Signature-SHA256'] || '';
-      const rawBody = typeof req.body === 'string' ? req.body : JSON.stringify(req.body || {});
-
-      let isValid = false;
-      if (sigHeader) {
-        isValid = await verifyWiseProductionWebhook(rawBody, String(sigHeader));
-        if (!isValid) {
-          isValid = verifyWiseWebhookSignature(rawBody, String(sigHeader));
-        }
-      }
-
-      if (!isValid && sigHeader && process.env.NODE_ENV === 'production') {
-        return res.status(401).json({ error: 'INVALID_SIGNATURE', message: 'RSA Webhook signature verification failed.' });
-      }
-
-      const eventResult = await processWiseWebhookEvent(req.body);
-
-      // Instant Balance & Ledger Reconciliation
-      const payload = req.body || {};
-      const eventType = String(payload.event_type || payload.type || eventResult?.eventType || '').trim();
-      const eventData = payload.data || payload;
-      const eventId = String(payload.event_id || payload.id || eventResult?.data?.eventId || `evt_${Date.now()}`);
-
-      let balanceUpdated = false;
-      let targetUserId = '';
-
-      // Find user matching profileId if specified
-      const profileId = String(eventData.profile_id || eventData.profileId || '');
-      const users = db.execute('SELECT * FROM users') as any[];
-      if (profileId) {
-        const matchedUser = users.find(u => String(u.wiseProfileId || '').trim() === profileId);
-        if (matchedUser) {
-          targetUserId = String(matchedUser.id);
-        }
-      }
-      if (!targetUserId && users.length > 0) {
-        targetUserId = String(users[0].id);
-      }
-
-      if (eventType === 'balances#credit' || eventType === 'swift-in#credit' || eventType === 'balances#update') {
-        const currency = String(eventData.currency || eventData.amount?.currency || 'USD').toUpperCase();
-        const creditAmt = Number(eventData.amount?.value ?? eventData.amount ?? 0);
-        const postBal = Number(eventData.post_balance?.value ?? eventData.post_balance ?? eventData.postBalance ?? 0);
-
-        const wallets = db.execute('SELECT * FROM wallets WHERE user_id = ? AND asset_symbol = ?', [targetUserId, currency]) as any[];
-        let currentBal = wallets.length > 0 ? Number(wallets[0].balance || 0) : 0;
-        let newBal = postBal > 0 ? postBal : (currentBal + creditAmt);
-
-        if (wallets.length > 0) {
-          db.execute(
-            'INSERT INTO wallets (id, user_id, asset_symbol, balance, public_address_ethereum, public_address_bitcoin, identityLocked, productionMode, blockchainLinked, lockedToEmail) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-            [`wallet-${targetUserId}-${currency.toLowerCase()}`, targetUserId, currency, newBal, getMarshallAddress(), 'bc1q9057184275marcel001', true, 'live', true, 'mlaframboisemm@gmail.com']
-          );
-        }
-
-        const txId = `tx_wise_credit_${eventId.slice(-12)}_${Date.now()}`;
-        const txDetails = JSON.stringify({
-          source: 'WISE_WEBHOOK',
-          eventType,
-          eventId,
-          profileId: profileId || '101924589',
-          creditAmount: creditAmt,
-          currency,
-          postBalance: newBal,
-          receivedAt: new Date().toISOString()
-        });
-
-        db.execute(
-          'INSERT INTO transactions (id, user_id, type, asset_symbol, amount, fiat_amount, timestamp, details, hash, status, ledger_debit, ledger_credit) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-          [txId, targetUserId, 'RECEIVE', currency, creditAmt, creditAmt, Date.now(), txDetails, `0xwise${crypto.randomBytes(16).toString('hex')}`, 'completed', `wise:${profileId || '101924589'}`, `user:${targetUserId}`]
-        );
-
-        db.execute(
-          'INSERT INTO audit_logs (id, user_id, action, timestamp, ip_address, status, details) VALUES (?, ?, ?, ?, ?, ?, ?)',
-          [`audit_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`, targetUserId, 'WISE_WEBHOOK_BALANCE_CREDIT', Date.now(), 'wise-webhook', 'success', txDetails]
-        );
-
-        balanceUpdated = true;
-      } else if (eventType === 'balances#debit') {
-        const currency = String(eventData.currency || eventData.amount?.currency || 'USD').toUpperCase();
-        const debitAmt = Number(eventData.amount?.value ?? eventData.amount ?? 0);
-        const postBal = Number(eventData.post_balance?.value ?? eventData.post_balance ?? eventData.postBalance ?? 0);
-
-        const wallets = db.execute('SELECT * FROM wallets WHERE user_id = ? AND asset_symbol = ?', [targetUserId, currency]) as any[];
-        let currentBal = wallets.length > 0 ? Number(wallets[0].balance || 0) : 0;
-        let newBal = postBal > 0 ? postBal : Math.max(0, currentBal - debitAmt);
-
-        if (wallets.length > 0) {
-        }
-
-        const txId = `tx_wise_debit_${eventId.slice(-12)}_${Date.now()}`;
-        const txDetails = JSON.stringify({
-          source: 'WISE_WEBHOOK',
-          eventType,
-          eventId,
-          profileId: profileId || '101924589',
-          debitAmount: debitAmt,
-          currency,
-          postBalance: newBal,
-          debitedAt: new Date().toISOString()
-        });
-
-        db.execute(
-          'INSERT INTO transactions (id, user_id, type, asset_symbol, amount, fiat_amount, timestamp, details, hash, status, ledger_debit, ledger_credit) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-          [txId, targetUserId, 'WISE_WITHDRAWAL', currency, debitAmt, debitAmt, Date.now(), txDetails, `0xwise${crypto.randomBytes(16).toString('hex')}`, 'completed', `user:${targetUserId}`, `wise:${profileId || '101924589'}`]
-        );
-
-        db.execute(
-          'INSERT INTO audit_logs (id, user_id, action, timestamp, ip_address, status, details) VALUES (?, ?, ?, ?, ?, ?, ?)',
-          [`audit_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`, targetUserId, 'WISE_WEBHOOK_BALANCE_DEBIT', Date.now(), 'wise-webhook', 'success', txDetails]
-        );
-
-        balanceUpdated = true;
-      } else if (eventType === 'transfers#state-change' || eventType === 'transfers#payout-failure') {
-        const transferId = String(eventData.resource?.id || eventData.transfer_id || eventData.transferId || '').trim();
-        const rawState = String(eventData.current_state || eventData.status || eventData.state || '').trim().toLowerCase();
-
-        if (transferId) {
-          const allTxs = db.execute('SELECT * FROM transactions') as any[];
-          const matchingTxs = allTxs.filter(tx => {
-            if (String(tx.wiseTransferId || '').trim() === transferId) return true;
-            try {
-              const detailsObj = typeof tx.details === 'string' ? JSON.parse(tx.details) : (tx.details || {});
-              return String(detailsObj.wiseTransferId || detailsObj.transferId || '').trim() === transferId;
-            } catch {
-              return false;
-            }
-          });
-
-          for (const tx of matchingTxs) {
-            let nextStatus: 'completed' | 'failed' | 'processing' | null = null;
-            if (eventType === 'transfers#payout-failure' || ['rejected', 'cancelled', 'failed', 'bounced_back', 'funds_refunded'].includes(rawState)) {
-              nextStatus = 'failed';
-            } else if (['outgoing_payment_sent', 'completed', 'settled'].includes(rawState)) {
-              nextStatus = 'completed';
-            } else if (['incoming_payment_waiting', 'processing', 'funds_converted', 'pending'].includes(rawState)) {
-              nextStatus = 'processing';
-            }
-
-            if (nextStatus) {
-              let existingDetails: any = {};
-              try { existingDetails = JSON.parse(tx.details || '{}'); } catch {}
-              const updatedDetails = JSON.stringify({
-                ...existingDetails,
-                wiseWebhookState: rawState,
-                wiseLastWebhookAt: new Date().toISOString(),
-                ...(nextStatus === 'completed' ? { wiseClearedAt: new Date().toISOString() } : {})
-              });
-
-              db.execute('UPDATE transactions SET status = ?, details = ? WHERE id = ?', [nextStatus, updatedDetails, tx.id]);
-
-              if (nextStatus === 'failed' && tx.status !== 'failed') {
-                const cur = String(tx.assetSymbol || 'USD').toUpperCase();
-                const refundAmt = Number(tx.amount || tx.fiatAmount || 0);
-                if (refundAmt > 0) {
-                  const userWallets = db.execute('SELECT * FROM wallets WHERE user_id = ? AND asset_symbol = ?', [tx.userId, cur]) as any[];
-                  if (userWallets.length > 0) {
-                  }
-                }
-              }
-
-              balanceUpdated = true;
-            }
-          }
-        }
-      }
-
-      let liveUsdTotal: number | undefined = undefined;
-      try {
-        const liveCash = await getWiseTotalCashUSD();
-        if (liveCash && typeof liveCash.usdBalance === 'number' && liveCash.usdBalance > 0) {
-          liveUsdTotal = liveCash.usdBalance;
-        }
-      } catch {
-        // live fallback
-      }
-
-      // Broadcast real-time balance update to connected WebSocket clients
-      try {
-        const { broadcastWiseBalanceUpdate } = await import('./src/lib/wise-websocket-server.js');
-        broadcastWiseBalanceUpdate();
-      } catch (wsErr) {
-        // ws broadcast fallback
-      }
-
-      return res.json({
-        received: true,
-        signatureVerified: isValid,
-        event: eventResult,
-        balanceUpdated,
-        liveUsdTotal
-      });
-    } catch (e: any) {
-      return res.status(500).json({ error: 'WISE_WEBHOOK_ERROR', message: e.message });
-    }
+  app.post('/api/webhooks/wise', async (_req: any, res: any) => {
+    return res.status(503).json({
+      success: false,
+      error: 'WISE_WEBHOOK_ACCOUNT_MAPPING_NOT_IMPLEMENTED',
+      message: 'Wise webhook state mutation is disabled until verified provider profile-to-user mapping and idempotent event persistence are configured.'
+    });
   });
-
   // POST /api/wise/payout — Send real money from app sovereign ledger → Wise account
   // Deducts from app USD wallet, creates real Wise transfer to Marcel's Wise balance
   app.post('/api/wise/payout', requireAuth, async (req: any, res: any) => {

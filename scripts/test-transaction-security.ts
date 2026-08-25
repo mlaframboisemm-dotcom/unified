@@ -223,6 +223,37 @@ async function main() {
     assert(typeof spendabilityBody.allRailsSpendable === 'boolean', 'Expected allRailsSpendable boolean in spendability payload.');
     assert(spendabilityBody.rails?.walletSend, 'Expected rails.walletSend in spendability payload.');
 
+    const manualTrackingRes = await fetch(`${base}/api/transactions/track`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', cookie },
+      body: JSON.stringify({ assetSymbol: 'BTC', amount: 1, hash: 'verified-reference-test' })
+    });
+    assert(manualTrackingRes.status === 501, `Expected manual transaction tracking to be disabled with 501, got ${manualTrackingRes.status}`);
+
+    const speedUpRes = await fetch(`${base}/api/transactions/speed-up`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', cookie },
+      body: JSON.stringify({ id: 'tx-test' })
+    });
+    assert(speedUpRes.status === 501, `Expected transaction speed-up to be disabled with 501, got ${speedUpRes.status}`);
+
+    const virtualCardsRes = await fetch(`${base}/api/virtual-cards`, { headers: { cookie } });
+    assert(virtualCardsRes.status === 501, `Expected virtual-card operations to be disabled with 501, got ${virtualCardsRes.status}`);
+
+    const plaidLinkRes = await fetch(`${base}/api/plaid/create-link-token`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', cookie },
+      body: JSON.stringify({})
+    });
+    assert(plaidLinkRes.status === 501, `Expected Plaid linking to be disabled with 501, got ${plaidLinkRes.status}`);
+
+    const wisePayoutRes = await fetch(`${base}/api/wise/payout`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', cookie },
+      body: JSON.stringify({ amount: 1, currency: 'USD' })
+    });
+    assert(wisePayoutRes.status === 501, `Expected Wise payout to be disabled with 501, got ${wisePayoutRes.status}`);
+
     const unknownTransferRes = await fetch(`${base}/api/exchanges/etransfer/get/non-existent-transfer-id`, {
       headers: { cookie }
     });
