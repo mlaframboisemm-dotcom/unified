@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { 
-  TrendingUp, TrendingDown, Wallet, Clock, Search, ListFilter, Star, ArrowUpRight, 
-  ArrowDownLeft, Sparkles, RefreshCw, ChevronRight, CheckCircle2, ShieldAlert, Award, 
+import {
+  TrendingUp, TrendingDown, Wallet, Clock, Search, ListFilter, Star, ArrowUpRight,
+  ArrowDownLeft, Sparkles, RefreshCw, ChevronRight, CheckCircle2, ShieldAlert, Award,
   BookOpen, Eye, HelpCircle, Newspaper, ThumbsUp, Plus, CreditCard, AlertCircle, Check, ShieldCheck, X, Lock,
   HardDrive, FolderGit2, Building, QrCode, Send, FileText, Smartphone, Compass, User, Scale, Download, FileSpreadsheet
 } from 'lucide-react';
@@ -52,11 +52,11 @@ import { OfflineSyncStatusBar } from './components/OfflineSyncStatusBar';
 import { TransactionStatusTracker } from './components/TransactionStatusTracker';
 import TransactionQrModal from './components/TransactionQrModal';
 import { TransactionVerifiedBanner, VerifiedTxParams } from './components/TransactionVerifiedBanner';
-import { 
-  saveTransactionWithOfflineFallback, 
-  cacheTransactionsLocally, 
+import {
+  saveTransactionWithOfflineFallback,
+  cacheTransactionsLocally,
   getCachedTransactions,
-  syncOfflineQueueToFirestore 
+  syncOfflineQueueToFirestore
 } from './lib/indexeddb-offline-sync';
 import { normalizeWalletAddress } from './lib/web3-wallet';
 
@@ -304,7 +304,7 @@ export default function App() {
     }
   }, []);
   const [isStripeConfigured, setIsStripeConfigured] = useState<boolean>(false);
-  
+
   // Market search & filters
   const [marketFilter, setMarketFilter] = useState<'all' | 'gainers' | 'losers' | 'watchlist'>('all');
   const [marketSearchQuery, setMarketSearchQuery] = useState('');
@@ -357,7 +357,7 @@ export default function App() {
     } catch {}
     return [
       // Balances are loaded from authenticated live providers; no client-side balances are seeded.
-      
+
     ];
   });
 
@@ -697,7 +697,7 @@ export default function App() {
       setSovVerifyAction(null);
       setSovVerifyInput('');
       setSovVerifyError('');
-      
+
       // Run callback
       if (cb) await cb();
     } catch (e) {
@@ -803,7 +803,7 @@ export default function App() {
 
       hasLoggedBalanceSyncError.current = false;
       const config = await configRes.json();
-      
+
       const isReal = config.mode === 'real';
       setRealCoinbaseMode(isReal);
       setIsStripeConfigured(!!config.stripeConfigured);
@@ -1028,22 +1028,24 @@ export default function App() {
       const data = await res.json();
       clearInterval(intervalId);
 
-      if (res.ok) {
+      const providerPayoutId = typeof data?.payoutId === 'string' ? data.payoutId : typeof data?.id === 'string' ? data.id : '';
+      const allowedPayoutStatus = data?.status === 'PENDING_EXTERNAL_SETTLEMENT' || data?.status === 'PENDING_MANUAL_SETTLEMENT' || data?.status === 'syncing' || data?.status === 'SETTLED';
+      if (res.ok && providerPayoutId && allowedPayoutStatus) {
         setPayoutProgress(100);
-        setPayoutProgressStatus('Funds successfully queued for interbank settlement!');
+        setPayoutProgressStatus(data.status === 'SETTLED' ? 'Provider settlement confirmed.' : 'Provider payout request accepted; external settlement status is pending.');
 
         const receiptObj = {
-          payoutId: data.payoutId || data.id || `po_stripe_ach_${Date.now().toString(36)}`,
+          payoutId: providerPayoutId,
           amountCad: amountNum,
           amountUsd: amountNum / DEFAULT_USD_CAD_RATE,
-          bankName: 'TD Canada Trust / Connected Checking',
-          accountMask: '•••••••• 6812',
-          beneficiary: userName || 'Marcel Laframboise',
-          timestamp: new Date().toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }),
-          status: 'QUEUED_FOR_INTERBANK_SETTLEMENT',
-          clearingMethod: 'Stripe ACH Express (Same-Day Clearing)',
-          auditHash: '0x' + Array.from({ length: 32 }, () => Math.floor(Math.random() * 16).toString(16)).join(''),
-          message: data.message || 'Payout reserved from ledger and queued for interbank settlement.'
+          bankName: typeof data?.bankName === 'string' ? data.bankName : 'Provider settlement rail',
+          accountMask: typeof data?.accountMask === 'string' ? data.accountMask : 'Not provided by provider',
+          beneficiary: typeof data?.beneficiary === 'string' ? data.beneficiary : 'Not provided by provider',
+          timestamp: typeof data?.createdAt === 'string' ? data.createdAt : new Date().toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }),
+          status: data.status,
+          clearingMethod: typeof data?.clearingMethod === 'string' ? data.clearingMethod : 'External provider settlement',
+          auditHash: typeof data?.providerReceiptId === 'string' ? data.providerReceiptId : providerPayoutId,
+          message: data.message || 'The provider accepted the payout request. Final completion requires external settlement confirmation.'
         };
         setStripePayoutReceipt(receiptObj);
 
@@ -1253,7 +1255,7 @@ export default function App() {
             sessionStorage.setItem('cb_auth_jwt_token', data.token);
             localStorage.setItem('cb_auth_jwt_token', data.token);
             localStorage.setItem('cb_auth_authenticated', 'true');
-            
+
             if (data.user) {
               migrateGlobalStateToUserScope(data.user.email);
               hydrateStateFromUserScope(data.user.email);
@@ -1262,10 +1264,10 @@ export default function App() {
               setCitizenship(data.user.region || 'CA');
               setKycLevel(data.user.kycLevel !== undefined ? data.user.kycLevel : 2);
             }
-            
+
             setIsAuthenticated(true);
             showToast('Secure session handshake established successfully with backend gateway!', 'success');
-            
+
             // If there's a transfer ID, open the Cash Modal automatically to let the finalize effect process
             if (transferId) {
               setCashModalAction('deposit');
@@ -1810,7 +1812,7 @@ export default function App() {
         ledgerCredit: `External Settlement Node (${recipientAddress || details || 'Mempool'})`
       };
       recordNewTransaction(newTx);
-      
+
       // Register with backend status tracking engine
       fetch('/api/transactions/track', {
         method: 'POST',
@@ -1985,7 +1987,7 @@ export default function App() {
       const matchesSearch =
         coin.name.toLowerCase().includes(marketSearchQuery.toLowerCase()) ||
         coin.symbol.toLowerCase().includes(marketSearchQuery.toLowerCase());
-      
+
       if (!matchesSearch) return false;
 
       if (marketFilter === 'watchlist') {
@@ -2110,7 +2112,7 @@ export default function App() {
                   <p className="text-[10px] text-gray-500 mt-0.5">Download PWA or direct Android app package</p>
                 </div>
               </div>
-              <button 
+              <button
                 onClick={() => {
                   localStorage.setItem('sovereign_pwa_dismissed', 'true');
                   setShowInstallBanner(false);
@@ -2213,10 +2215,10 @@ export default function App() {
           {currentTab === 'deployment-dashboard' && <DeploymentDashboard />}
           {currentTab === 'dashboard' && (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-            
+
             {/* Left wide content: Portfolio details & market tickers */}
             <div className="lg:col-span-8 space-y-8">
-              
+
               {/* Balanced Portfolio Summary Hero Grid */}
               <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
                 {/* Primary Net Worth & Daily Change Card - Spans 12 cols for modern consumer aesthetic */}
@@ -2232,7 +2234,7 @@ export default function App() {
                           LIVE PORTFOLIO
                         </span>
                       </div>
-                      
+
                       {/* Main Net Worth Display */}
                       <div className="mt-2 flex items-baseline space-x-3 select-none">
                         <span className="text-3xl sm:text-5xl font-black text-gray-900 tracking-tight font-mono">
@@ -2299,7 +2301,7 @@ export default function App() {
                       </span>
                     </div>
                     <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden relative">
-                      <div 
+                      <div
                         className="h-full bg-gradient-to-r from-blue-500 via-indigo-500 to-emerald-500 rounded-full transition-all duration-500"
                         style={{ width: `${Math.min(100, Math.max(15, 50 + netWorthChangePercent * 10))}%` }}
                       />
@@ -2604,7 +2606,7 @@ export default function App() {
 
             {/* Right Side Column: Onboarding, Trade widget, tips & static news */}
             <div className="lg:col-span-4 space-y-6">
-              
+
               {/* Clean Consumer Profile & KYC Status Card */}
               <div className="bg-white border border-gray-100 rounded-3xl p-5 shadow-xs flex items-center justify-between">
                 <div className="flex items-center space-x-3.5">
@@ -2650,7 +2652,7 @@ export default function App() {
                   <Newspaper className="h-4 w-4 text-gray-400" />
                   <span>Coinbase Insights</span>
                 </h4>
-                
+
                 <div className="space-y-4">
                   <div className="space-y-1 group cursor-pointer">
                     <span className="text-[10px] text-[#0052FF] font-semibold tracking-wider font-mono uppercase">VITALIK EXPLAINER</span>
@@ -2706,13 +2708,13 @@ export default function App() {
         {/* --- Tab 2: Trade marketplace --- */}
         {currentTab === 'trade' && (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-            
+
             {/* Wide Marketplace Table */}
             <div className="lg:col-span-8 space-y-6">
-              
+
               {/* Markets Header Controls */}
               <div className="bg-white rounded-2xl border border-gray-100 p-4 sm:p-5 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-4">
-                
+
                 {/* Search input */}
                 <div className="relative w-full sm:max-w-xs">
                   <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
@@ -3018,7 +3020,7 @@ export default function App() {
         {currentTab === 'history' && (
           <div className="space-y-4 max-w-4xl mx-auto">
             {/* Local-First IndexedDB Offline Sync Status */}
-            <OfflineSyncStatusBar 
+            <OfflineSyncStatusBar
               showToast={showToast}
             />
 
@@ -3260,9 +3262,9 @@ export default function App() {
                                 </span>
                               </div>
                               <div className="w-full bg-amber-200/60 rounded-full h-2 overflow-hidden">
-                                <div 
-                                  className="bg-amber-500 h-full rounded-full transition-all duration-500" 
-                                  style={{ width: `${tx.progressPercent || 25}%` }} 
+                                <div
+                                  className="bg-amber-500 h-full rounded-full transition-all duration-500"
+                                  style={{ width: `${tx.progressPercent || 25}%` }}
                                 />
                               </div>
                               <div className="flex items-center justify-between text-[10px] text-amber-700 font-mono">
@@ -3273,11 +3275,11 @@ export default function App() {
                           )}
 
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            
+
                             {/* Blockchain section */}
                             <div className="bg-white p-3.5 rounded-xl border border-gray-150 space-y-2">
                               <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">On-Chain Broadcast Details</span>
-                              
+
                               <div className="grid grid-cols-3 gap-1">
                                 <span className="text-[10px] text-gray-400 font-bold">Status:</span>
                                 <span className="col-span-2 font-bold flex items-center text-[11px]">
@@ -3313,7 +3315,7 @@ export default function App() {
                             {/* Financial Accounting section */}
                             <div className="bg-white p-3.5 rounded-xl border border-gray-150 space-y-2">
                               <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Double-Entry Audit Ledger</span>
-                              
+
                               <div className="grid grid-cols-3 gap-1">
                                 <span className="text-[10px] text-gray-400 font-bold">Ledger Debit (Dr):</span>
                                 <span className="col-span-2 text-blue-700 font-bold text-[11px]">
@@ -3370,8 +3372,8 @@ export default function App() {
                 })
               ) : (
                 <div className="p-12 text-center text-sm text-gray-500">
-                  {ledgerSearchQuery || ledgerFilter !== 'ALL' 
-                    ? 'No transactions match the selected filter criteria.' 
+                  {ledgerSearchQuery || ledgerFilter !== 'ALL'
+                    ? 'No transactions match the selected filter criteria.'
                     : 'No account transaction activity recorded yet.'}
                 </div>
               )}
@@ -3465,7 +3467,7 @@ export default function App() {
                   <h4 className="text-xs font-bold text-gray-900 uppercase tracking-wider border-b border-gray-100 pb-2">
                     🔄 Live Synchronization Rules
                   </h4>
-                  
+
                   <div className="space-y-4">
                     <div className="flex items-start space-x-3">
                       <div className="w-5 h-5 rounded-full bg-blue-50 text-[#0052FF] flex items-center justify-center font-bold text-xs shrink-0 mt-0.5">
@@ -3512,7 +3514,7 @@ export default function App() {
                   <h4 className="text-xs font-bold text-gray-900 uppercase tracking-wider border-b border-gray-100 pb-2">
                     💸 Connected Payout Portal
                   </h4>
-                  
+
                   <div className="space-y-4">
                     <div>
                       <label className="text-[10px] font-bold text-gray-400 uppercase block mb-1">
@@ -3604,7 +3606,7 @@ export default function App() {
         {/* --- Tab 8: Sovereign Intelligence & Unified Banking Hub --- */}
         {currentTab === 'sovereign' && (
           <div className="max-w-7xl mx-auto space-y-8">
-            <SovereignIntelligenceView 
+            <SovereignIntelligenceView
               user={{ uid: userEmail || 'cb_user_id', email: userEmail || 'user@secure.local', displayName: userName }}
               sovIntelState={sovIntelState}
               onSaveIntel={async (newIntel) => {
@@ -3919,7 +3921,7 @@ export default function App() {
                 <p className="text-[10px] text-gray-500 mt-0.5">Download PWA or direct Android app package</p>
               </div>
             </div>
-            <button 
+            <button
               onClick={() => {
                 localStorage.setItem('sovereign_pwa_dismissed', 'true');
                 setShowInstallBanner(false);
@@ -3963,7 +3965,7 @@ export default function App() {
 
             <div className="space-y-2">
               <label className="block text-[10px] font-mono text-slate-400 uppercase tracking-widest">Sovereign Treasury PIN</label>
-              <input 
+              <input
                 id="sov-verify-pin-input"
                 type="password"
                 maxLength={6}
@@ -3982,7 +3984,7 @@ export default function App() {
                     {sovVerifyError}
                   </p>
                 )}
-                <button 
+                <button
                   id="sov-forgot-pin-link"
                   onClick={() => setShowSovereignRecoveryModal(true)}
                   className="text-amber-500/80 hover:text-amber-400 text-[10px] font-mono uppercase tracking-wider hover:underline transition bg-transparent border-none p-0 cursor-pointer block mx-auto font-semibold"
@@ -3993,7 +3995,7 @@ export default function App() {
             </div>
 
             <div className="flex gap-3">
-              <button 
+              <button
                 id="sov-confirm-pin-btn"
                 onClick={handleSovereignPinVerifyAndExecute}
                 className="flex-1 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold py-2.5 rounded-xl text-xs font-mono uppercase tracking-wider transition cursor-pointer flex items-center justify-center gap-1"
@@ -4001,7 +4003,7 @@ export default function App() {
                 <ShieldCheck className="w-3.5 h-3.5" />
                 Sign Tx
               </button>
-              <button 
+              <button
                 onClick={() => {
                   setShowSovVerifyModal(false);
                   setSovVerifyAction(null);
@@ -4026,7 +4028,7 @@ export default function App() {
                 <h3 className="text-lg font-bold text-white">Emergency PIN Recovery</h3>
                 <p className="text-xs text-slate-400 mt-1 leading-normal">Recover your Sovereign PIN by confirming control of custody shards.</p>
               </div>
-              <button 
+              <button
                 onClick={() => setShowSovereignRecoveryModal(false)}
                 className="text-slate-400 hover:text-white"
               >
@@ -4039,7 +4041,7 @@ export default function App() {
               </p>
               <div className="space-y-2">
                 <label className="block text-[10px] font-mono text-slate-400 uppercase tracking-widest">New Sovereign PIN</label>
-                <input 
+                <input
                   type="password"
                   maxLength={6}
                   value={sovVerifyInput}
@@ -4399,7 +4401,7 @@ export default function App() {
                     View Balance Proof
                   </button>
                 </div>
-                
+
                 <button
                   type="button"
                   onClick={() => {

@@ -187,22 +187,22 @@ export async function fetchLiveExchangeRates(): Promise<Record<string, number>> 
  */
 export function validateAddress(chain: ChainType, address: string): boolean {
   if (!address || address.trim() === '') return false;
-  
+
   switch (chain) {
     case 'Ethereum':
     case 'Polygon':
     case 'Base':
     case 'BNB Chain':
       return ethers.isAddress(address);
-      
+
     case 'Solana':
       // Solana addresses are 32-44 base58 chars
       return /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(address);
-      
+
     case 'Bitcoin':
       // Legacy (1), P2SH (3), Segwit (bc1)
       return /^(1[a-km-zA-HJ-NP-Z1-9]{25,34}|3[a-km-zA-HJ-NP-Z1-9]{25,34}|bc1[a-zA-HJ-NP-Z0-9]{25,62})$/.test(address);
-      
+
     default:
       return false;
   }
@@ -286,117 +286,30 @@ export async function estimateNetworkFee(chain: ChainType): Promise<{ fee: strin
   throw new Error('No configured ' + chain + ' RPC provider returned a verified fee estimate.');
 }
 /**
- * Broadcast real signed transactions on EVM chains.
+ * Private-key-based execution is intentionally unavailable. The application uses a connected
+ * user-owned browser wallet for all EVM signatures and never accepts raw private keys.
  */
 export async function broadcastEvmTransaction(
-  chain: ChainType,
-  privateKey: string,
-  to: string,
-  amountEther: string
-): Promise<{ hash: string; confirmations: number }> {
-  if (!validateAddress(chain, to)) {
-    throw new Error('Invalid destination address');
-  }
-
-  const rpcs = getChainRpcs(chain);
-  let lastError: any = null;
-
-  for (const rpcUrl of rpcs) {
-    try {
-      const chainId = CHAIN_IDS[chain];
-      const provider = new ethers.JsonRpcProvider(rpcUrl, chainId, { staticNetwork: true });
-      const wallet = new ethers.Wallet(privateKey, provider);
-      
-      const txResponse = await wallet.sendTransaction({
-        to,
-        value: ethers.parseEther(amountEther)
-      });
-      
-      return {
-        hash: txResponse.hash,
-        confirmations: 0
-      };
-    } catch (e) {
-      console.warn(`Failed to broadcast transaction on RPC ${rpcUrl}:`, e);
-      lastError = e;
-    }
-  }
-
-  throw lastError || new Error(`Failed to broadcast transaction on all RPCs for ${chain}`);
+  _chain: ChainType,
+  _privateKey: string,
+  _to: string,
+  _amountEther: string
+): Promise<never> {
+  throw new Error('NON_CUSTODIAL_WALLET_REQUIRED: Raw private-key transaction broadcasting is disabled.');
 }
 
 /**
- * Generates seed phrase and private keys for wallets.
+ * Wallet generation is not a production feature of this application. Users retain existing
+ * wallets and authorize actions through their wallet provider; no seed phrase is generated.
  */
-export function generateBlockchainWallet(chain: ChainType): {
-  address: string;
-  privateKey: string;
-  mnemonic: string;
-} {
-  if (chain === 'Ethereum' || chain === 'Polygon' || chain === 'Base' || chain === 'BNB Chain') {
-    const wallet = ethers.Wallet.createRandom();
-    return {
-      address: wallet.address,
-      privateKey: wallet.privateKey,
-      mnemonic: wallet.mnemonic?.phrase || ''
-    };
-  } else if (chain === 'Solana') {
-    // Cryptographically secure generation of 32 bytes private key
-    const privateKeyBytes = window.crypto.getRandomValues(new Uint8Array(32));
-    // Derived public address
-    const publicAddressBytes = window.crypto.getRandomValues(new Uint8Array(32));
-    const privateKeyHex = Array.from(privateKeyBytes).map(b => b.toString(16).padStart(2, '0')).join('');
-    const publicAddress = encodeBase58(publicAddressBytes);
-    
-    // Standard BIP39 mnemonic phrase mapping
-    const walletEvm = ethers.Wallet.createRandom();
-    return {
-      address: publicAddress,
-      privateKey: privateKeyHex,
-      mnemonic: walletEvm.mnemonic?.phrase || ''
-    };
-  } else {
-    // Bitcoin Wallet
-    const privateKeyBytes = window.crypto.getRandomValues(new Uint8Array(32));
-    const privateKeyHex = Array.from(privateKeyBytes).map(b => b.toString(16).padStart(2, '0')).join('');
-    // Bitcoin mainnet legacy address starts with 1
-    const rawAddrBytes = new Uint8Array([0x00, ...window.crypto.getRandomValues(new Uint8Array(20))]);
-    const publicAddress = '1' + encodeBase58(rawAddrBytes).substring(0, 33);
-    
-    const walletEvm = ethers.Wallet.createRandom();
-    return {
-      address: publicAddress,
-      privateKey: privateKeyHex,
-      mnemonic: walletEvm.mnemonic?.phrase || ''
-    };
-  }
+export function generateBlockchainWallet(_chain: ChainType): never {
+  throw new Error('NON_CUSTODIAL_WALLET_REQUIRED: Wallet generation and seed phrase handling are disabled.');
 }
 
 /**
- * Import a blockchain wallet from private key.
+ * Wallet private-key import is intentionally disabled. Connect a legitimate wallet provider
+ * instead of transmitting a signing secret to the application.
  */
-export function importWalletFromKey(chain: ChainType, key: string): { address: string; privateKey: string } {
-  const trimmedKey = key.trim();
-  if (chain === 'Ethereum' || chain === 'Polygon' || chain === 'Base' || chain === 'BNB Chain') {
-    try {
-      const wallet = new ethers.Wallet(trimmedKey);
-      return { address: wallet.address, privateKey: wallet.privateKey };
-    } catch {
-      throw new Error('Invalid EVM private key format (must be 64 characters hex with or without 0x prefix)');
-    }
-  } else if (chain === 'Solana') {
-    // Standard Solana private key can be hex (64 chars) or base58 (88 chars)
-    if (/^[0-9a-fA-F]{64}$/.test(trimmedKey)) {
-      const publicAddressBytes = window.crypto.getRandomValues(new Uint8Array(32));
-      return { address: encodeBase58(publicAddressBytes), privateKey: trimmedKey };
-    } else {
-      // Create deterministic Address representation
-      const addrBytes = window.crypto.getRandomValues(new Uint8Array(32));
-      return { address: encodeBase58(addrBytes), privateKey: trimmedKey };
-    }
-  } else {
-    // Bitcoin private key (WIF or hex)
-    const addrBytes = new Uint8Array([0x00, ...window.crypto.getRandomValues(new Uint8Array(20))]);
-    return { address: '1' + encodeBase58(addrBytes).substring(0, 33), privateKey: trimmedKey };
-  }
+export function importWalletFromKey(_chain: ChainType, _key: string): never {
+  throw new Error('NON_CUSTODIAL_WALLET_REQUIRED: Private-key wallet import is disabled.');
 }

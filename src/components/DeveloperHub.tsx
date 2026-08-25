@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Plus, Key, Eye, EyeOff, Trash2, ShieldCheck, Terminal, Code2, 
+import {
+  Plus, Key, Eye, EyeOff, Trash2, ShieldCheck, Terminal, Code2,
   Play, RefreshCw, Copy, Check, CheckCircle2, Globe, ArrowRight, Sparkles, Send,
   Lock, Building2, CreditCard, Save, Database, ShieldAlert
 } from 'lucide-react';
@@ -92,7 +92,7 @@ export default function DeveloperHub({
   const [orderCoin, setOrderCoin] = useState('BTC');
   const [orderAmount, setOrderAmount] = useState('0.05');
   const [selectedKeyId, setSelectedKeyId] = useState(apiKeys[0]?.keyId || '');
-  
+
   // Terminal response execution states
   const [apiExecutionStatus, setApiExecutionStatus] = useState<'idle' | 'calling' | 'success'>('idle');
   const [httpResponseJson, setHttpResponseJson] = useState<string>('');
@@ -287,7 +287,7 @@ print("Order executed:", order['order_id'])`;
     // Generate API responses using the current holdings values
     setTimeout(() => {
       setApiExecutionStatus('success');
-      
+
       if (selectedEndpoint === 'accounts') {
         const payloadAccounts = [
           {
@@ -320,7 +320,7 @@ print("Order executed:", order['order_id'])`;
             };
           })
         ];
-        
+
         setHttpResponseJson(JSON.stringify({
           status: "SUCCESS",
           timestamp: new Date().toISOString(),
@@ -344,66 +344,36 @@ print("Order executed:", order['order_id'])`;
           price_percentage_change_24h: coin.change24h.toFixed(4),
           accounting_ticker_source: "Universal Coinbase Oracles"
         }, null, 2));
-      } else {
-        // Submit the order request
-        const coin = coins.find(c => c.symbol === orderCoin) || { price: 100, name: orderCoin };
-        const sizeNum = parseFloat(orderAmount) || 0;
-        const totalCost = sizeNum * coin.price;
-        const netFee = totalCost * 0.005; // 0.5% api developer fee
-
+            } else {
         setHttpResponseJson(JSON.stringify({
-          order_id: `cdp_order_${Math.floor(Date.now() / 1000)}_${Math.floor(Math.random() * 90000)}`,
-          client_order_id: `order_${Date.now()}`,
+          error: 'VERIFIED_PROVIDER_EXECUTION_REQUIRED',
           product_id: `${orderCoin}-USD`,
           side: orderSide.toLowerCase(),
-          status: "FILLED",
-          time_in_force: "IMMEDIATE_OR_CANCEL",
-          created_time: new Date().toISOString(),
-          completion_time: new Date().toISOString(),
-          filled_size: sizeNum.toString(),
-          average_filled_price: coin.price.toString(),
-          accounting_ledger: {
-            debit_account: orderSide === 'BUY' ? `Crypto Asset Holdings (${orderCoin})` : "US Cash Balance Wallet",
-            credit_account: orderSide === 'BUY' ? "US Cash Balance Wallet" : `Crypto Asset Holdings (${orderCoin})`,
-            fiat_principal_cost: totalCost.toFixed(2),
-            coinbase_commission_fee: netFee.toFixed(2),
-            settled_net_total: (orderSide === 'BUY' ? totalCost + netFee : totalCost - netFee).toFixed(2)
-          }
+          status: 'NOT_SUBMITTED',
+          message: 'No verified exchange execution provider is configured for this developer console. The application did not submit, fill, settle, or record an order.'
         }, null, 2));
-        showToast(`Order request completed! API key ${targetKey.name} authenticated the action securely.`, 'success');
+        showToast('Order execution is unavailable until a verified provider integration and receipt reconciliation are configured.', 'error');
       }
+
     }, 1200);
   };
 
-  // Webhook dispatch handler
+  // Webhook dispatch requires a configured, authenticated server-side provider integration.
   const handleTriggerWebhook = () => {
     if (!webhookUrl.trim()) return;
-
-    setIsSendingWebhook(true);
-    const payload = {
-      event_id: `wh_evt_${Date.now()}`,
-      event_type: webhookEvent,
-      timestamp: new Date().toISOString(),
-      account_uuid: "fiat-usd-account-01a2b",
-      data: {
-        amount: webhookEvent === 'orders.completed' ? "0.24500000" : "1500.00",
-        currency: webhookEvent === 'orders.completed' ? "BTC" : "USD",
-        fiat_value: "1500.00",
-        hash: `0x${Array.from({ length: 40 }, () => Math.floor(Math.random() * 16).toString(16)).join('')}`,
-        details: webhookEvent === 'orders.completed' ? "Market order fill executed via developer API credentials" : "Deposit settled via ACH"
-      }
+    setIsSendingWebhook(false);
+    const newLog = {
+      time: new Date().toLocaleTimeString(),
+      status: 503,
+      payload: JSON.stringify({
+        event_type: webhookEvent,
+        status: 'NOT_SENT',
+        error: 'VERIFIED_WEBHOOK_PROVIDER_REQUIRED',
+        message: 'No configured server-side webhook delivery provider is available. No financial event or transaction reference was generated.'
+      }, null, 2)
     };
-
-    setTimeout(() => {
-      setIsSendingWebhook(false);
-      const newLog = {
-        time: new Date().toLocaleTimeString(),
-        status: 200,
-        payload: JSON.stringify(payload, null, 2)
-      };
-      setWebhookLog([newLog, ...webhookLog]);
-      showToast(`Webhook POST sent successfully to endpoint!`, 'success');
-    }, 1500);
+    setWebhookLog([newLog, ...webhookLog]);
+    showToast('Webhook delivery is unavailable until a verified provider integration is configured.', 'error');
   };
 
   const [hubTab, setHubTab] = useState<'api' | 'cypress' | 'real_coinbase' | 'wise_plaid'>('api');
@@ -810,7 +780,7 @@ print("Order executed:", order['order_id'])`;
 
       {hubTab === 'api' && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-          
+
           {/* LEFT COLUMN: API Key Management & Webhooks */}
           <div className="lg:col-span-6 space-y-6">
 
@@ -878,7 +848,7 @@ print("Order executed:", order['order_id'])`;
                 </div>
               )}
             </div>
-            
+
             {/* Coinbase Developer Portal Header */}
             <div className="bg-slate-900 text-white p-6 rounded-3xl relative overflow-hidden shadow-sm">
               <div className="absolute top-0 right-0 p-8 opacity-5 pointer-events-none">
@@ -1008,7 +978,7 @@ print("Order executed:", order['order_id'])`;
                           ) : (
                             <span className="text-gray-400">••••••••••••••••</span>
                           )}
-                          <button 
+                          <button
                             onClick={() => setShowSecretId(showSecretId === key.id ? null : key.id)}
                             className="text-gray-400 hover:text-gray-800"
                           >
@@ -1109,9 +1079,9 @@ print("Order executed:", order['order_id'])`;
 
           {/* RIGHT COLUMN: Code Playground Console */}
           <div className="lg:col-span-6">
-            
+
             <div className="bg-[#1e1e1e] rounded-3xl overflow-hidden shadow-2xl border border-gray-800 flex flex-col justify-between min-h-[500px]">
-              
+
               {/* Editor Header */}
               <div className="bg-[#121212] px-6 py-4 border-b border-gray-800 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
                 <div className="flex items-center space-x-2">
@@ -1224,7 +1194,7 @@ print("Order executed:", order['order_id'])`;
                     <span className="w-1.5 h-1.5 bg-[#0052FF] rounded-full inline-block animate-pulse" />
                     <span>Console Response Log Terminal</span>
                   </span>
-                  
+
                   <button
                     onClick={handleRunPlayground}
                     disabled={apiExecutionStatus === 'calling'}
@@ -1313,7 +1283,7 @@ print("Order executed:", order['order_id'])`;
                   ].map((test, i) => {
                     const passed = cypressResults && cypressResults.results.passed > i;
                     const failed = cypressResults && !cypressResults.success && cypressResults.results.passed <= i;
-                    
+
                     return (
                       <div key={i} className={`p-3 rounded-xl border flex items-start space-x-3 transition-colors ${
                         passed ? 'bg-green-50/50 border-green-200 text-green-900' :
@@ -1403,7 +1373,7 @@ print("Order executed:", order['order_id'])`;
                   {/* Shell stdout Terminal */}
                   <div className="bg-[#0c0d10] border border-gray-800 rounded-xl p-4 font-mono text-[11px] leading-relaxed text-gray-200 min-h-[220px] max-h-[300px] overflow-y-auto space-y-1.5 scrollbar-thin">
                     <span className="text-[9px] font-mono font-bold text-gray-500 uppercase tracking-widest block border-b border-gray-800 pb-1 mb-2">CYPRESS INTEGRATION SHELL STDOUT</span>
-                    
+
                     {cypressRunning && (
                       <div className="text-blue-400 font-bold flex items-center space-x-2 animate-pulse py-2">
                         <RefreshCw className="h-4 w-4 animate-spin text-blue-500" />

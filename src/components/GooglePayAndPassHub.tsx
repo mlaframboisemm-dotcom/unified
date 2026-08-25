@@ -171,7 +171,7 @@ export function useWiseLedgerEnforcer() {
       const authHeaders = await getFirebaseAuthHeaders();
       const res = await fetch('/api/wise/balances', { headers: authHeaders, credentials: 'include' });
       let liveUsd = ledgerStatus.reconciledUsdBalance;
-      
+
       if (res.ok) {
         const data = await res.json();
         if (data.success && typeof data.totalUSD === 'number') {
@@ -241,7 +241,7 @@ export default function GooglePayAndPassHub({
   const [isLoadingPass, setIsLoadingPass] = useState<boolean>(true);
   const [copiedAddress, setCopiedAddress] = useState<boolean>(false);
   const [isSyncingWise, setIsSyncingWise] = useState<boolean>(false);
-  
+
   // Custom Hook: Active Wise Wallets & Payment Mapping
   const {
     wiseWallets,
@@ -305,45 +305,11 @@ export default function GooglePayAndPassHub({
     usdEquivalent: number;
     wiseTxId: string;
     timestamp: string;
-    status: 'COMPLETED' | 'RECONCILED';
+    status: 'SETTLED';
     method: 'Web NFC POS' | 'Google Pay' | 'Samsung Pay APDU' | 'Wallet Pass';
   }
 
-  const [nfcTxHistory, setNfcTxHistory] = useState<NfcTxItem[]>([
-    {
-      id: 'WISE_NFC_92A1F8',
-      merchant: 'Tim Hortons (Canada)',
-      amount: 5.25,
-      currency: 'CAD',
-      usdEquivalent: 3.86,
-      wiseTxId: 'WISE_PO_8912401',
-      timestamp: '11:42:15 AM',
-      status: 'RECONCILED',
-      method: 'Samsung Pay APDU'
-    },
-    {
-      id: 'WISE_NFC_74B39C',
-      merchant: 'Starbucks Coffee',
-      amount: 8.50,
-      currency: 'USD',
-      usdEquivalent: 8.50,
-      wiseTxId: 'WISE_PO_8912388',
-      timestamp: '09:15:02 AM',
-      status: 'RECONCILED',
-      method: 'Web NFC POS'
-    },
-    {
-      id: 'GPAY_DEP_30192X',
-      merchant: 'Google Pay Instant Top-Up',
-      amount: 25.00,
-      currency: 'USD',
-      usdEquivalent: 25.00,
-      wiseTxId: 'WISE_DEP_992101',
-      timestamp: 'Yesterday, 04:30 PM',
-      status: 'RECONCILED',
-      method: 'Google Pay'
-    }
-  ]);
+  const [nfcTxHistory, setNfcTxHistory] = useState<NfcTxItem[]>([]);
 
   // Web Audio API High-Quality "Success Tap" Chime Synthesizer
   const playNfcSuccessAudio = () => {
@@ -549,13 +515,16 @@ export default function GooglePayAndPassHub({
         }
       }
 
-      if (data.success || res.ok) {
-        // Trigger Haptic Vibration Pulse & Audio Chime
+      const providerTransactionId = typeof data?.txId === 'string' ? data.txId : typeof data?.wiseTransferId === 'string' ? data.wiseTransferId : typeof data?.payoutId === 'string' ? data.payoutId : '';
+      const providerSettlementReference = typeof data?.wiseTransferId === 'string' ? data.wiseTransferId : typeof data?.payoutId === 'string' ? data.payoutId : '';
+      const providerSettled = data?.status === 'SETTLED' || data?.status === 'COMPLETED';
+      if ((data.success || res.ok) && providerSettled && providerTransactionId && providerSettlementReference) {
+        // A completed state requires provider-issued identifiers; no local reference is generated.
         triggerHapticSuccess();
         playNfcSuccessAudio();
 
-        const txIdGenerated = data.txId || `WISE_NFC_${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
-        const wiseTxRef = data.wiseTransferId || data.payoutId || `WISE_PO_${Math.floor(1000000 + Math.random() * 9000000)}`;
+        const txIdGenerated = providerTransactionId;
+        const wiseTxRef = providerSettlementReference;
 
         const newTxItem: NfcTxItem = {
           id: txIdGenerated,
@@ -565,7 +534,7 @@ export default function GooglePayAndPassHub({
           usdEquivalent: usdEquivalent,
           wiseTxId: wiseTxRef,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-          status: 'RECONCILED',
+          status: 'SETTLED',
           method: 'Web NFC POS'
         };
 
@@ -580,7 +549,7 @@ export default function GooglePayAndPassHub({
           fxConverted: currencyVal === 'CAD'
         });
         setNfcStatus('success');
-        const conversionMsg = currencyVal === 'CAD' 
+        const conversionMsg = currencyVal === 'CAD'
           ? ` ($${amountVal.toFixed(2)} CAD ≈ $${usdEquivalent.toFixed(2)} USD via Wise FX)`
           : '';
         showToast?.(`NFC TAP-TO-PAY COMPLETE: Paid $${amountVal.toFixed(2)} ${currencyVal}${conversionMsg} to ${merchant} via Wise API!`, 'success');
@@ -600,9 +569,9 @@ export default function GooglePayAndPassHub({
 
   const startNfcScan = async () => {
     if (!('NDEFReader' in window)) {
-      showToast?.('Web NFC API activated in listening mode! Tap phone to physical terminal or trigger terminal scan.', 'info');
-      setIsNfcScanning(true);
-      setNfcStatus('scanning');
+      showToast?.('Web NFC is not supported by this browser. A real NFC payment cannot be initiated here.', 'error');
+      setIsNfcScanning(false);
+      setNfcStatus('error');
       return;
     }
 
@@ -779,7 +748,7 @@ export default function GooglePayAndPassHub({
   const handleLinkPassToGooglePay = async () => {
     setShowAndroidPassGuide(true);
     let url = passData?.addToWalletUrl || hubSyncState?.googlePayPass?.addToWalletUrl;
-    
+
     if (!url) {
       try {
         const res = await fetch('/api/sovereign/wallet-pass');
@@ -811,27 +780,12 @@ export default function GooglePayAndPassHub({
     await handleNfcTerminalDetected(terminalMerchant, amt, terminalCurrency);
   };
 
-  const handleGooglePaySuccess = (result: any) => {
-    triggerHapticSuccess();
-    playNfcSuccessAudio();
-
-    const topUpAmt = parseFloat(topUpAmount) || 25.0;
-    const newTxItem: NfcTxItem = {
-      id: `GPAY_DEP_${Math.random().toString(36).substring(2, 8).toUpperCase()}`,
-      merchant: 'Google Pay Instant Top-Up',
-      amount: topUpAmt,
-      currency: 'USD',
-      usdEquivalent: topUpAmt,
-      wiseTxId: `WISE_DEP_${Math.floor(1000000 + Math.random() * 9000000)}`,
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-      status: 'RECONCILED',
-      method: 'Google Pay'
-    };
-
-    setNfcTxHistory(prev => [newTxItem, ...prev]);
-    showToast?.('Google Pay payment processed successfully! Top-up reconciled.', 'success');
-    onRefreshBalance?.();
-    fetchWalletPass();
+  const handleGooglePaySuccess = (_result: any) => {
+    // Google Pay authorization alone is not a settlement receipt. A provider-backed server
+    // integration must return a verified transaction and reconciliation reference before the
+    // application can update balances or display a completed top-up.
+    setNfcStatus('error');
+    showToast?.('Google Pay authorization was received, but no verified provider settlement integration is configured. No balance or transaction state was changed.', 'error');
   };
 
   const handleGooglePayError = (error: string) => {

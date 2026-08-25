@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  X, ArrowUpRight, ArrowDownLeft, CheckCircle2, Landmark, 
+import {
+  X, ArrowUpRight, ArrowDownLeft, CheckCircle2, Landmark,
   Plus, ShieldCheck, Lock, ChevronLeft, CreditCard, DollarSign,
   Building2, ArrowRight, RefreshCw, AlertCircle, Sparkles, Smartphone,
   ShieldAlert, Check, Building
@@ -93,23 +93,21 @@ export default function CashTransferModal({
   onOpenPlaidLinkModal
 }: CashTransferModalProps) {
   const [activeTab, setActiveTab] = useState<'deposit' | 'withdraw' | 'banks'>(initialTab);
-  
+
   // Bank Account States
   const [linkedBanks, setLinkedBanks] = useState<LinkedBank[]>(() => {
     const saved = localStorage.getItem('cb_linked_banks');
-    return saved ? JSON.parse(saved) : [
-      { id: 'bank-stripe-ca', bankName: 'JPMorgan Chase (Stripe Payments Canada)', accountType: 'Checking', lastFour: '1072' },
-      { id: 'bank-1', bankName: 'Chase Bank', accountType: 'Checking', lastFour: '8329' },
-      { id: 'bank-2', bankName: 'Wells Fargo', accountType: 'Savings', lastFour: '4012' }
-    ];
+    return saved ? JSON.parse(saved) : [];
   });
 
   // e-Transfer and Canadian network states
   const [depositMethod, setDepositMethod] = useState<'bank' | 'etransfer' | 'stripe_wire'>('stripe_wire');
   const [withdrawMethod, setWithdrawMethod] = useState<'bank' | 'etransfer' | 'stripe'>(citizenship === 'CA' ? 'etransfer' : 'bank');
-  const [etransferBankName, setEtransferBankName] = useState('TD Canada Trust');
+    const [etransferBankName, setEtransferBankName] = useState('');
+
   const [etransferEmail, setEtransferEmail] = useState(() => localStorage.getItem('cb_auth_email') || '');
-  const [etransferRef, setEtransferRef] = useState(() => 'CA' + Math.floor(100000 + Math.random() * 900000).toString());
+    const [etransferRef, setEtransferRef] = useState('');
+
   const [isEtransferVerifying, setIsEtransferVerifying] = useState(false);
   const [etransferStep, setEtransferStep] = useState(0);
 
@@ -206,7 +204,7 @@ export default function CashTransferModal({
     if (action === 'stripe_success' && (sessionId || paymentIntentId)) {
       if (!isAuthenticated) return;
       window.history.replaceState({}, document.title, window.location.pathname);
-      
+
       const finalizeStripeCallback = async () => {
         showToast('Settling Stripe Payment...', 'info');
         try {
@@ -225,7 +223,7 @@ export default function CashTransferModal({
           const resData = await res.json();
           const amountUsd = Number(resData.amountUsd || 100);
           const refId = paymentIntentId || sessionId || 'stripe_pi';
-          
+
           if (!resData.alreadyProcessed) {
             onAddTransaction({
               id: refId,
@@ -255,7 +253,7 @@ export default function CashTransferModal({
       }
 
       window.history.replaceState({}, document.title, window.location.pathname);
-      
+
       const finalizeRedirectionCallback = async () => {
         const bankKey = callbackBankKey || activeSelectedBankKey || localStorage.getItem('cb_active_selected_bank_key') || 'Tangerine';
         const bankName = activeSelectedBankName || localStorage.getItem('cb_active_selected_bank_name') || callbackBankKey || 'Tangerine';
@@ -264,7 +262,7 @@ export default function CashTransferModal({
         } else {
           showToast('Clearing interbank OAuth authorization code...', 'info');
         }
-        
+
         try {
           const res = await fetch(buildApiUrl('/api/v1/interac/finalize'), {
             method: 'POST',
@@ -283,10 +281,10 @@ export default function CashTransferModal({
 
           const resData = await res.json();
           const clearinghouseHash = resData.tracking_reference_id;
-          
+
           const isDeposit = resData.operation_type ? (resData.operation_type === 'DEPOSIT') : (resData.status === 'DEPOSITED');
           const amountUsd = Number(resData.amount_usd || (isDeposit ? 110.12 : 36.71));
-          
+
           if (isDeposit) {
             onAddTransaction({
               id: clearinghouseHash,
@@ -316,7 +314,7 @@ export default function CashTransferModal({
           showToast(`Callback settlement failed: ${e.message}`, 'error');
         }
       };
-      
+
       finalizeRedirectionCallback();
     }
   }, [isAuthenticated, activeSelectedBankKey, activeSelectedBankName, onAddTransaction, onUpdateUsdBalance, usdBalance, showToast]);
@@ -585,55 +583,49 @@ export default function CashTransferModal({
         throw new Error(resData.message || resData.error || 'Server error');
       }
 
-      const pendingExternal = resData?.status === 'PENDING_EXTERNAL_SETTLEMENT';
+      const providerTransactionId = typeof resData?.txId === 'string' ? resData.txId : typeof resData?.providerTransactionId === 'string' ? resData.providerTransactionId : '';
+      const providerReceiptId = typeof resData?.providerReceiptId === 'string' ? resData.providerReceiptId : typeof resData?.receiptId === 'string' ? resData.receiptId : '';
+      const pendingExternal = resData?.status === 'PENDING_EXTERNAL_SETTLEMENT' && Boolean(providerTransactionId);
+      const settledExternally = resData?.status === 'SETTLED' && Boolean(providerTransactionId) && Boolean(providerReceiptId);
+      if (!pendingExternal && !settledExternally) {
+        throw new Error('The deposit provider did not return a verifiable pending or settled transaction reference. No balance was changed.');
+      }
 
-      setEtransferStep(2);
-      setTimeout(() => setEtransferStep(3), 800);
-      setTimeout(() => {
-        const netAmount = amountUsd;
+      setEtransferStep(3);
+      const netAmount = amountUsd;
+      const tx: Transaction = {
+        id: providerTransactionId,
+        type: 'RECEIVE',
+        assetSymbol: 'USD',
+        amount: netAmount,
+        fiatAmount: netAmount,
+        timestamp: Date.now(),
+        details: pendingExternal
+          ? `Pending external Interac settlement from ${etransferBankName} (provider transaction: ${providerTransactionId})`
+          : `Verified external Interac settlement from ${etransferBankName} (provider receipt: ${providerReceiptId})`
+      };
 
-        const tx: Transaction = {
-          id: resData.txId || `tx-etrans-${Date.now()}`,
-          type: 'RECEIVE',
-          assetSymbol: 'USD',
-          amount: netAmount,
-          fiatAmount: netAmount,
-          timestamp: Date.now(),
-          details: pendingExternal
-            ? `Pending External Settlement: Interac deposit request (${resData.provider || 'provider'}) from ${etransferBankName} (Ref: ${etransferRef.toUpperCase()}) - CA$${amountCad.toLocaleString(undefined, { minimumFractionDigits: 2 })}`
-            : `Interac e-Transfer Deposit from ${etransferBankName} (Ref: ${etransferRef.toUpperCase()}) - CA$${amountCad.toLocaleString(undefined, { minimumFractionDigits: 2 })}`
-        };
+      onAddTransaction(tx);
+      setIsEtransferVerifying(false);
+      setEtransferStep(0);
+      setSuccessScreenData({
+        type: 'deposit',
+        amount: amountCad,
+        fee: 0,
+        netAmount,
+        bankName: `Interac (${etransferBankName})`,
+        speed: pendingExternal ? `Pending external settlement (${providerTransactionId})` : `Provider settlement verified (${providerReceiptId})`,
+        pendingExternal,
+        requestId: providerTransactionId
+      });
 
-        onAddTransaction(tx);
-        setIsEtransferVerifying(false);
-        setEtransferStep(0);
-
-        setSuccessScreenData({
-          type: 'deposit',
-          amount: amountCad,
-          fee: 0,
-          netAmount: netAmount,
-          bankName: `Interac (${etransferBankName})`,
-          speed: pendingExternal
-            ? `Pending External Settlement (Ref: ${etransferRef.toUpperCase()})`
-            : `Instant Auto-Deposit Match (Ref: ${etransferRef.toUpperCase()})`,
-          pendingExternal,
-          requestId: resData.txId
-        });
-
-        if (pendingExternal) {
-          showToast(`Interac request submitted: CA$${amountCad.toLocaleString(undefined, { minimumFractionDigits: 2 })} (≈ US$${netAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })})`, 'info');
-        } else {
-          onUpdateUsdBalance(usdBalance + netAmount);
-          showToast(`Interac e-Transfer matched and credited! CA$${amountCad.toLocaleString(undefined, { minimumFractionDigits: 2 })} (US$${netAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })})`, 'success');
-        }
-        
-        // Redirect to selected bank online banking portal
-        const targetUrl = bankUrls[etransferBankName] || 'https://www.scotiabank.com/online-banking';
-        window.open(targetUrl, '_blank');
-
-        setEtransferRef('CA' + Math.floor(100000 + Math.random() * 900000).toString());
-      }, 1600);
+      if (pendingExternal) {
+        showToast(`Interac deposit request is pending external settlement (${providerTransactionId}). No balance was credited.`, 'info');
+      } else {
+        onUpdateUsdBalance(usdBalance + netAmount);
+        showToast(`Interac deposit was settled by the provider (${providerReceiptId}).`, 'success');
+      }
+      setEtransferRef('');
     } catch (e: any) {
       setIsEtransferVerifying(false);
       setEtransferStep(0);
@@ -1230,7 +1222,7 @@ export default function CashTransferModal({
 
       <div className="flex min-h-full items-center justify-center p-4">
         <div className="relative transform overflow-hidden rounded-2xl bg-white p-6 shadow-xl transition-all w-full max-w-md animate-slide-up border border-gray-100">
-          
+
           {/* PLAID FLOW SCREEN (OVERLAY INSIDE MODAL) */}
           {linkingStep !== 'none' && (
             <div className="absolute inset-0 bg-white z-50 p-6 flex flex-col justify-between">
@@ -1245,7 +1237,7 @@ export default function CashTransferModal({
                       Coinbase uses secure encryption to link your bank account instantly via a private, safe portal.
                     </p>
                   </div>
-                  
+
                   <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 text-left space-y-2.5 w-full">
                     <div className="flex items-center space-x-2 text-xs text-gray-600">
                       <Lock className="h-3.5 w-3.5 text-blue-600 shrink-0" />
@@ -1285,7 +1277,7 @@ export default function CashTransferModal({
               {linkingStep === 'select-bank' && (
                 <div className="flex flex-col h-full">
                   <div className="flex justify-between items-center pb-3 border-b border-gray-100">
-                    <button 
+                    <button
                       onClick={() => setLinkingStep('welcome')}
                       className="flex items-center text-xs text-gray-500 hover:text-gray-900"
                     >
@@ -1328,7 +1320,7 @@ export default function CashTransferModal({
                 <form onSubmit={handlePlaidSubmit} className="flex flex-col justify-between h-full">
                   <div>
                     <div className="flex justify-between items-center pb-3 border-b border-gray-100 mb-5">
-                      <button 
+                      <button
                         type="button"
                         onClick={() => setLinkingStep('select-bank')}
                         className="flex items-center text-xs text-gray-500 hover:text-gray-900"
@@ -1458,7 +1450,7 @@ export default function CashTransferModal({
                         <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">
                           Select Bank Account
                         </span>
-                        
+
                         <div className="space-y-2">
                           <button
                             type="button"
@@ -1510,7 +1502,7 @@ export default function CashTransferModal({
                           <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">
                             Bank MFA Verification
                           </span>
-                          
+
                           <div className="flex items-center space-x-3">
                             <div className="relative flex items-center justify-center">
                               <Smartphone className="h-9 w-9 text-gray-500" />
@@ -1621,7 +1613,7 @@ export default function CashTransferModal({
               <div className="w-14 h-14 bg-green-50 text-green-600 rounded-full flex items-center justify-center">
                 <CheckCircle2 className="h-9 w-9" />
               </div>
-              
+
               <div>
                 <h4 className="text-base font-extrabold text-gray-900">
                   {successScreenData.pendingExternal
@@ -1631,7 +1623,7 @@ export default function CashTransferModal({
                 <p className="text-xs sm:text-sm text-gray-500 mt-1 max-w-xs">
                   {successScreenData.pendingExternal
                     ? `Request ${successScreenData.requestId || ''} is pending external settlement and will reconcile after provider confirmation.`
-                    : (successScreenData.type === 'deposit' 
+                    : (successScreenData.type === 'deposit'
                         ? `Successfully credited $${successScreenData.netAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })} cash balance!`
                         : `Dispatched $${successScreenData.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })} back to bank account.`)}
                 </p>
@@ -1683,7 +1675,7 @@ export default function CashTransferModal({
           ) : (
             /* REGULAR PANEL DEPOSIT / WITHDRAWAL */
             <div className="space-y-5">
-              
+
               {/* Header Navigation Tabs */}
               <div className="flex justify-between items-center border-b border-gray-100 pb-3">
                 <div className="flex bg-gray-100 p-1 rounded-xl">
@@ -1902,7 +1894,7 @@ export default function CashTransferModal({
                                 ))}
                               </select>
                             ) : (
-                              <div 
+                              <div
                                 onClick={handleStartPlaid}
                                 className="p-3 border border-dashed border-gray-200 hover:border-[#0052FF] rounded-xl text-center cursor-pointer text-xs font-semibold text-gray-500 bg-gray-50/50 flex items-center justify-center space-x-2"
                               >
@@ -1982,7 +1974,7 @@ export default function CashTransferModal({
                       ) : (
                         /* INTERAC E-TRANSFER VIEW */
                         <div className="space-y-3">
-                          
+
                           {/* Interac Instructions Callout */}
                           <div className="bg-slate-950 p-4 rounded-xl border border-white/5 text-white space-y-3 text-xs">
                             <div className="flex justify-between items-center text-[10px] font-black text-amber-400 uppercase tracking-wider">
@@ -1992,7 +1984,7 @@ export default function CashTransferModal({
                             <p className="text-[11px] text-gray-300 leading-relaxed">
                               Send funds from your Canadian financial mobile app (TD, RBC, Scotiabank, BMO, etc.) to:
                             </p>
-                            
+
                             <div className="bg-white/5 p-3 rounded-lg space-y-2 font-semibold">
                               <div className="flex justify-between">
                                 <span className="text-gray-400 text-[10px]">Recipient Email:</span>
@@ -2011,7 +2003,7 @@ export default function CashTransferModal({
                                 <span className="text-amber-400 select-all font-mono font-bold animate-pulse">{etransferRef.toUpperCase()}</span>
                               </div>
                             </div>
-                            
+
                             <p className="text-[9px] text-gray-400 leading-normal">
                               ⚠️ CRITICAL: You MUST include the reference code {etransferRef.toUpperCase()} in the "Message" or "Memo" field of your Interac e-Transfer to enable instant auto-matching and credit.
                             </p>
@@ -2048,7 +2040,7 @@ export default function CashTransferModal({
                                 }}
                                 className={`px-2.5 py-1 text-[9px] font-bold rounded-lg border transition-all cursor-pointer ${
                                   useSovereignsGateway && !useStripeCheckout
-                                    ? 'bg-blue-50 text-blue-600 border-blue-200 shadow-2xs' 
+                                    ? 'bg-blue-50 text-blue-600 border-blue-200 shadow-2xs'
                                     : 'bg-white text-gray-400 border-gray-100 hover:bg-gray-50'
                                 }`}
                               >
@@ -2062,8 +2054,8 @@ export default function CashTransferModal({
                                   setLocalError(null);
                                 }}
                                 className={`px-2.5 py-1 text-[9px] font-bold rounded-lg border transition-all cursor-pointer ${
-                                  useStripeCheckout 
-                                    ? 'bg-blue-50 text-blue-600 border-blue-200 shadow-2xs' 
+                                  useStripeCheckout
+                                    ? 'bg-blue-50 text-blue-600 border-blue-200 shadow-2xs'
                                     : 'bg-white text-gray-400 border-gray-100 hover:bg-gray-50'
                                 }`}
                               >
@@ -2077,8 +2069,8 @@ export default function CashTransferModal({
                                   setLocalError(null);
                                 }}
                                 className={`px-2.5 py-1 text-[9px] font-bold rounded-lg border transition-all cursor-pointer ${
-                                  !useSovereignsGateway && !useStripeCheckout 
-                                    ? 'bg-blue-50 text-blue-600 border-blue-200 shadow-2xs' 
+                                  !useSovereignsGateway && !useStripeCheckout
+                                    ? 'bg-blue-50 text-blue-600 border-blue-200 shadow-2xs'
                                     : 'bg-white text-gray-400 border-gray-100 hover:bg-gray-50'
                                 }`}
                               >
@@ -2148,8 +2140,8 @@ export default function CashTransferModal({
                                            handleInitiateSovereignsGateway(key, bank.name);
                                          }}
                                          className={`p-2 border rounded-xl flex items-center space-x-2 transition-all text-left cursor-pointer ${
-                                           isSelected 
-                                             ? 'border-blue-600 bg-blue-50/40 text-blue-900 shadow-2xs' 
+                                           isSelected
+                                             ? 'border-blue-600 bg-blue-50/40 text-blue-900 shadow-2xs'
                                              : 'border-gray-100 hover:border-blue-200 hover:bg-gray-50/50 bg-white text-gray-800'
                                          }`}
                                        >
@@ -2548,15 +2540,10 @@ export default function CashTransferModal({
                               requestedAmountCad: parseFloat(withdrawAmount) || 0,
                               requestedAmountUsd: cadToUsd(parseFloat(withdrawAmount) || 0),
                               exchangeRate: usdCadRate,
-                              bankName: activeSelectedBankName || 'Tangerine Bank / Chequing Account (Connected)',
-                              accountMask: '•••••••• 6812',
-                              accountHolder: 'Marcel Laframboise',
-                              clearingMethod: 'Stripe ACH Express (Same-Day Clearing)',
-                              stripePrimaryAvailableUsd: 1475.20,
-                              stripeConnectedAvailableUsd: 850.00,
-                              treasuryReserveUsd: 5000.00,
-                              payoutId: `po_stripe_${Date.now().toString(36)}`,
-                              auditHash: '0x' + Array.from({ length: 32 }, () => Math.floor(Math.random() * 16).toString(16)).join(''),
+                              bankName: activeSelectedBankName || 'No verified settlement destination selected',
+                              accountMask: 'Not available before provider confirmation',
+                              accountHolder: 'Not available before provider confirmation',
+                              clearingMethod: 'Provider confirmation required',
                               timestamp: new Date().toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }),
                               status: isWithdrawing ? 'processing' : 'preview'
                             }}
@@ -2565,7 +2552,7 @@ export default function CashTransferModal({
                       ) : (
                         /* INTERAC E-TRANSFER WITHDRAW VIEW */
                         <div className="space-y-3">
-                          
+
                           {/* Amount Input */}
                           <div className="border border-gray-200 rounded-2xl p-4 bg-gray-50/50">
                             <div className="flex justify-between items-center mb-1">
@@ -2624,8 +2611,8 @@ export default function CashTransferModal({
                                   setLocalError(null);
                                 }}
                                 className={`px-2.5 py-1 text-[9px] font-bold rounded-lg border transition-all cursor-pointer ${
-                                  useSovereignsGateway 
-                                    ? 'bg-blue-50 text-blue-600 border-blue-200 shadow-2xs' 
+                                  useSovereignsGateway
+                                    ? 'bg-blue-50 text-blue-600 border-blue-200 shadow-2xs'
                                     : 'bg-white text-gray-400 border-gray-100 hover:bg-gray-50'
                                 }`}
                               >
@@ -2638,8 +2625,8 @@ export default function CashTransferModal({
                                   setLocalError(null);
                                 }}
                                 className={`px-2.5 py-1 text-[9px] font-bold rounded-lg border transition-all cursor-pointer ${
-                                  !useSovereignsGateway 
-                                    ? 'bg-blue-50 text-blue-600 border-blue-200 shadow-2xs' 
+                                  !useSovereignsGateway
+                                    ? 'bg-blue-50 text-blue-600 border-blue-200 shadow-2xs'
                                     : 'bg-white text-gray-400 border-gray-100 hover:bg-gray-50'
                                 }`}
                               >
@@ -2666,8 +2653,8 @@ export default function CashTransferModal({
                                            handleInitiateSovereignsWithdrawal(key, bank.name);
                                          }}
                                          className={`p-2 border rounded-xl flex items-center space-x-2 transition-all text-left cursor-pointer ${
-                                           isSelected 
-                                             ? 'border-blue-600 bg-blue-50/40 text-blue-900 shadow-2xs' 
+                                           isSelected
+                                             ? 'border-blue-600 bg-blue-50/40 text-blue-900 shadow-2xs'
                                              : 'border-gray-100 hover:border-blue-200 hover:bg-gray-50/50 bg-white text-gray-800'
                                          }`}
                                        >

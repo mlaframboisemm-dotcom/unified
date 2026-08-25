@@ -57,30 +57,30 @@ export const SettlementConfirmationDialog: React.FC<SettlementConfirmationDialog
   const {
     requestedAmountCad = 0,
     requestedAmountUsd = 0,
-    exchangeRate = 1.3622,
-    bankName = 'Tangerine Bank / Chequing Account (Connected)',
-    accountMask = '•••••••• 6812',
-    accountHolder = 'Marcel Laframboise',
-    clearingMethod = 'Stripe ACH Express (Same-Day Clearing)',
+    exchangeRate = 0,
+    bankName = 'Not provided by a verified settlement provider',
+    accountMask = 'Not available before provider confirmation',
+    accountHolder = 'Not available before provider confirmation',
+    clearingMethod = 'Provider confirmation required',
     stripePrimaryAvailableUsd = 0,
     stripeConnectedAvailableUsd = 0,
     treasuryReserveUsd = 0,
-    payoutId = `po_stripe_${Date.now().toString(36)}`,
-    auditHash = '0x92cbc1df3bb7dcb83eb8d4cb5cccc3b7',
+    payoutId = 'No provider payout reference assigned',
+    auditHash = 'No provider receipt assigned',
     timestamp = new Date().toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }),
     status = 'preview'
   } = data;
 
   // Calculate proportional allocation of Stripe balance fulfillment sources
   const totalUsdNeeded = requestedAmountUsd > 0 ? requestedAmountUsd : requestedAmountCad / exchangeRate;
-  
+
   // Available pools
   const primaryAllocated = Math.min(stripePrimaryAvailableUsd, totalUsdNeeded);
   const remainingAfterPrimary = Math.max(0, totalUsdNeeded - primaryAllocated);
-  
+
   const connectedAllocated = Math.min(stripeConnectedAvailableUsd, remainingAfterPrimary);
   const remainingAfterConnected = Math.max(0, remainingAfterPrimary - connectedAllocated);
-  
+
   const reserveAllocated = remainingAfterConnected;
 
   const primaryPct = totalUsdNeeded > 0 ? Math.round((primaryAllocated / totalUsdNeeded) * 100) : 100;
@@ -96,17 +96,18 @@ Net USD Debit: US$${totalUsdNeeded.toLocaleString(undefined, { minimumFractionDi
 FX Rate: 1 USD = ${exchangeRate} CAD
 
 STRIPE BALANCE ALLOCATION BREAKDOWN:
-- Primary Stripe Balance (acct_1TYDUPI8MQ7TKrX3): US$${primaryAllocated.toLocaleString(undefined, { minimumFractionDigits: 2 })} (${primaryPct}%)
-- Connected Express Sub-Accounts: US$${connectedAllocated.toLocaleString(undefined, { minimumFractionDigits: 2 })} (${connectedPct}%)
-- Sovereign Treasury Instant Reserve: US$${reserveAllocated.toLocaleString(undefined, { minimumFractionDigits: 2 })} (${reservePct}%)
-Total Fulfillment Coverage: 100% Verified
+- Provider allocation details are not asserted before a verified provider receipt is returned.
+- Preview amount: US$${totalUsdNeeded.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+- Primary allocation estimate: US$${primaryAllocated.toLocaleString(undefined, { minimumFractionDigits: 2 })} (${primaryPct}%)
+- Connected allocation estimate: US$${connectedAllocated.toLocaleString(undefined, { minimumFractionDigits: 2 })} (${connectedPct}%)
+- Reserve allocation estimate: US$${reserveAllocated.toLocaleString(undefined, { minimumFractionDigits: 2 })} (${reservePct}%)
 
 DESTINATION DETAILS:
 - Beneficiary: ${accountHolder}
 - Bank Institution: ${bankName}
 - Account Mask: ${accountMask}
 - Clearing Transit: ${clearingMethod}
-- Transfer Speed & Fee: Instant / Same-Day (CA$ 0.00 Fee)
+- Transfer speed and fee: Determined only by the verified settlement provider response
 - Cryptographic Audit Hash: ${auditHash}
 Status: ${status === 'confirmed' ? 'QUEUED_FOR_INTERBANK_SETTLEMENT' : 'READY_FOR_DISPATCH'}`;
 
@@ -156,7 +157,7 @@ Status: ${status === 'confirmed' ? 'QUEUED_FOR_INTERBANK_SETTLEMENT' : 'READY_FO
         {/* Amount & FX Conversion Card */}
         <div className="bg-gradient-to-br from-slate-900 to-indigo-950 text-white rounded-2xl p-4 sm:p-5 border border-slate-800 shadow-xl space-y-3 relative overflow-hidden">
           <div className="absolute -top-12 -right-12 w-32 h-32 bg-[#635BFF]/30 rounded-full blur-3xl pointer-events-none" />
-          
+
           <div className="flex justify-between items-center text-[10px] font-mono tracking-widest text-slate-400 uppercase border-b border-slate-800/80 pb-2">
             <span>SETTLEMENT PAYOUT SPECIFICATION</span>
             <span className="text-emerald-400 font-bold flex items-center gap-1">
