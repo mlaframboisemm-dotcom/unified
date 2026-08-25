@@ -708,27 +708,27 @@ export function resolveTokenInfo(symbolOrAddress: string): TokenNetworkInfo {
   );
   if (foundByAddress) return foundByAddress;
 
-  // Custom or auto-generated dynamic token info
+  // A custom asset must provide a real contract address. Symbols alone are not enough to create verified token metadata.
   const isAddress = /^0x[a-fA-F0-9]{40}$/.test(symbolOrAddress);
-  const formattedAddr = isAddress 
-    ? `${symbolOrAddress.substring(0, 6)}...${symbolOrAddress.substring(symbolOrAddress.length - 4)}`
-    : `${upper} Verified Protocol`;
+  if (!isAddress) {
+    throw new Error(`Unknown asset "${upper}". Provide a registered symbol or a valid contract address for verification.`);
+  }
 
   return {
-    symbol: upper,
-    name: upper,
-    network: isAddress ? 'Ethereum Mainnet (Custom ERC-20)' : 'Decentralized Multi-Chain Network',
-    contractAddress: isAddress ? symbolOrAddress : `0x${Array.from({ length: 40 }, () => Math.floor(Math.random() * 16).toString(16)).join('')}`,
-    formattedAddress: formattedAddr,
+    symbol: 'CUSTOM',
+    name: 'Unverified ERC-20 Contract',
+    network: 'Ethereum Mainnet (Custom ERC-20)',
+    contractAddress: symbolOrAddress,
+    formattedAddress: `${symbolOrAddress.substring(0, 6)}...${symbolOrAddress.substring(symbolOrAddress.length - 4)}`,
     decimals: 18,
     isNativeL1: false,
     gasToken: 'ETH',
     standardGasLimit: 65000,
     explorerUrl: 'https://etherscan.io',
-    explorerTokenUrl: isAddress ? `https://etherscan.io/token/${symbolOrAddress}` : `https://etherscan.io/search?q=${upper}`,
-    verifierName: 'On-Chain Verified Asset Protocol',
-    legitimacyBadge: '✓ Verified Asset',
-    auditRating: 'A (Verified)',
+    explorerTokenUrl: `https://etherscan.io/token/${symbolOrAddress}`,
+    verifierName: 'Contract address supplied; metadata not independently verified',
+    legitimacyBadge: 'Verification required',
+    auditRating: 'Unverified',
     category: 'DeFi'
   };
 }
@@ -822,9 +822,13 @@ export function buildImmutableLedgerEntry(params: {
   targetAmount?: number;
   gasFeeCrypto?: number;
   gasToken?: string;
+  verifiedTransactionHash: string;
 }) {
   const timestamp = Date.now();
-  const txHash = `0x${Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join('')}`;
+  if (!/^0x[0-9a-fA-F]{64}$/.test(params.verifiedTransactionHash)) {
+    throw new Error('An immutable ledger entry requires a verified 64-hex on-chain transaction hash.');
+  }
+  const txHash = params.verifiedTransactionHash;
   const token = resolveTokenInfo(params.assetSymbol);
 
   let ledgerDebit = '';
@@ -876,7 +880,7 @@ export function buildImmutableLedgerEntry(params: {
     amount: params.amount,
     fiatAmount: params.fiatAmount,
     timestamp,
-    status: 'completed' as const,
+    status: 'verified' as const,
     hash: txHash,
     details: params.details,
     ledgerDebit,
