@@ -39,4 +39,5 @@ jobs:
       - name: Trigger Render Zero-Downtime Live Deploy
         run: |
           echo "🚀 Initiating production deployment for srv-d99sus57vvec7386p2p0..."
-          curl -X POST https://api.render.com/deploy/srv-d99sus57vvec7386p2p0?key=${{ secrets.RENDER_DEPLOY_HOOK_KEY }}
+          test -n "${{ secrets.RENDER_DEPLOY_HOOK_KEY }}" || { echo "Missing required repository secret: RENDER_DEPLOY_HOOK_KEY"; exit 1; }
+          curl --fail --show-error --silent --retry 2 -X POST "https://api.render.com/deploy/srv-d99sus57vvec7386p2p0?key=${{ secrets.RENDER_DEPLOY_HOOK_KEY }}"
