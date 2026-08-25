@@ -28,11 +28,21 @@ const forbiddenWalletFragments = [
   'estimatedPrice',
   'Add zero-balance placeholders',
   'Using cached on-chain state',
+  'Key Authority Active',
+  'Wallet.createRandom',
+  'web3_active_private_key',
+  'Server Default Key Ready',
   "DEFAULT_WEB3_WALLET_ADDRESS = '0x'"
 ];
 for (const fragment of forbiddenWalletFragments) {
   assert(!walletSource.includes(fragment), `Web3 wallet must not display a fixed or placeholder value: ${fragment}`);
 }
+
+assert(walletSource.includes("method: 'eth_accounts'"), 'Web3 sync must inspect only already-authorized browser-wallet accounts before connecting.');
+assert(walletSource.includes("method: 'eth_requestAccounts'"), 'Web3 sync must require explicit browser-wallet approval for a new connection.');
+assert(walletSource.includes('https://eth.blockscout.com/api/v2/addresses/${normalizedAddress}/token-balances'), 'Mainnet token discovery must use the documented Blockscout read-only endpoint.');
+assert(walletSource.includes('No cached or fallback values are displayed.'), 'RPC verification failure must clear displayed wallet state.');
+assert(walletSource.includes('Private keys are not stored or generated') || walletSource.includes('does not import private keys'), 'Wallet UI must state the browser-wallet ownership boundary.');
 
 assert.equal(normalizeWalletAddress(''), '', 'An absent wallet address must remain disconnected.');
 assert.equal(normalizeWalletAddress('not-an-address'), '', 'An invalid wallet address must not fall back to another address.');
