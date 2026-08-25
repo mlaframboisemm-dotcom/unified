@@ -3517,6 +3517,8 @@ export default function App() {
                   const isConvert = tx.type === 'CONVERT';
                   const isPending = tx.status === 'pending' || tx.status === 'processing';
                   const isFailed = tx.status === 'failed';
+                  const requiredConfirmations = tx.requiredConfirmations || 3;
+                  const isAwaitingConfirmation = !isFailed && typeof tx.confirmations === 'number' && tx.confirmations < requiredConfirmations;
                   const txDate = new Date(tx.timestamp).toLocaleString(undefined, {
                     month: 'short',
                     day: 'numeric',
@@ -3569,10 +3571,10 @@ export default function App() {
                               </span>
 
                               {/* Real-time Status Badge */}
-                              {isPending ? (
+                              {isPending || isAwaitingConfirmation ? (
                                 <span className="text-[10px] bg-amber-100 text-amber-800 font-bold px-2 py-0.5 rounded-full flex items-center gap-1 border border-amber-300">
                                   <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping" />
-                                  <span>In-Flight ({tx.confirmations || 0}/3 Blocks)</span>
+                                  <span>In-Flight ({tx.confirmations || 0}/{requiredConfirmations} Blocks)</span>
                                 </span>
                               ) : isFailed ? (
                                 <span className="text-[10px] bg-red-100 text-red-700 font-bold px-2 py-0.5 rounded-full border border-red-200">
@@ -3660,9 +3662,9 @@ export default function App() {
                               <div className="grid grid-cols-3 gap-1">
                                 <span className="text-[10px] text-gray-400 font-bold">Status:</span>
                                 <span className="col-span-2 font-bold flex items-center text-[11px]">
-                                  <span className={`w-1.5 h-1.5 rounded-full mr-1.5 ${isPending ? 'bg-amber-500 animate-ping' : isFailed ? 'bg-red-500' : 'bg-green-500'}`} />
-                                  <span className={isPending ? 'text-amber-700' : isFailed ? 'text-red-700' : 'text-gray-800'}>
-                                    {isPending ? `Pending Confirmation (${tx.confirmations || 0}/3 Blocks)` : isFailed ? 'Transaction Rejected' : 'Broadcasted & Settled'}
+                                  <span className={`w-1.5 h-1.5 rounded-full mr-1.5 ${isPending || isAwaitingConfirmation ? 'bg-amber-500 animate-ping' : isFailed ? 'bg-red-500' : 'bg-green-500'}`} />
+                                  <span className={isPending || isAwaitingConfirmation ? 'text-amber-700' : isFailed ? 'text-red-700' : 'text-gray-800'}>
+                                    {isPending || isAwaitingConfirmation ? `Pending Confirmation (${tx.confirmations || 0}/${requiredConfirmations} Blocks)` : isFailed ? 'Transaction Rejected' : 'Broadcasted & Settled'}
                                   </span>
                                 </span>
                               </div>
@@ -3670,38 +3672,14 @@ export default function App() {
                               <div className="grid grid-cols-3 gap-1">
                                 <span className="text-[10px] text-gray-400 font-bold">Block Height:</span>
                                 <span className="col-span-2 text-gray-700 font-mono font-semibold text-[11px]">
-                                  #{tx.blockHeight || (841029 + Math.floor(Math.random() * 500))}
+                                  {tx.blockHeight ? `#${tx.blockHeight}` : 'Awaiting confirmation'}
                                 </span>
                               </div>
 
                               <div className="grid grid-cols-3 gap-1">
                                 <span className="text-[10px] text-gray-400 font-bold">Transaction Hash:</span>
-                                <span className="col-span-2 text-gray-700 font-mono text-[10px] truncate select-all" title={tx.hash || (() => {
-                                  const id = tx.id || '';
-                                  let hashVal = 0;
-                                  for (let i = 0; i < id.length; i++) {
-                                    hashVal = (hashVal << 5) - hashVal + id.charCodeAt(i);
-                                    hashVal |= 0;
-                                  }
-                                  const hex = Math.abs(hashVal).toString(16).padEnd(8, 'a') + 
-                                              Math.abs(hashVal * 31).toString(16).padEnd(8, 'b') + 
-                                              Math.abs(hashVal * 97).toString(16).padEnd(8, 'c') + 
-                                              Math.abs(hashVal * 157).toString(16).padEnd(8, 'd');
-                                  return '0x' + hex.substring(0, 40);
-                                })()}>
-                                  {tx.hash || (() => {
-                                    const id = tx.id || '';
-                                    let hashVal = 0;
-                                    for (let i = 0; i < id.length; i++) {
-                                      hashVal = (hashVal << 5) - hashVal + id.charCodeAt(i);
-                                      hashVal |= 0;
-                                    }
-                                    const hex = Math.abs(hashVal).toString(16).padEnd(8, 'a') + 
-                                                Math.abs(hashVal * 31).toString(16).padEnd(8, 'b') + 
-                                                Math.abs(hashVal * 97).toString(16).padEnd(8, 'c') + 
-                                                Math.abs(hashVal * 157).toString(16).padEnd(8, 'd');
-                                    return '0x' + hex.substring(0, 40);
-                                  })()}
+                                <span className="col-span-2 text-gray-700 font-mono text-[10px] truncate select-all" title={tx.hash || 'Not assigned until broadcast'}>
+                                  {tx.hash || 'Not assigned until broadcast'}
                                 </span>
                               </div>
 
