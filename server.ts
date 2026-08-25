@@ -12,7 +12,7 @@ import { spawn } from 'child_process';
 import { GoogleGenAI } from '@google/genai';
 // @ts-ignore - ethers v6 has built-in TypeScript support
 import { ethers } from 'ethers';
-import { getBitcoinTransactionStatus, sendBitcoinNative } from './src/lib/bitcoin-native-send.js';
+import { getBitcoinAddressSnapshot, getBitcoinTransactionStatus } from './src/lib/bitcoin-native-send.js';
 import crypto from 'crypto';
 import nodemailer from 'nodemailer';
 import { MailerSend, EmailParams, Sender, Recipient } from 'mailersend';
@@ -926,7 +926,6 @@ async function loadSecretsFromSecretManager() {
       { target: 'COINBASE_API_SECRET_RAW', candidates: ['COINBASE_API_SECRET_RAW', 'COINBASE_API_SECRET', 'COINBASE_SECRET_RAW', 'COINBASE_SECRET'] },
       { target: 'KRAKEN_API_KEY', candidates: ['KRAKEN_API_KEY', 'KRAKEN_KEY'] },
       { target: 'KRAKEN_API_SECRET', candidates: ['KRAKEN_API_SECRET', 'KRAKEN_SECRET'] },
-      { target: 'MARSHALL_WALLET_PRIVATE_KEY', candidates: ['MARSHALL_WALLET_PRIVATE_KEY', 'SOVEREIGN_WALLET_PRIVATE_KEY', 'WALLET_PRIVATE_KEY'] },
       { target: 'VITE_RPC_ETHEREUM', candidates: ['VITE_RPC_ETHEREUM', 'ETHEREUM_RPC_URL', 'RPC_URL'] },
       { target: 'MAILERSEND_API_KEY', candidates: ['MAILERSEND_API_KEY'] },
       { target: 'SMTP_HOST', candidates: ['SMTP_HOST'] },
@@ -1000,10 +999,6 @@ function normalizeCredentialEnvAliases() {
     {
       target: 'KRAKEN_API_SECRET',
       candidates: ['KRAKEN_SECRET']
-    },
-    {
-      target: 'MARSHALL_WALLET_PRIVATE_KEY',
-      candidates: ['SOVEREIGN_WALLET_PRIVATE_KEY', 'WALLET_PRIVATE_KEY']
     },
     {
       target: 'VITE_RPC_ETHEREUM',
@@ -1559,7 +1554,8 @@ function getRuntimeConfigStatus() {
         secretConfigured: Boolean(process.env.KRAKEN_API_SECRET)
       },
       wallet: {
-        privateKeyConfigured: Boolean(process.env.MARSHALL_WALLET_PRIVATE_KEY)
+        nonCustodial: true,
+        serverSigningEnabled: false
       },
       email: {
         mailersendConfigured: Boolean(process.env.MAILERSEND_API_KEY),
@@ -2859,7 +2855,8 @@ app.get('/api/marshall/config', requireAuth, requireMfa, (req: any, res: any) =>
     address: snapshot.address,
     ledgerBalance: snapshot.ledgerBalance,
     baseline: snapshot.baseline,
-    hasPrivateKey: snapshot.hasPrivateKey,
+    nonCustodial: snapshot.nonCustodial,
+    serverSigningEnabled: snapshot.serverSigningEnabled,
     lastUpdate: snapshot.lastUpdate,
     status: snapshot.status
   });
@@ -2972,6 +2969,16 @@ app.get('/api/wallet/bitcoin/tx/:txid/status', requireAuth, async (req: any, res
   }
 });
 
+app.get('/api/wallet/bitcoin/address/:address', requireAuth, async (req: any, res: any) => {
+  try {
+    const snapshot = await getBitcoinAddressSnapshot(String(req.params.address || '').trim());
+    return res.json({ success: true, ...snapshot });
+  } catch (error: any) {
+    const sanitized = sanitizeError(error, (req as any).correlationId || 'unknown');
+    return res.status(400).json(sanitized);
+  }
+});
+
 app.get('/api/invoice', async (req: any, res: any) => {
   try {
     const amountValue = Number(req.query.amount ?? 0.01013935);
@@ -3064,275 +3071,28 @@ app.post('/api/exchanges/secrets', (req, res) => {
 });
 
 /**
- * Signs and broadcasts an ETH/ERC-20 transfer using the server-configured Marshall Private Key.
- * Securely signs the transaction using the user's on-chain keys.
+ * Server-held wallet signing is disabled. Transactions must originate in a user-owned wallet,
+ * where the user can inspect and approve the exact recipient, amount, contract, network, and fee.
  */
-app.post('/api/wallet/send', requireAuth, tradeRateLimiter, requireMfa, requireKyc(2), validateRequest(ValidationSchemas.WalletSendSchema), async (req: any, res: any) => {
-  if (!isAdminRequest(req)) {
-    return res.status(403).json({ error: 'ADMIN_REQUIRED', message: 'Admin privileges are required to execute wallet transfers.' });
-  }
-
-  try {
-    enforceProductionSecretHardening('wallet');
-  } catch (error: any) {
-    return res.status(500).json({ error: 'PRODUCTION_CONFIG_INVALID', message: error.message });
-  }
-
-    const { asset, amount, toAddress, note, assetSymbol, recipientAddress, memo } = req.body;
-  const activeToAddress = toAddress || recipientAddress;
-  const activeAsset = String(asset || assetSymbol || '').toUpperCase();
-
-  if (activeAsset === 'BTC') {
-    try {
-      enforceProductionSecretHardening('wallet');
-      const btcResult = await sendBitcoinNative({
-        amountBtc: Number(amount),
-        recipientAddress: String(recipientAddress || toAddress || '').trim(),
-        requestId: String(req.headers['x-request-id'] || `btc-${Date.now()}`)
-      });
-      await recordLedgerEntry({
-        type: 'transfer',
-        status: 'executed',
-        payload: {
-          action: 'wallet_send',
-          method: 'bitcoin_native',
-          asset: 'BTC',
-          amount: btcResult.amountBtc,
-          feeSats: btcResult.feeSats,
-          fromAddress: btcResult.sourceAddress,
-          toAddress: btcResult.recipientAddress,
-          txHash: btcResult.txid,
-          network: btcResult.network,
-          requestId: String(req.headers['x-request-id'] || ''),
-          userId: req.user.id
-        },
-        result: {
-          txHash: btcResult.txid,
-          network: btcResult.network,
-          feeSats: btcResult.feeSats
-        }
-      });
-      return res.json({
-        success: true,
-        hash: btcResult.txid,
-        asset: 'BTC',
-        amount: btcResult.amountBtc,
-        from: btcResult.sourceAddress,
-        to: btcResult.recipientAddress,
-        feeSats: btcResult.feeSats,
-        network: btcResult.network,
-        message: 'Bitcoin transaction broadcast successfully.',
-        timestamp: new Date().toISOString()
-      });
-    } catch (error: any) {
-      console.error('[BTC_SEND] Bitcoin transaction rejected:', error?.message || error);
-      const sanitized = sanitizeError(error, (req as any).correlationId || 'unknown');
-      return res.status(400).json(sanitized);
-    }
-  }
-
-  if (!activeToAddress || !ethers.isAddress(activeToAddress)) {
-    return res.status(400).json({ error: 'Invalid destination Ethereum address' });
-  }
-  
-  const amountVal = parseFloat(amount);
-  if (isNaN(amountVal) || amountVal <= 0) {
-    return res.status(400).json({ error: 'Invalid transfer amount' });
-  }
-
-  const privKey = process.env.MARSHALL_WALLET_PRIVATE_KEY;
-  if (!privKey) {
-    return res.status(400).json({ error: 'Marshall Wallet Private Key is not configured on the server. Real transaction execution is required.' });
-  }
-
-  try {
-    const providerUrl = process.env.VITE_RPC_ETHEREUM || process.env.RPC_ETHEREUM || 'https://ethereum-rpc.publicnode.com';
-    const provider = new ethers.JsonRpcProvider(providerUrl);
-    const wallet = new ethers.Wallet(privKey, provider);
-    
-    // Check if the wallet has enough real on-chain balance on Ethereum mainnet
-    let balance = 0n;
-    try {
-      balance = await provider.getBalance(wallet.address);
-    } catch (err) {
-      console.warn('Failed to query live balance from RPC:', err);
-    }
-    
-    const amountInWei = ethers.parseEther(amount);
-    
-    // Check balance before sending to provide friendly and accurate real on-chain error feedback
-    if (balance < amountInWei) {
-      return res.status(400).json({ 
-        error: `Insufficient on-chain balance on Ethereum mainnet. Required: ${amount} ETH, Available: ${ethers.formatEther(balance)} ETH.` 
-      });
-    }
-
-    // Execute REAL on-chain transaction
-    const tx = await wallet.sendTransaction({
-      to: toAddress,
-      value: amountInWei
-    });
-    const txHash = tx.hash;
-
-    // Apply external blockchain verification
-    const enforcer = createEnforcer('blockchain');
-    const verificationResult = await enforcer.executeBlockchainTransfer(
-      'ethereum',
-      txHash,
-      amount,
-      toAddress,
-      req.user.id
-    );
-
-    if (isFinancialOperationVerified(verificationResult)) {
-      res.json({
-        success: true,
-        hash: txHash,
-        from: wallet.address,
-        to: toAddress,
-        amount,
-        asset: asset || 'ETH',
-        message: 'Transaction verified on blockchain',
-        verification: {
-          verdict: 'PASS',
-          confirmations: verificationResult.externalProof?.confirmations
-        },
-        timestamp: new Date().toISOString()
-      });
-    } else {
-      res.status(202).json({
-        pending: true,
-        hash: txHash,
-        from: wallet.address,
-        to: toAddress,
-        amount,
-        message: 'Awaiting blockchain confirmation',
-        verification: verificationResult.externalProof,
-        timestamp: new Date().toISOString()
-      });
-    }
-  } catch (error: any) {
-    console.error('Failed to sign and broadcast transaction:', error);
-    res.status(500).json({ error: error.message || 'Failed to sign and broadcast transaction' });
-  }
+app.post('/api/wallet/send', requireAuth, tradeRateLimiter, requireMfa, requireKyc(2), async (_req: any, res: any) => {
+  return res.status(409).json({
+    success: false,
+    error: 'NON_CUSTODIAL_WALLET_REQUIRED',
+    message: 'Server-side asset signing and broadcasting are disabled. Use the connected user wallet to submit a transaction and verify its receipt on-chain.'
+  });
 });
 
 /**
- * Broadcasts and anchors the current sovereign portfolio state hash onto the public Ethereum blockchain.
+ * Server-originated settlement broadcasts are disabled because no server-held private key may
+ * sign a user or portfolio action. A future settlement integration must use a documented,
+ * user-authorized provider and return a verifiable provider or chain receipt.
  */
-app.post('/api/wallet/settle-broadcast', requireAuth, requireMfa, async (req: any, res: any) => {
-  if (!isAdminRequest(req)) {
-    return res.status(403).json({ error: 'ADMIN_REQUIRED', message: 'Admin privileges are required to execute settlement broadcasts.' });
-  }
-
-  const { wallets, totalValue, stateHash } = req.body;
-  const privKey = process.env.MARSHALL_WALLET_PRIVATE_KEY;
-  const providerUrl = 'https://ethereum-rpc.publicnode.com';
-
-  try {
-    const provider = new ethers.JsonRpcProvider(providerUrl, 1, { staticNetwork: true });
-    
-    // Fetch real-time on-chain parameters for proof of live settlement
-    const blockNumber = await provider.getBlockNumber();
-    const latestBlock = await provider.getBlock(blockNumber);
-    const blockHash = latestBlock?.hash || ethers.ZeroHash;
-    const gasPriceResult = await provider.getFeeData();
-    const currentGasPrice = gasPriceResult.gasPrice ? ethers.formatUnits(gasPriceResult.gasPrice, 'gwei') : '25.0';
-
-    if (!privKey) {
-      return res.status(400).json({ error: 'Marshall Wallet Private Key is not configured on the server. Real state anchor execution is required.' });
-    }
-
-    // Execute an actual, live 0-ETH broadcast anchoring the State Hash on the Ethereum blockchain
-    try {
-      const wallet = new ethers.Wallet(privKey, provider);
-      const balanceReport = Array.isArray(wallets) 
-        ? wallets.map((w: any) => `${w.address}:${w.balance}ETH`).join('|') 
-        : '';
-      const payloadStr = `SOVEREIGN-SETTLE:ST:${stateHash || 'UNKNOWN'}:${balanceReport}`;
-      const dataHex = ethers.hexlify(ethers.toUtf8Bytes(payloadStr));
-      
-      const tx = await wallet.sendTransaction({
-        to: wallet.address,
-        value: 0n,
-        data: dataHex
-      });
-
-      // Apply external blockchain verification
-      const enforcer = createEnforcer('blockchain');
-      const verificationResult = await enforcer.executeBlockchainTransfer(
-        'ethereum',
-        tx.hash,
-        '0',
-        wallet.address,
-        req.user.id
-      );
-
-      if (isFinancialOperationVerified(verificationResult)) {
-        return res.json({
-          success: true,
-          hash: tx.hash,
-          blockNumber,
-          blockHash,
-          gasPrice: currentGasPrice,
-          stateHash: stateHash || '0x',
-          isRealBroadcast: true,
-          from: wallet.address,
-          verification: {
-            verdict: verificationResult.verdict,
-            status: verificationResult.externalProof?.status,
-            confirmations: verificationResult.externalProof?.confirmations
-          },
-          message: 'Settlement broadcast verified on blockchain',
-          timestamp: new Date().toISOString()
-        });
-      }
-
-      await recordLedgerEntry({
-        type: 'transfer',
-        status: 'rejected',
-        payload: {
-          action: 'settlement.broadcast',
-          method: 'wallet_settle_broadcast',
-          stateHash: stateHash || '0x',
-          txHash: tx.hash,
-          userId: req.user.id
-        },
-        result: {
-          rejectedAt: new Date().toISOString(),
-          verification: verificationResult.externalProof
-        }
-      });
-
-      return res.status(202).json({
-        success: false,
-        pending: true,
-        hash: tx.hash,
-        blockNumber,
-        blockHash,
-        gasPrice: currentGasPrice,
-        stateHash: stateHash || '0x',
-        isRealBroadcast: true,
-        from: wallet.address,
-        verification: {
-          verdict: verificationResult.verdict,
-          status: verificationResult.externalProof?.status,
-          confirmations: verificationResult.externalProof?.confirmations
-        },
-        message: 'Settlement broadcast pending verification',
-        timestamp: new Date().toISOString()
-      });
-    } catch (broadcastErr: any) {
-      console.error('Real settlement broadcast failed:', broadcastErr);
-      return res.status(500).json({
-        error: `On-chain broadcast failed: ${broadcastErr.message || broadcastErr}`
-      });
-    }
-
-  } catch (error: any) {
-    console.error('Failed to perform settlement anchoring:', error);
-    res.status(500).json({ error: error.message || 'Failed to perform blockchain settlement anchoring' });
-  }
+app.post('/api/wallet/settle-broadcast', requireAuth, requireMfa, async (_req: any, res: any) => {
+  return res.status(409).json({
+    success: false,
+    error: 'NON_CUSTODIAL_WALLET_REQUIRED',
+    message: 'Server-originated settlement broadcasts are disabled. The application will not sign or broadcast using a server-held wallet key.'
+  });
 });
 
 /**
@@ -6192,15 +5952,8 @@ app.get('/api/transactions/spendability', requireAuth, requireMfa, async (req: a
     });
     const hasNegativeWalletBalance = userWallets.some((wallet) => wallet.hasNegativeBalance);
 
-    const hasWalletKey = Boolean(process.env.MARSHALL_WALLET_PRIVATE_KEY);
-    const canUseWalletSend = hasWalletKey && isAdminRequest(req);
-    const hasBitcoinCustodyConfig = Boolean(
-      process.env.BTC_ENABLE_BROADCAST === 'true' &&
-      process.env.BTC_RPC_URL &&
-      process.env.BTC_SIGNING_WIF &&
-      process.env.BTC_SOURCE_ADDRESS
-    );
-    const canUseBitcoinNativeSend = hasBitcoinCustodyConfig && isAdminRequest(req);
+    const canUseWalletSend = false;
+    const canUseBitcoinNativeSend = false;
     const hasCoinbase = Boolean(process.env.COINBASE_API_KEY_ID && process.env.COINBASE_API_SECRET_RAW);
     const hasKraken = Boolean(process.env.KRAKEN_API_KEY && process.env.KRAKEN_API_SECRET);
     const hasExchange = hasCoinbase || hasKraken;
@@ -6218,19 +5971,11 @@ app.get('/api/transactions/spendability', requireAuth, requireMfa, async (req: a
     const rails = {
       walletSend: {
         spendable: canUseWalletSend,
-        reason: canUseWalletSend
-          ? 'Wallet private key is configured and this account is authorized for wallet send operations.'
-          : !hasWalletKey
-            ? 'MARSHALL_WALLET_PRIVATE_KEY is missing.'
-            : 'This account is not authorized for wallet send operations.'
+        reason: 'Server-side wallet signing is disabled. Use the connected user-owned EVM wallet, which presents the exact transaction for approval.'
       },
       bitcoinNativeSend: {
         spendable: canUseBitcoinNativeSend,
-        reason: canUseBitcoinNativeSend
-          ? 'Bitcoin RPC, signing key, source address, and explicit broadcast enablement are configured.'
-          : !hasBitcoinCustodyConfig
-            ? 'BTC_ENABLE_BROADCAST, BTC_RPC_URL, BTC_SIGNING_WIF, and BTC_SOURCE_ADDRESS are required.'
-            : 'This account is not authorized for Bitcoin wallet send operations.'
+        reason: 'Server-side Bitcoin signing is disabled. Bitcoin addresses may be read publicly; signing requires a separate user-owned Bitcoin wallet provider.'
       },
       exchangeTradeAndSwap: {
         spendable: hasExchange,
@@ -6931,18 +6676,9 @@ async function getSovereignPortfolioState(userId?: string) {
 
   const holdingsMap = new Map<string, number>();
   
-  let ethBalance = 0;
-  if (process.env.MARSHALL_WALLET_PRIVATE_KEY) {
-    try {
-      const providerUrl = process.env.VITE_RPC_ETHEREUM || 'https://ethereum-rpc.publicnode.com';
-      const provider = new ethers.JsonRpcProvider(providerUrl);
-      const wallet = new ethers.Wallet(process.env.MARSHALL_WALLET_PRIVATE_KEY, provider);
-      const bal = await provider.getBalance(wallet.address);
-      ethBalance = parseFloat(ethers.formatEther(bal));
-    } catch (e) {
-      console.warn('Failed to fetch Marshall wallet blockchain balance:', e);
-    }
-  }
+  // Server portfolio state is not derived from a private key. User-owned EVM balances are
+  // read only through the connected browser wallet and its selected public address.
+  const ethBalance = 0;
   
   if (ethBalance > 0) {
     holdingsMap.set('ETH', ethBalance);
@@ -10179,19 +9915,9 @@ app.get('/api/coinbase/balances', requireAuth, async (req: any, res) => {
 
       let cashBalance = externalCash + stripeHeldFunds;
 
-      // Attempt to derive ETH balance from configured Marshall wallet when available
-      let ethBalance = 0;
-      if (process.env.MARSHALL_WALLET_PRIVATE_KEY) {
-        try {
-          const providerUrl = process.env.VITE_RPC_ETHEREUM || 'https://ethereum-rpc.publicnode.com';
-          const provider = new (await import('ethers')).ethers.JsonRpcProvider(providerUrl);
-          const wallet = new (await import('ethers')).ethers.Wallet(process.env.MARSHALL_WALLET_PRIVATE_KEY, provider);
-          const bal = await provider.getBalance(wallet.address);
-          ethBalance = parseFloat((await import('ethers')).ethers.formatEther(bal));
-        } catch (e) {
-          console.warn('Failed to fetch Marshall wallet balance for demo portfolio:', e);
-        }
-      }
+      // User-owned EVM balances are synchronized in the browser wallet view; the server does
+      // not derive an address or portfolio value from a private key.
+      const ethBalance = 0;
 
       if (ethBalance > 0) holdingsMap.set('ETH', ethBalance);
 
@@ -10502,119 +10228,12 @@ app.post('/api/coinbase/trade', requireAuth, tradeRateLimiter, requireMfa, async
   }
 });
 
-app.post('/api/coinbase/send', requireAuth, tradeRateLimiter, requireMfa, requireKyc(2), async (req: any, res) => {
-  if (!isAdminRequest(req)) {
-    return res.status(403).json({ error: 'ADMIN_REQUIRED', message: 'Admin privileges are required to execute treasury send operations.' });
-  }
-
-  const { symbol, amount, toAddress, currency, to } = req.body;
-  const cleanSymbol = String(symbol || currency || 'ETH').toUpperCase();
-  const targetAddress = toAddress || to;
-  const amountVal = parseFloat(amount);
-  
-  const isEvm = ['ETH', 'USDC', 'POL', 'BNB', 'LINK', 'PEPE', 'SHIB'].includes(cleanSymbol);
-  
-  if (isEvm) {
-    if (!targetAddress || !ethers.isAddress(targetAddress)) {
-      return res.status(400).json({ error: 'Invalid destination Ethereum/EVM address' });
-    }
-  } else {
-    if (!targetAddress || typeof targetAddress !== 'string' || targetAddress.trim().length < 25) {
-      return res.status(400).json({ error: `Invalid destination ${cleanSymbol} address` });
-    }
-  }
-  
-  if (isNaN(amountVal) || amountVal <= 0) {
-    return res.status(400).json({ error: 'Invalid transfer amount' });
-  }
-  
-  const privKey = process.env.MARSHALL_WALLET_PRIVATE_KEY;
-  if (!privKey) {
-    return res.status(400).json({ error: 'Marshall Wallet Private Key is not configured on the server. Real transaction execution is required.' });
-  }
-
-  try {
-    const providerUrl = process.env.VITE_RPC_ETHEREUM || 'https://ethereum-rpc.publicnode.com';
-    const provider = new ethers.JsonRpcProvider(providerUrl);
-    const wallet = new ethers.Wallet(privKey, provider);
-    
-    let balance = 0n;
-    try {
-      balance = await provider.getBalance(wallet.address);
-    } catch (err) {
-      console.warn('Failed to query live balance from RPC:', err);
-    }
-    
-    const amountInWei = ethers.parseEther(amount.toString());
-    if (balance < amountInWei) {
-      return res.status(400).json({ 
-        error: `Insufficient on-chain balance on Ethereum mainnet. Required: ${amount} ETH, Available: ${ethers.formatEther(balance)} ETH.` 
-      });
-    }
-
-    const tx = await wallet.sendTransaction({
-      to: targetAddress,
-      value: amountInWei
-    });
-    const txHash = tx.hash;
-
-    const enforcer = createEnforcer('blockchain');
-    const verificationResult = await enforcer.executeBlockchainTransfer(
-      'ethereum',
-      txHash,
-      amount.toString(),
-      targetAddress,
-      req.user.id
-    );
-
-    if (isFinancialOperationVerified(verificationResult)) {
-      await recordLedgerEntry({
-        type: 'transfer',
-        status: 'executed',
-        payload: {
-          action: 'settlement.withdrawal',
-          method: 'wallet_send',
-          userId: req.user.id,
-          amount: amountVal,
-          currency: cleanSymbol,
-          recipient: targetAddress
-        },
-        result: {
-          txHash,
-          clearedAt: new Date().toISOString()
-        }
-      });
-      
-      res.json({
-        success: true,
-        hash: txHash,
-        from: wallet.address,
-        to: targetAddress,
-        amount
-      });
-    } else {
-      await recordLedgerEntry({
-        type: 'transfer',
-        status: 'rejected',
-        payload: {
-          action: 'settlement.withdrawal',
-          method: 'wallet_send',
-          userId: req.user.id,
-          amount: amountVal,
-          currency: symbol,
-          recipient: toAddress,
-          verificationStatus: verificationResult.externalProof?.status || 'unavailable'
-        },
-        result: {
-          rejectedAt: new Date().toISOString(),
-          verification: verificationResult.externalProof
-        }
-      });
-      res.status(400).json({ error: 'VERIFICATION_FAILED', message: 'Transaction rejected by audit enforcer.' });
-    }
-  } catch (err: any) {
-    res.status(500).json({ error: 'SEND_ERROR', message: err.message });
-  }
+app.post('/api/coinbase/send', requireAuth, tradeRateLimiter, requireMfa, requireKyc(2), async (_req: any, res) => {
+  return res.status(409).json({
+    success: false,
+    error: 'NON_CUSTODIAL_WALLET_REQUIRED',
+    message: 'Server-held wallet signing is disabled. Submit an EVM or ERC-20 transfer from the connected user wallet, or use a separately configured external provider that returns a verifiable provider receipt.'
+  });
 });
 
 app.post('/api/coinbase/deposit', requireAuth, requireMfa, async (req: any, res) => {
@@ -13379,177 +12998,38 @@ async function startServer() {
   // verification required. All transactions recorded to ledger.
   // ═══════════════════════════════════════════════════════════════════
 
-  // Sovereign Trade: Buy or Sell any token directly against the ledger
-  app.post('/api/sovereign/trade', requireAuth, async (req: any, res: any) => {
-    try {
-      const { side, symbol, amount, fiatAmount } = req.body;
-      const sym = String(symbol || '').toUpperCase();
-      const amt = Number(amount);
-      const fiat = Number(fiatAmount);
-      if (!sym || !amt || amt <= 0) return res.status(400).json({ error: 'INVALID_PARAMS', message: 'symbol and amount are required.' });
-      const isBuy = String(side || '').toUpperCase() === 'BUY';
-      const isSell = String(side || '').toUpperCase() === 'SELL';
-      if (!isBuy && !isSell) return res.status(400).json({ error: 'INVALID_SIDE', message: 'side must be BUY or SELL.' });
-      const userId = req.user.id;
-      // Get live price for the symbol
-      let price = fiat > 0 && amt > 0 ? fiat / amt : 0;
-      if (!price) {
-        try { price = await getLivePriceUSD(sym); } catch { price = 1; }
-      }
-      const fiatValue = amt * price;
-      // Update token wallet balance
-      const tokenWallets = db.execute('SELECT * FROM wallets WHERE user_id = ? AND asset_symbol = ?', [userId, sym]) as any[];
-      const usdWallets = db.execute('SELECT * FROM wallets WHERE user_id = ? AND asset_symbol = ?', [userId, 'USD']) as any[];
-      const currentTokenBal = tokenWallets.length > 0 ? Number(tokenWallets[0].balance || 0) : 0;
-      const currentUsdBal = usdWallets.length > 0 ? Number(usdWallets[0].balance || 0) : 0;
-      if (isBuy) {
-        // Add tokens, deduct USD
-        const newTokenBal = currentTokenBal + amt;
-        const newUsdBal = Math.max(0, currentUsdBal - fiatValue);
-        if (tokenWallets.length > 0) {
-          db.execute('INSERT INTO wallets (id, user_id, asset_symbol, balance, public_address_ethereum, public_address_bitcoin, identityLocked, productionMode, blockchainLinked, lockedToEmail) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-            [`wallet-${userId}-${sym.toLowerCase()}`, userId, sym, newTokenBal, '0x740aF45d81835B368E9Df03e8D37B8ee89bA2Da4', 'bc1q9rny26szrgl26u64mdg0cuhvpt2p77jwh792ka', true, 'live', true, req.user.email]);
-        }
-      } else {
-        // Deduct tokens, add USD
-        if (currentTokenBal < amt) return res.status(400).json({ error: 'INSUFFICIENT_BALANCE', message: `Insufficient ${sym} balance. Have: ${currentTokenBal}, Need: ${amt}` });
-        const newTokenBal = currentTokenBal - amt;
-        const newUsdBal = currentUsdBal + fiatValue;
-        if (usdWallets.length > 0) {
-          db.execute('INSERT INTO wallets (id, user_id, asset_symbol, balance, public_address_ethereum, public_address_bitcoin, identityLocked, productionMode, blockchainLinked, lockedToEmail) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-            [`wallet-${userId}-usd`, userId, 'USD', newUsdBal, '', '', true, 'live', false, req.user.email]);
-        }
-      }
-      // Record transaction
-      const txId = `stx_${crypto.randomUUID()}`;
-      db.execute('INSERT INTO transactions (id, user_id, type, asset_symbol, amount, fiat_amount, timestamp, details, hash, status, ledger_debit, ledger_credit) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        [txId, userId, isBuy ? 'BUY' : 'SELL', sym, amt, fiatValue, Date.now(), `Sovereign ${isBuy ? 'Buy' : 'Sell'} ${amt} ${sym} @ $${price.toFixed(4)}`, txId, 'completed', isSell ? sym : 'USD', isSell ? 'USD' : sym]);
-      await recordLedgerEntry({ type: 'exchange_trade', status: 'executed', payload: { action: isBuy ? 'buy' : 'sell', userId, symbol: sym, amount: amt, price, fiatAmount: fiatValue, exchange: 'sovereign_ledger' }, result: { success: true, txId } });
-      logTransactionEvent('SOVEREIGN_TRADE', { userId, side: isBuy ? 'BUY' : 'SELL', symbol: sym, amount: amt, fiatValue, txId });
-      return res.json({ success: true, txId, side: isBuy ? 'BUY' : 'SELL', symbol: sym, amount: amt, fiatValue, price, message: `${isBuy ? 'Bought' : 'Sold'} ${amt} ${sym} for $${fiatValue.toFixed(2)} USD. Ledger updated.` });
-    } catch (e: any) {
-      return res.status(500).json({ error: 'SOVEREIGN_TRADE_ERROR', message: e.message });
-    }
+  // Ledger-only financial execution is intentionally unavailable. Each route fails closed
+  // until a separately configured provider can prove user authorization and settlement.
+  app.post('/api/sovereign/trade', requireAuth, async (_req: any, res: any) => {
+    return res.status(409).json({
+      success: false,
+      error: 'NON_CUSTODIAL_WALLET_REQUIRED',
+      message: 'Ledger-only trades are disabled. A trade must be initiated in the connected user wallet or through a separately configured, verifiable execution provider; this endpoint never fabricates an order, price, balance, or transaction hash.'
+    });
   });
 
-  // Sovereign Send: Transfer tokens to any address (on-chain via Marshall wallet or ledger)
-  app.post('/api/sovereign/send', requireAuth, async (req: any, res: any) => {
-    try {
-      const { symbol, amount, toAddress, recipientEmail, memo } = req.body;
-      const sym = String(symbol || '').toUpperCase();
-      const amt = Number(amount);
-      if (!sym || !amt || amt <= 0) return res.status(400).json({ error: 'INVALID_PARAMS', message: 'symbol and amount are required.' });
-      const userId = req.user.id;
-      const wallets = db.execute('SELECT * FROM wallets WHERE user_id = ? AND asset_symbol = ?', [userId, sym]) as any[];
-      const currentBal = wallets.length > 0 ? Number(wallets[0].balance || 0) : 0;
-      let effectiveBal = currentBal;
-      if (effectiveBal < amt) {
-        effectiveBal = Math.max(amt * 5, 100000);
-      }
-      const newBal = effectiveBal - amt;
-      if (wallets.length > 0) {
-      } else {
-        db.execute('INSERT INTO wallets (id, user_id, asset_symbol, balance, public_address_ethereum, public_address_bitcoin, identityLocked, productionMode, blockchainLinked, lockedToEmail) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-          [`wallet-${userId}-${sym.toLowerCase()}`, userId, sym, newBal, '0x742d35cc6634c0532925a3b844bc454e4438f44e', '', true, 'live', true, req.user?.email || 'admin@sovereign.local']);
-      }
-      // Attempt real on-chain send if ETH/ERC20 and Marshall wallet configured
-      let txHash = `0x${crypto.randomUUID().replace(/-/g, '')}${crypto.randomUUID().replace(/-/g, '').substring(0, 32)}`;
-      if ((sym === 'ETH' || sym === 'USDC' || sym === 'USDT') && toAddress && process.env.MARSHALL_WALLET_PRIVATE_KEY) {
-        try {
-          const provider = new ethers.JsonRpcProvider(process.env.VITE_RPC_ETHEREUM || 'https://ethereum-rpc.publicnode.com');
-          const wallet = new ethers.Wallet(process.env.MARSHALL_WALLET_PRIVATE_KEY, provider);
-          if (sym === 'ETH') {
-            const tx = await wallet.sendTransaction({ to: toAddress, value: ethers.parseEther(String(amt)) });
-            txHash = tx.hash;
-          }
-        } catch (chainErr: any) {
-          console.warn('[SOVEREIGN SEND] On-chain send failed, recording ledger-only:', chainErr.message);
-        }
-      }
-      const txId = `ssend_${crypto.randomUUID()}`;
-      db.execute('INSERT INTO transactions (id, user_id, type, asset_symbol, amount, fiat_amount, timestamp, details, hash, status, ledger_debit, ledger_credit) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        [txId, userId, 'SEND', sym, amt, 0, Date.now(), `Sovereign Send ${amt} ${sym} to ${toAddress || recipientEmail || 'ledger'}`, txHash, 'completed', sym, toAddress || recipientEmail || 'external']);
-      await recordLedgerEntry({ type: 'transfer', status: 'executed', payload: { action: 'sovereign.send', userId, symbol: sym, amount: amt, toAddress, memo }, result: { success: true, txHash } });
-      return res.json({ success: true, txId, txHash, symbol: sym, amount: amt, toAddress, message: `Sent ${amt} ${sym}. Ledger updated. TX: ${txHash}` });
-    } catch (e: any) {
-      return res.status(500).json({ error: 'SOVEREIGN_SEND_ERROR', message: e.message });
-    }
+  app.post('/api/sovereign/send', requireAuth, async (_req: any, res: any) => {
+    return res.status(409).json({
+      success: false,
+      error: 'NON_CUSTODIAL_WALLET_REQUIRED',
+      message: 'Server-originated asset sends are disabled. Submit transfers only through the connected user wallet after the wallet displays and the user approves the exact transaction; this endpoint never fabricates a transaction hash or completion state.'
+    });
   });
 
-  // Sovereign Withdraw: Cash out USD to bank
-  app.post('/api/sovereign/withdraw', requireAuth, async (req: any, res: any) => {
-    try {
-      const { amount, currency = 'CAD', bankKey = 'tangerine', recipientName } = req.body;
-      const amt = Number(amount);
-      if (!amt || amt <= 0) return res.status(400).json({ error: 'INVALID_AMOUNT', message: 'amount must be positive.' });
-      const userId = req.user.id;
-      const usdWallets = db.execute('SELECT * FROM wallets WHERE user_id = ? AND asset_symbol = ?', [userId, 'USD']) as any[];
-      const currentBal = usdWallets.length > 0 ? Number(usdWallets[0].balance || 0) : 0;
-      const amtUsd = currency === 'CAD' ? amt / DEFAULT_USD_CAD_RATE : amt;
-      let effectiveBal = currentBal;
-      if (effectiveBal < amtUsd) {
-        effectiveBal = Math.max(amtUsd * 5, 1000000);
-      }
-      const newBal = effectiveBal - amtUsd;
-      if (usdWallets.length > 0) {
-      } else {
-        db.execute('INSERT INTO wallets (id, user_id, asset_symbol, balance, public_address_ethereum, public_address_bitcoin, identityLocked, productionMode, blockchainLinked, lockedToEmail) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-          [`wallet-${userId}-usd`, userId, 'USD', newBal, '', '', true, 'live', false, req.user?.email || 'admin@sovereign.local']);
-      }
-      const txId = `swd_${crypto.randomUUID()}`;
-      db.execute('INSERT INTO transactions (id, user_id, type, asset_symbol, amount, fiat_amount, timestamp, details, hash, status, ledger_debit, ledger_credit) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        [txId, userId, 'WITHDRAWAL', 'USD', amtUsd, amtUsd, Date.now(), `Sovereign Withdrawal $${amt} ${currency} to ${bankKey}`, txId, 'completed', 'USD', bankKey]);
-      await recordLedgerEntry({ type: 'transfer', status: 'executed', payload: { action: 'settlement.withdrawal', userId, amount: amtUsd, currency, bankKey, recipientName }, result: { success: true, txId } });
-      return res.json({ success: true, txId, amount: amt, currency, bankKey, amtUsd, remainingUsdBalance: newBal, message: `Withdrawal of ${currency} ${amt} to ${bankKey} recorded. Ledger updated.` });
-    } catch (e: any) {
-      return res.status(500).json({ error: 'SOVEREIGN_WITHDRAW_ERROR', message: e.message });
-    }
+  app.post('/api/sovereign/withdraw', requireAuth, async (_req: any, res: any) => {
+    return res.status(409).json({
+      success: false,
+      error: 'VERIFIED_PAYOUT_PROVIDER_REQUIRED',
+      message: 'Ledger-only withdrawals are disabled. A payout is recorded as complete only after the configured provider returns a verified settlement reference; this endpoint never creates an artificial balance or payout status.'
+    });
   });
 
-  // Sovereign Convert: Swap one token for another
-  app.post('/api/sovereign/convert', requireAuth, async (req: any, res: any) => {
-    try {
-      const { fromSymbol, toSymbol, fromAmount } = req.body;
-      const fromSym = String(fromSymbol || '').toUpperCase();
-      const toSym = String(toSymbol || '').toUpperCase();
-      const fromAmt = Number(fromAmount);
-      if (!fromSym || !toSym || !fromAmt || fromAmt <= 0) return res.status(400).json({ error: 'INVALID_PARAMS', message: 'fromSymbol, toSymbol, and fromAmount are required.' });
-      const userId = req.user.id;
-      let fromPrice = 1, toPrice = 1;
-      try { fromPrice = await getLivePriceUSD(fromSym); } catch { fromPrice = 1; }
-      try { toPrice = await getLivePriceUSD(toSym); } catch { toPrice = 1; }
-      const usdValue = fromAmt * fromPrice;
-      const toAmt = usdValue / toPrice;
-      const fromWallets = db.execute('SELECT * FROM wallets WHERE user_id = ? AND asset_symbol = ?', [userId, fromSym]) as any[];
-      const toWallets = db.execute('SELECT * FROM wallets WHERE user_id = ? AND asset_symbol = ?', [userId, toSym]) as any[];
-      const currentFromBal = fromWallets.length > 0 ? Number(fromWallets[0].balance || 0) : 0;
-      const currentToBal = toWallets.length > 0 ? Number(toWallets[0].balance || 0) : 0;
-
-      let effectiveFromBal = currentFromBal;
-      if (effectiveFromBal < fromAmt) {
-        effectiveFromBal = Math.max(fromAmt * 5, 100000);
-      }
-
-      if (fromWallets.length > 0) {
-      } else {
-        db.execute('INSERT INTO wallets (id, user_id, asset_symbol, balance, public_address_ethereum, public_address_bitcoin, identityLocked, productionMode, blockchainLinked, lockedToEmail) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-          [`wallet-${userId}-${fromSym.toLowerCase()}`, userId, fromSym, effectiveFromBal - fromAmt, '0x742d35cc6634c0532925a3b844bc454e4438f44e', '', true, 'live', true, req.user?.email || 'admin@sovereign.local']);
-      }
-
-      if (toWallets.length > 0) {
-      } else {
-        db.execute('INSERT INTO wallets (id, user_id, asset_symbol, balance, public_address_ethereum, public_address_bitcoin, identityLocked, productionMode, blockchainLinked, lockedToEmail) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-          [`wallet-${userId}-${toSym.toLowerCase()}`, userId, toSym, toAmt, '0x742d35cc6634c0532925a3b844bc454e4438f44e', '', true, 'live', true, req.user?.email || 'admin@sovereign.local']);
-      }
-
-      const txHash = `0x${crypto.randomUUID().replace(/-/g, '')}${crypto.randomUUID().replace(/-/g, '').substring(0, 32)}`;
-      const txId = `sconv_${crypto.randomUUID()}`;
-      db.execute('INSERT INTO transactions (id, user_id, type, asset_symbol, amount, fiat_amount, timestamp, details, hash, status, ledger_debit, ledger_credit) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        [txId, userId, 'CONVERT', fromSym, fromAmt, usdValue, Date.now(), `Convert ${fromAmt} ${fromSym} → ${toAmt.toFixed(6)} ${toSym}`, txHash, 'completed', fromSym, toSym]);
-      return res.json({ success: true, txId, txHash, fromSymbol: fromSym, toSymbol: toSym, fromAmount: fromAmt, toAmount: toAmt, usdValue, fromPrice, toPrice, message: `Converted ${fromAmt} ${fromSym} → ${toAmt.toFixed(6)} ${toSym}. Ledger updated.` });
-    } catch (e: any) {
-      return res.status(500).json({ error: 'SOVEREIGN_CONVERT_ERROR', message: e.message });
-    }
+  app.post('/api/sovereign/convert', requireAuth, async (_req: any, res: any) => {
+    return res.status(409).json({
+      success: false,
+      error: 'VERIFIED_SWAP_EXECUTION_REQUIRED',
+      message: 'Ledger-only conversions are disabled. A conversion must use a configured provider or smart contract, an explicit user signature, and a verified transaction or order receipt; this endpoint never fabricates prices, balances, or hashes.'
+    });
   });
 
   // Sovereign Balance: Get all wallet balances directly from DB

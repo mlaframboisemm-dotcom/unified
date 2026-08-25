@@ -150,4 +150,9 @@ async function runSuite() {
   console.log(`==================================================\n`);
 }
 
-runSuite().catch(console.error);
+runSuite().then(() => {
+  process.exit(0);
+}).catch((error) => {
+  console.error(error);
+  process.exit(1);
+});

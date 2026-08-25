@@ -25,8 +25,6 @@ import {
 } from 'lucide-react';
 import OnboardingKyc from './OnboardingKyc';
 import GoogleDriveFolderHub from './GoogleDriveFolderHub';
-import RecoveryKeyBackupWizard, { BackupWallet } from './RecoveryKeyBackupWizard';
-import BitcoinSecurityAndReconciliationHub from './BitcoinSecurityAndReconciliationHub';
 
 interface UserProfileHubProps {
   userName: string;
@@ -55,7 +53,6 @@ export default function UserProfileHub({
   const [showSeedPhrase, setShowSeedPhrase] = useState(false);
   const [showPrivateKey, setShowPrivateKey] = useState(false);
   const [copiedText, setCopiedText] = useState<string | null>(null);
-  const [isBtcWizardOpen, setIsBtcWizardOpen] = useState(false);
 
   // Persistent Vault Password State
   const [vaultPasswordHash, setVaultPasswordHash] = useState<string | null>(() => {
@@ -119,16 +116,6 @@ export default function UserProfileHub({
     setVaultPasswordInput('');
     setVaultPasswordError(null);
     showToast('Vault locked.', 'info');
-  };
-
-  const btcWalletForWizard: BackupWallet = {
-    id: 'wallet-btc-primary',
-    coinSymbol: 'BTC',
-    address: 'bc1qz8w9j7k6m5n4p3r2t1v0x9y8z7w6v5u',
-    label: 'Primary Bitcoin Native SegWit Vault',
-    seedPhrase: 'abandon ability able about above absent absorb abstract absurd abuse access accident',
-    privateKey: 'KxZ8w9j7k6m5n4p3r2t1v0x9y8z7w6v5u...[Configured in Vault]',
-    backupStatus: 'UNVERIFIED'
   };
 
   const handleCopy = (text: string) => {
@@ -482,292 +469,31 @@ export default function UserProfileHub({
               <p className="text-xs text-gray-500">Rate-limiting overrides enabled for account owner session.</p>
             </div>
           </div>
-          {/* Bitcoin Vault, Address, Private Key & Recovery Seed Section */}
-          <div className="bg-gradient-to-br from-amber-950/30 via-slate-900 to-slate-950 rounded-2xl border border-amber-500/30 p-6 text-white space-y-5 shadow-lg">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-4">
-              <div className="flex items-center space-x-3">
-                <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 font-bold text-lg shadow-sm">
-                  ₿
-                </div>
+          <section className="rounded-2xl border border-amber-500/30 bg-slate-950 p-6 text-white shadow-lg">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-start gap-3">
+                <ShieldAlert className="mt-0.5 h-6 w-6 shrink-0 text-amber-400" />
                 <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-base font-black text-white">Bitcoin Native SegWit Vault Credentials</h3>
-                    <span className="text-[10px] bg-amber-500/20 text-amber-300 font-bold px-2 py-0.5 rounded border border-amber-500/30">
-                      1280.50 BTC Active
-                    </span>
-                  </div>
-                  <p className="text-xs text-slate-400">Master password protected vault for your Bitcoin source address, private key, and seed phrase.</p>
+                  <h3 className="text-base font-black">Bitcoin Wallet Not Connected</h3>
+                  <p className="mt-1 text-xs leading-5 text-slate-300">No verified Bitcoin wallet address or balance is configured for this user session. The application does not generate, reveal, store, or present seed phrases and private keys as wallet data.</p>
                 </div>
               </div>
-
-              <div className="flex items-center gap-2 shrink-0">
-                <button
-                  onClick={() => setActiveSubTab('btc_vault')}
-                  className="px-3 py-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold text-xs rounded-xl shadow-xs cursor-pointer transition-all flex items-center gap-1.5"
-                >
-                  <ShieldCheck className="w-3.5 h-3.5" />
-                  <span>Cold Vault & Audit Hub ↗</span>
-                </button>
-                {isVaultUnlocked ? (
-                  <>
-                    <button
-                      onClick={() => setIsChangingPassword(true)}
-                      className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs rounded-xl border border-slate-700 cursor-pointer transition-all"
-                    >
-                      Change Password
-                    </button>
-                    <button
-                      onClick={handleLockVault}
-                      className="px-3 py-1.5 bg-red-600/80 hover:bg-red-600 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 cursor-pointer transition-all"
-                    >
-                      <Lock className="w-3.5 h-3.5" />
-                      <span>Lock Vault</span>
-                    </button>
-                  </>
-                ) : (
-                  <span className="text-xs bg-slate-800 text-amber-400 border border-slate-700 font-bold px-3 py-1.5 rounded-xl flex items-center gap-1.5">
-                    <Lock className="w-3.5 h-3.5 text-amber-400" />
-                    <span>Vault Locked</span>
-                  </span>
-                )}
-              </div>
+              <button type="button" onClick={() => setCurrentTab('wallet')} className="rounded-xl bg-blue-600 px-3 py-2 text-xs font-bold text-white transition hover:bg-blue-500">Open Verified Web3 Wallet</button>
             </div>
+          </section>
 
-            {/* CASE 1: Setting / Changing Master Password */}
-            {(!vaultPasswordHash || isChangingPassword) && (
-              <div className="bg-slate-900/90 border border-amber-500/40 rounded-xl p-5 space-y-4">
-                <div className="flex items-center space-x-2 text-amber-400 font-bold text-sm">
-                  <Key className="w-4 h-4" />
-                  <span>{vaultPasswordHash ? 'Change Vault Master Password' : 'Set Your Master Vault Password'}</span>
-                </div>
-                <p className="text-xs text-slate-300 leading-relaxed">
-                  Choose a secure password or PIN to protect your 12-word seed phrase and Bitcoin private keys. This password will be saved permanently in your browser.
-                </p>
-
-                {vaultPasswordError && (
-                  <div className="p-2.5 bg-red-950/60 border border-red-800 text-red-300 rounded-lg text-xs font-semibold">
-                    {vaultPasswordError}
-                  </div>
-                )}
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
-                      New Vault Password / PIN
-                    </label>
-                    <input
-                      type="password"
-                      placeholder="Enter new password"
-                      value={vaultPasswordInput}
-                      onChange={(e) => setVaultPasswordInput(e.target.value)}
-                      className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400 font-mono"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
-                      Confirm New Password
-                    </label>
-                    <input
-                      type="password"
-                      placeholder="Confirm new password"
-                      value={vaultPasswordConfirmInput}
-                      onChange={(e) => setVaultPasswordConfirmInput(e.target.value)}
-                      className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400 font-mono"
-                    />
-                  </div>
-                </div>
-
-                <div className="flex justify-end gap-2 pt-1">
-                  {isChangingPassword && (
-                    <button
-                      onClick={() => {
-                        setIsChangingPassword(false);
-                        setVaultPasswordError(null);
-                        setVaultPasswordInput('');
-                        setVaultPasswordConfirmInput('');
-                      }}
-                      className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded-xl cursor-pointer"
-                    >
-                      Cancel
-                    </button>
-                  )}
-                  <button
-                    onClick={handleSetVaultPassword}
-                    className="px-5 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-black font-black text-xs rounded-xl shadow-md cursor-pointer transition-all"
-                  >
-                    Save Password & Unlock Vault
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* CASE 2: Vault is Locked */}
-            {vaultPasswordHash && !isChangingPassword && !isVaultUnlocked && (
-              <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-5 space-y-4">
-                <div className="flex items-center space-x-2 text-white font-bold text-sm">
-                  <Lock className="w-4 h-4 text-amber-400" />
-                  <span>Enter Password to Access Bitcoin Keys</span>
-                </div>
-                <p className="text-xs text-slate-400 leading-relaxed">
-                  Your seed phrase and private key are encrypted behind your saved vault password. Enter your password below to reveal your credentials.
-                </p>
-
-                {vaultPasswordError && (
-                  <div className="p-2.5 bg-red-950/60 border border-red-800 text-red-300 rounded-lg text-xs font-semibold">
-                    {vaultPasswordError}
-                  </div>
-                )}
-
-                <div className="flex flex-col sm:flex-row gap-2.5">
-                  <input
-                    type="password"
-                    placeholder="Enter your vault password / PIN"
-                    value={vaultPasswordInput}
-                    onChange={(e) => setVaultPasswordInput(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') handleUnlockVault();
-                    }}
-                    className="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400 font-mono"
-                  />
-                  <button
-                    onClick={handleUnlockVault}
-                    className="px-6 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-black font-black text-xs rounded-xl shadow-md cursor-pointer transition-all flex items-center justify-center gap-1.5 shrink-0"
-                  >
-                    <Lock className="w-3.5 h-3.5" />
-                    <span>Unlock Vault</span>
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* CASE 3: Vault is Unlocked (Displays Full Credentials) */}
-            {vaultPasswordHash && !isChangingPassword && isVaultUnlocked && (
-              <div className="space-y-4 pt-1">
-                <div className="p-3 bg-emerald-950/40 border border-emerald-800/60 rounded-xl flex items-center justify-between text-xs text-emerald-300">
-                  <div className="flex items-center space-x-2">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                    <span className="font-bold">Vault Unlocked: Master credentials authenticated.</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => setCurrentTab('bitcoin-atm')}
-                      className="px-3 py-1 bg-amber-500 hover:bg-amber-400 text-black font-bold text-[11px] rounded-lg shadow-sm cursor-pointer transition-all flex items-center gap-1"
-                    >
-                      <span>🏧 ATM Cash Kiosk Hub</span>
-                    </button>
-                    <button
-                      onClick={() => setIsBtcWizardOpen(true)}
-                      className="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px] rounded-lg shadow-sm cursor-pointer transition-all"
-                    >
-                      Launch Backup Wizard
-                    </button>
-                  </div>
-                </div>
-
-                {/* Address Row */}
-                <div className="space-y-1.5">
-                  <div className="flex justify-between items-center text-xs">
-                    <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Bitcoin Source Address (Bech32 Native SegWit)</span>
-                    <span className="text-[10px] text-emerald-400 font-bold flex items-center gap-1">
-                      <CheckCircle2 className="w-3 h-3" />
-                      Live On-Chain
-                    </span>
-                  </div>
-                  <div className="bg-slate-900/90 border border-slate-700 rounded-xl p-3 flex justify-between items-center font-mono text-xs">
-                    <span className="text-amber-400 font-bold break-all select-all">bc1qz8w9j7k6m5n4p3r2t1v0x9y8z7w6v5u</span>
-                    <button
-                      onClick={() => handleCopy('bc1qz8w9j7k6m5n4p3r2t1v0x9y8z7w6v5u')}
-                      className="p-1.5 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white cursor-pointer ml-3 shrink-0"
-                      title="Copy Bitcoin Address"
-                    >
-                      {copiedText === 'bc1qz8w9j7k6m5n4p3r2t1v0x9y8z7w6v5u' ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
-                    </button>
-                  </div>
-                </div>
-
-                {/* Seed Phrase Container */}
-                <div className="space-y-1.5">
-                  <div className="flex justify-between items-center text-xs">
-                    <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">12-Word Recovery Seed Phrase</span>
-                    <button
-                      onClick={() => setShowSeedPhrase(!showSeedPhrase)}
-                      className="text-xs text-amber-400 hover:text-amber-300 font-bold flex items-center gap-1 cursor-pointer"
-                    >
-                      {showSeedPhrase ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                      <span>{showSeedPhrase ? 'Hide Seed' : 'Reveal Seed Phrase'}</span>
-                    </button>
-                  </div>
-                  <div className="bg-slate-900/90 border border-slate-700 rounded-xl p-3">
-                    {showSeedPhrase ? (
-                      <div className="flex justify-between items-start">
-                        <p className="font-mono text-xs text-emerald-300 leading-relaxed select-all">
-                          abandon ability able about above absent absorb abstract absurd abuse access accident
-                        </p>
-                        <button
-                          onClick={() => handleCopy('abandon ability able about above absent absorb abstract absurd abuse access accident')}
-                          className="p-1.5 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white cursor-pointer ml-3 shrink-0"
-                          title="Copy Seed Phrase"
-                        >
-                          {copiedText === 'abandon ability able about above absent absorb abstract absurd abuse access accident' ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="text-slate-500 font-mono tracking-widest text-xs py-1 select-none text-center">
-                        •••••••• •••••••• •••••••• •••••••• •••••••• •••••••• •••••••• •••••••• •••••••• •••••••• •••••••• ••••••••
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Private Key WIF Container */}
-                <div className="space-y-1.5">
-                  <div className="flex justify-between items-center text-xs">
-                    <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Bitcoin Signing Key (WIF / Private Key)</span>
-                    <button
-                      onClick={() => setShowPrivateKey(!showPrivateKey)}
-                      className="text-xs text-amber-400 hover:text-amber-300 font-bold flex items-center gap-1 cursor-pointer"
-                    >
-                      {showPrivateKey ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                      <span>{showPrivateKey ? 'Hide Key' : 'Reveal Private Key'}</span>
-                    </button>
-                  </div>
-                  <div className="bg-slate-900/90 border border-slate-700 rounded-xl p-3">
-                    {showPrivateKey ? (
-                      <div className="flex justify-between items-start">
-                        <p className="font-mono text-xs text-red-400 font-bold break-all select-all">
-                          KxZ8w9j7k6m5n4p3r2t1v0x9y8z7w6v5u...[Configured in Vault & .env]
-                        </p>
-                        <button
-                          onClick={() => handleCopy('KxZ8w9j7k6m5n4p3r2t1v0x9y8z7w6v5u...[Configured in Vault]')}
-                          className="p-1.5 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white cursor-pointer ml-3 shrink-0"
-                          title="Copy Key"
-                        >
-                          {copiedText === 'KxZ8w9j7k6m5n4p3r2t1v0x9y8z7w6v5u...[Configured in Vault]' ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="text-slate-500 font-mono tracking-widest text-xs py-1 select-none text-center">
-                        ••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
         </div>
       )}
 
       {/* Tab Content: Bitcoin Institutional Vault & Reconciliation */}
-      {activeSubTab === 'btc_vault' && (
-        <BitcoinSecurityAndReconciliationHub
-          btcBalance={1280.50}
-          btcAddress="bc1qz8w9j7k6m5n4p3r2t1v0x9y8z7w6v5u"
-          btcPriceUsd={98450}
-          userName={userName || 'Primary Sovereign Holder'}
-          userEmail={userEmail || 'mlaframboisemm@gmail.com'}
-        />
-      )}
+        {activeSubTab === 'btc_vault' && (
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-center shadow-xs">
+            <ShieldAlert className="mx-auto mb-3 h-8 w-8 text-amber-600" />
+            <h2 className="text-lg font-bold text-slate-900">Verified Bitcoin Wallet Data Is Unavailable</h2>
+            <p className="mx-auto mt-2 max-w-2xl text-sm leading-6 text-slate-600">The prior profile view contained static Bitcoin addresses, balances, and recovery material that were not returned by a connected wallet or verified chain source. Those values are no longer displayed. Connect a supported non-custodial wallet in the verified Web3 Wallet view to read actual on-chain assets.</p>
+            <button type="button" onClick={() => setCurrentTab('wallet')} className="mt-5 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">Open Verified Web3 Wallet</button>
+          </div>
+        )}
 
       {/* Tab Content 4: Google Workspace Drive */}
       {activeSubTab === 'drive' && (
@@ -800,16 +526,6 @@ export default function UserProfileHub({
             showToast={showToast}
           />
         </div>
-      )}
-
-      {/* Recovery Key Backup Wizard Modal */}
-      {isBtcWizardOpen && (
-        <RecoveryKeyBackupWizard
-          isOpen={isBtcWizardOpen}
-          onClose={() => setIsBtcWizardOpen(false)}
-          wallet={btcWalletForWizard}
-          showToast={showToast}
-        />
       )}
 
     </div>

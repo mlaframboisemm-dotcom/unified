@@ -20,7 +20,6 @@ import DeploymentDashboard from './pages/DeploymentDashboard';
 import SendReceiveModal from './components/SendReceiveModal';
 import CoinChart from './components/CoinChart';
 import CashTransferModal from './components/CashTransferModal';
-import AddressHub from './components/AddressHub';
 import BlockchainWalletComponent, { BlockchainWalletSnapshot } from './components/BlockchainWalletComponent';
 import DeveloperHub from './components/DeveloperHub';
 import IntegrationsHub from './components/IntegrationsHub';

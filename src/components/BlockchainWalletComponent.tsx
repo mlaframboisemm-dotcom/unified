@@ -12,6 +12,13 @@ import {
   Wallet
 } from 'lucide-react';
 import { Transaction } from '../types';
+import {
+  getSupportedEvmNetwork,
+  getWalletProviderErrorMessage,
+  parseEip1193ChainId,
+  SUPPORTED_EVM_NETWORKS,
+  type SupportedEvmNetwork
+} from '../lib/web3-wallet';
 
 export interface TokenBalance {
   symbol: string;
@@ -38,68 +45,6 @@ export interface BlockchainWalletSnapshot {
   totalPortfolioUsd: number | null;
 }
 
-export interface NetworkConfig {
-  id: string;
-  name: string;
-  chainId: number;
-  rpcUrl: string;
-  symbol: string;
-  explorerUrl: string;
-  isTestnet?: boolean;
-}
-
-const SUPPORTED_NETWORKS: NetworkConfig[] = [
-  {
-    id: 'ethereum',
-    name: 'Ethereum Mainnet',
-    chainId: 1,
-    rpcUrl: 'https://ethereum-rpc.publicnode.com',
-    symbol: 'ETH',
-    explorerUrl: 'https://etherscan.io'
-  },
-  {
-    id: 'polygon',
-    name: 'Polygon PoS',
-    chainId: 137,
-    rpcUrl: 'https://polygon-bor-rpc.publicnode.com',
-    symbol: 'POL',
-    explorerUrl: 'https://polygonscan.com'
-  },
-  {
-    id: 'arbitrum',
-    name: 'Arbitrum One',
-    chainId: 42161,
-    rpcUrl: 'https://arbitrum-one-rpc.publicnode.com',
-    symbol: 'ETH',
-    explorerUrl: 'https://arbiscan.io'
-  },
-  {
-    id: 'optimism',
-    name: 'Optimism Mainnet',
-    chainId: 10,
-    rpcUrl: 'https://optimism-rpc.publicnode.com',
-    symbol: 'ETH',
-    explorerUrl: 'https://optimistic.etherscan.io'
-  },
-  {
-    id: 'base',
-    name: 'Base Mainnet',
-    chainId: 8453,
-    rpcUrl: 'https://mainnet.base.org',
-    symbol: 'ETH',
-    explorerUrl: 'https://basescan.org'
-  },
-  {
-    id: 'sepolia',
-    name: 'Sepolia Testnet',
-    chainId: 11155111,
-    rpcUrl: 'https://ethereum-sepolia-rpc.publicnode.com',
-    symbol: 'ETH',
-    explorerUrl: 'https://sepolia.etherscan.io',
-    isTestnet: true
-  }
-];
-
 const KNOWN_ERC20_TOKENS = [
   { symbol: 'USDC', name: 'USD Coin', address: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', decimals: 6 },
   { symbol: 'USDT', name: 'Tether USD', address: '0xdAC17F958D2ee523a2206206994597C13D831ec7', decimals: 6 },
@@ -124,6 +69,11 @@ const ERC20_ABI = [
   'function decimals() view returns (uint8)',
   'function symbol() view returns (string)',
   'function name() view returns (string)'
+];
+
+const ERC20_TRANSFER_ABI = [
+  ...ERC20_ABI,
+  'function transfer(address to, uint256 value) returns (bool)'
 ];
 
 interface ImportedToken {
@@ -171,9 +121,11 @@ const clearSnapshot = (onBalancesChange?: (snapshot: BlockchainWalletSnapshot | 
 export default function BlockchainWalletComponent({
   onWalletStateChange,
   onBalancesChange,
+  onTransactionSuccess,
   className = ''
 }: BlockchainWalletComponentProps) {
-  const [selectedNetwork, setSelectedNetwork] = useState<NetworkConfig>(SUPPORTED_NETWORKS[0]);
+  const [selectedNetwork, setSelectedNetwork] = useState<SupportedEvmNetwork>(SUPPORTED_EVM_NETWORKS[0]);
+  const [walletChainId, setWalletChainId] = useState<number | null>(null);
   const [walletAddress, setWalletAddress] = useState('');
   const [isBrowserWalletConnected, setIsBrowserWalletConnected] = useState(false);
   const [isConnectingBrowser, setIsConnectingBrowser] = useState(false);
@@ -196,6 +148,16 @@ export default function BlockchainWalletComponent({
   const [importTokenSuccess, setImportTokenSuccess] = useState<string | null>(null);
   const [hideZeroBalances, setHideZeroBalances] = useState(false);
   const [copiedAddress, setCopiedAddress] = useState(false);
+  const [showNativeSendForm, setShowNativeSendForm] = useState(false);
+  const [sendRecipient, setSendRecipient] = useState('');
+  const [sendAmount, setSendAmount] = useState('');
+  const [isSendingNativeAsset, setIsSendingNativeAsset] = useState(false);
+  const [nativeTransactionStatus, setNativeTransactionStatus] = useState<{ state: 'pending' | 'confirmed' | 'failed'; message: string; hash?: string } | null>(null);
+  const [selectedTokenForSend, setSelectedTokenForSend] = useState<TokenBalance | null>(null);
+  const [showTokenSendForm, setShowTokenSendForm] = useState(false);
+  const [tokenSendRecipient, setTokenSendRecipient] = useState('');
+  const [tokenSendAmount, setTokenSendAmount] = useState('');
+  const [isSendingToken, setIsSendingToken] = useState(false);
 
   const importedTokens = useMemo(
     () => importedTokensByNetwork[selectedNetwork.id] ?? [],
@@ -218,6 +180,9 @@ export default function BlockchainWalletComponent({
     setGasPriceGwei(null);
     setLastRefreshedAt(null);
     setDiscoverySources([]);
+    setNativeTransactionStatus(null);
+    setSelectedTokenForSend(null);
+    setShowTokenSendForm(false);
     clearSnapshot(onBalancesChange);
   }, [onBalancesChange]);
 
@@ -239,6 +204,11 @@ export default function BlockchainWalletComponent({
     if (!isBrowserWalletConnected || !ethers.isAddress(normalizedAddress)) {
       clearDisplayedState();
       setRpcError('Connect a browser wallet before synchronizing verified on-chain assets.');
+      return;
+    }
+    if (walletChainId !== null && walletChainId !== selectedNetwork.chainId) {
+      clearDisplayedState();
+      setRpcError(`Your wallet is connected to chain #${walletChainId}, not ${selectedNetwork.name}. Switch the network in your wallet before synchronizing.`);
       return;
     }
 
@@ -402,7 +372,7 @@ export default function BlockchainWalletComponent({
     } finally {
       setIsRefreshing(false);
     }
-  }, [clearDisplayedState, fetchAuthoritativeUsdPrice, importedTokens, isBrowserWalletConnected, onBalancesChange, selectedNetwork, walletAddress]);
+  }, [clearDisplayedState, fetchAuthoritativeUsdPrice, importedTokens, isBrowserWalletConnected, onBalancesChange, selectedNetwork, walletAddress, walletChainId]);
 
   const handleAccountsChanged = useCallback((accounts: unknown) => {
     const nextAccount = Array.isArray(accounts) && typeof accounts[0] === 'string' && ethers.isAddress(accounts[0])
@@ -410,33 +380,85 @@ export default function BlockchainWalletComponent({
       : '';
     setWalletAddress(nextAccount);
     setIsBrowserWalletConnected(Boolean(nextAccount));
-    onWalletStateChange?.(nextAccount, false);
+    setNativeTransactionStatus(null);
+    onWalletStateChange?.(nextAccount, Boolean(nextAccount));
     if (!nextAccount) {
       clearDisplayedState();
       setRpcError('The browser wallet disconnected. No on-chain assets are displayed.');
     }
   }, [clearDisplayedState, onWalletStateChange]);
 
+  const handleChainChanged = useCallback((chainId: unknown) => {
+    const rawChainId = typeof chainId === 'object' && chainId !== null && 'chainId' in chainId
+      ? (chainId as { chainId?: unknown }).chainId
+      : chainId;
+    const parsedChainId = parseEip1193ChainId(
+      typeof rawChainId === 'string' || typeof rawChainId === 'number' || typeof rawChainId === 'bigint'
+        ? rawChainId
+        : null
+    );
+    setWalletChainId(parsedChainId);
+    setNativeTransactionStatus(null);
+    const matchingNetwork = getSupportedEvmNetwork(parsedChainId);
+    if (!matchingNetwork) {
+      clearDisplayedState();
+      setRpcError(`Chain ${String(rawChainId)} is not supported by this wallet view. No on-chain balances are displayed until you switch to a supported network.`);
+      return;
+    }
+    setSelectedNetwork(matchingNetwork);
+    setRpcError(null);
+  }, [clearDisplayedState]);
+
+  const handleProviderDisconnect = useCallback(() => {
+    setWalletAddress('');
+    setWalletChainId(null);
+    setIsBrowserWalletConnected(false);
+    clearDisplayedState();
+    onWalletStateChange?.('', false);
+    setRpcError('The browser wallet is disconnected from the blockchain. No on-chain balances are displayed.');
+  }, [clearDisplayedState, onWalletStateChange]);
+
   useEffect(() => {
     const provider = (window as Window & { ethereum?: Eip1193Provider }).ethereum;
     if (!provider) return;
 
-    const loadAuthorizedAccount = async () => {
+    const loadAuthorizedWalletState = async () => {
       try {
-        handleAccountsChanged(await provider.request({ method: 'eth_accounts' }));
+        const [chainId, accounts] = await Promise.all([
+          provider.request({ method: 'eth_chainId' }),
+          provider.request({ method: 'eth_accounts' })
+        ]);
+        handleChainChanged(chainId);
+        handleAccountsChanged(accounts);
       } catch {
         handleAccountsChanged([]);
       }
     };
 
-    void loadAuthorizedAccount();
+    void loadAuthorizedWalletState();
     provider.on?.('accountsChanged', handleAccountsChanged);
-    return () => provider.removeListener?.('accountsChanged', handleAccountsChanged);
-  }, [handleAccountsChanged]);
+    provider.on?.('chainChanged', handleChainChanged);
+    provider.on?.('connect', handleChainChanged);
+    provider.on?.('disconnect', handleProviderDisconnect);
+    return () => {
+      provider.removeListener?.('accountsChanged', handleAccountsChanged);
+      provider.removeListener?.('chainChanged', handleChainChanged);
+      provider.removeListener?.('connect', handleChainChanged);
+      provider.removeListener?.('disconnect', handleProviderDisconnect);
+    };
+  }, [handleAccountsChanged, handleChainChanged, handleProviderDisconnect]);
 
   useEffect(() => {
     if (isBrowserWalletConnected) void fetchBlockchainBalances();
   }, [fetchBlockchainBalances, isBrowserWalletConnected]);
+
+  useEffect(() => {
+    if (!isBrowserWalletConnected || walletChainId !== selectedNetwork.chainId) return;
+    const reconciliationTimer = window.setInterval(() => {
+      void fetchBlockchainBalances();
+    }, 30_000);
+    return () => window.clearInterval(reconciliationTimer);
+  }, [fetchBlockchainBalances, isBrowserWalletConnected, selectedNetwork.chainId, walletChainId]);
 
   const handleConnectBrowserWallet = async () => {
     const provider = (window as Window & { ethereum?: Eip1193Provider }).ethereum;
@@ -447,11 +469,202 @@ export default function BlockchainWalletComponent({
 
     setIsConnectingBrowser(true);
     try {
-      handleAccountsChanged(await provider.request({ method: 'eth_requestAccounts' }));
-    } catch (error: any) {
-      setRpcError(`Browser wallet connection was not approved: ${error?.message || 'request failed'}.`);
+      const [chainId, accounts] = await Promise.all([
+        provider.request({ method: 'eth_chainId' }),
+        provider.request({ method: 'eth_requestAccounts' })
+      ]);
+      handleChainChanged(chainId);
+      handleAccountsChanged(accounts);
+    } catch (error: unknown) {
+      setRpcError(getWalletProviderErrorMessage(error, 'Browser wallet connection was not approved'));
     } finally {
       setIsConnectingBrowser(false);
+    }
+  };
+
+  const handleDisconnectWallet = () => {
+    setWalletAddress('');
+    setWalletChainId(null);
+    setIsBrowserWalletConnected(false);
+    clearDisplayedState();
+    onWalletStateChange?.('', false);
+    setRpcError('Disconnected from this application. Your wallet remains under your control; reconnecting requires a new user action.');
+  };
+
+  const handleNetworkSelection = async (networkId: string) => {
+    const nextNetwork = SUPPORTED_EVM_NETWORKS.find((candidate) => candidate.id === networkId);
+    if (!nextNetwork) return;
+    if (!isBrowserWalletConnected) {
+      setSelectedNetwork(nextNetwork);
+      return;
+    }
+
+    const provider = (window as Window & { ethereum?: Eip1193Provider }).ethereum;
+    if (!provider) {
+      setRpcError('The browser wallet is unavailable. Reconnect it before changing the active blockchain network.');
+      return;
+    }
+
+    try {
+      await provider.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: `0x${nextNetwork.chainId.toString(16)}` }] });
+      handleChainChanged(await provider.request({ method: 'eth_chainId' }));
+    } catch (error: unknown) {
+      setRpcError(getWalletProviderErrorMessage(error, `Unable to switch to ${nextNetwork.name}. Add or select this network in your wallet, then retry`));
+    }
+  };
+
+  const handleSubmitNativeSend = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const provider = (window as Window & { ethereum?: Eip1193Provider }).ethereum;
+    if (!provider || !isBrowserWalletConnected || !ethers.isAddress(walletAddress)) {
+      setNativeTransactionStatus({ state: 'failed', message: 'Connect an authorized browser wallet before requesting a transaction.' });
+      return;
+    }
+    if (walletChainId !== selectedNetwork.chainId) {
+      setNativeTransactionStatus({ state: 'failed', message: `Your wallet must be on ${selectedNetwork.name} before a transaction can be requested.` });
+      return;
+    }
+    if (!ethers.isAddress(sendRecipient.trim())) {
+      setNativeTransactionStatus({ state: 'failed', message: 'Enter a valid recipient address for the active network.' });
+      return;
+    }
+
+    let value: bigint;
+    try {
+      value = ethers.parseEther(sendAmount.trim());
+      if (value <= 0n) throw new Error('Amount must be greater than zero.');
+    } catch (error: unknown) {
+      setNativeTransactionStatus({ state: 'failed', message: getWalletProviderErrorMessage(error, 'Enter a valid native-asset amount') });
+      return;
+    }
+
+    setIsSendingNativeAsset(true);
+    setNativeTransactionStatus(null);
+    try {
+      const rawCurrentChainId = await provider.request({ method: 'eth_chainId' });
+      const currentChainId = parseEip1193ChainId(
+        typeof rawCurrentChainId === 'string' || typeof rawCurrentChainId === 'number' || typeof rawCurrentChainId === 'bigint'
+          ? rawCurrentChainId
+          : null
+      );
+      if (currentChainId !== selectedNetwork.chainId) {
+        throw new Error(`Wallet network changed. Switch back to ${selectedNetwork.name} before confirming this transaction.`);
+      }
+      const accounts = await provider.request({ method: 'eth_accounts' });
+      const activeAccount = Array.isArray(accounts) && typeof accounts[0] === 'string' ? accounts[0] : '';
+      if (!activeAccount || activeAccount.toLowerCase() !== walletAddress.toLowerCase()) {
+        throw new Error('The authorized wallet account changed. Review the connected account before sending.');
+      }
+
+      const transactionRequest = {
+        from: walletAddress,
+        to: ethers.getAddress(sendRecipient.trim()),
+        value: `0x${value.toString(16)}`
+      };
+      const response = await provider.request({ method: 'eth_sendTransaction', params: [transactionRequest] });
+      const transactionHash = typeof response === 'string' && ethers.isHexString(response, 32) ? response : '';
+      if (!transactionHash) throw new Error('The wallet did not return a valid transaction hash. The transaction is not marked successful.');
+
+      setNativeTransactionStatus({ state: 'pending', hash: transactionHash, message: 'Transaction broadcast. Waiting for an on-chain confirmation.' });
+      const readProvider = new ethers.JsonRpcProvider(selectedNetwork.rpcUrl);
+      const receipt = await readProvider.waitForTransaction(transactionHash, 1, 120000);
+      if (!receipt) {
+        setNativeTransactionStatus({ state: 'pending', hash: transactionHash, message: 'Transaction remains pending on-chain. Check the explorer for its current status.' });
+        return;
+      }
+      if (receipt.status !== 1) {
+        setNativeTransactionStatus({ state: 'failed', hash: transactionHash, message: 'The blockchain reported that this transaction failed. No success state is recorded.' });
+        return;
+      }
+
+      setNativeTransactionStatus({ state: 'confirmed', hash: transactionHash, message: `Transaction confirmed in block ${receipt.blockNumber}.` });
+      onTransactionSuccess?.(transactionHash);
+      setSendAmount('');
+      setSendRecipient('');
+      setShowNativeSendForm(false);
+      await fetchBlockchainBalances();
+    } catch (error: unknown) {
+      setNativeTransactionStatus({ state: 'failed', message: getWalletProviderErrorMessage(error, 'The wallet did not submit a transaction') });
+    } finally {
+      setIsSendingNativeAsset(false);
+    }
+  };
+
+  const handleSubmitTokenSend = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const provider = (window as Window & { ethereum?: Eip1193Provider }).ethereum;
+    const token = selectedTokenForSend;
+    if (!provider || !token?.contractAddress || !isBrowserWalletConnected || !ethers.isAddress(walletAddress)) {
+      setNativeTransactionStatus({ state: 'failed', message: 'Connect an authorized browser wallet and select a verified ERC-20 balance before requesting a token transfer.' });
+      return;
+    }
+    if (walletChainId !== selectedNetwork.chainId) {
+      setNativeTransactionStatus({ state: 'failed', message: `Your wallet must be on ${selectedNetwork.name} before a token transfer can be requested.` });
+      return;
+    }
+    if (!ethers.isAddress(tokenSendRecipient.trim())) {
+      setNativeTransactionStatus({ state: 'failed', message: 'Enter a valid recipient address for the active network.' });
+      return;
+    }
+
+    let rawAmount: bigint;
+    try {
+      rawAmount = ethers.parseUnits(tokenSendAmount.trim(), token.decimals);
+      if (rawAmount <= 0n) throw new Error('Amount must be greater than zero.');
+      if (rawAmount > BigInt(token.balance)) throw new Error(`The requested amount exceeds the verified ${token.symbol} balance.`);
+    } catch (error: unknown) {
+      setNativeTransactionStatus({ state: 'failed', message: getWalletProviderErrorMessage(error, `Enter a valid ${token.symbol} amount`) });
+      return;
+    }
+
+    setIsSendingToken(true);
+    setNativeTransactionStatus(null);
+    try {
+      const rawCurrentChainId = await provider.request({ method: 'eth_chainId' });
+      const currentChainId = parseEip1193ChainId(
+        typeof rawCurrentChainId === 'string' || typeof rawCurrentChainId === 'number' || typeof rawCurrentChainId === 'bigint'
+          ? rawCurrentChainId
+          : null
+      );
+      if (currentChainId !== selectedNetwork.chainId) {
+        throw new Error(`Wallet network changed. Switch back to ${selectedNetwork.name} before confirming this token transfer.`);
+      }
+      const accounts = await provider.request({ method: 'eth_accounts' });
+      const activeAccount = Array.isArray(accounts) && typeof accounts[0] === 'string' ? accounts[0] : '';
+      if (!activeAccount || activeAccount.toLowerCase() !== walletAddress.toLowerCase()) {
+        throw new Error('The authorized wallet account changed. Review the connected account before sending.');
+      }
+
+      const browserProvider = new ethers.BrowserProvider(provider as any);
+      const signer = await browserProvider.getSigner(walletAddress);
+      const contract = new ethers.Contract(token.contractAddress, ERC20_TRANSFER_ABI, signer);
+      const transaction = await contract.transfer(ethers.getAddress(tokenSendRecipient.trim()), rawAmount);
+      const transactionHash = typeof transaction?.hash === 'string' && ethers.isHexString(transaction.hash, 32) ? transaction.hash : '';
+      if (!transactionHash) throw new Error('The wallet did not return a valid token-transfer hash. The transfer is not marked successful.');
+
+      setNativeTransactionStatus({ state: 'pending', hash: transactionHash, message: `${token.symbol} transfer broadcast. Waiting for an on-chain confirmation.` });
+      const readProvider = new ethers.JsonRpcProvider(selectedNetwork.rpcUrl);
+      const receipt = await readProvider.waitForTransaction(transactionHash, 1, 120000);
+      if (!receipt) {
+        setNativeTransactionStatus({ state: 'pending', hash: transactionHash, message: `${token.symbol} transfer remains pending on-chain. Check the explorer for its current status.` });
+        return;
+      }
+      if (receipt.status !== 1) {
+        setNativeTransactionStatus({ state: 'failed', hash: transactionHash, message: `The blockchain reported that this ${token.symbol} transfer failed. No success state is recorded.` });
+        return;
+      }
+
+      setNativeTransactionStatus({ state: 'confirmed', hash: transactionHash, message: `${token.symbol} transfer confirmed in block ${receipt.blockNumber}.` });
+      onTransactionSuccess?.(transactionHash);
+      setTokenSendAmount('');
+      setTokenSendRecipient('');
+      setShowTokenSendForm(false);
+      setSelectedTokenForSend(null);
+      await fetchBlockchainBalances();
+    } catch (error: unknown) {
+      setNativeTransactionStatus({ state: 'failed', message: getWalletProviderErrorMessage(error, 'The wallet did not submit a token transfer') });
+    } finally {
+      setIsSendingToken(false);
     }
   };
 
@@ -523,10 +736,10 @@ export default function BlockchainWalletComponent({
           <div>
             <div className="flex items-center gap-2">
               <h2 className="text-lg font-bold tracking-tight text-white">Verified Web3 Asset Synchronization</h2>
-              <span className="rounded-full border border-blue-800/60 bg-blue-950/80 px-2.5 py-0.5 text-xs font-semibold text-blue-300">Read-only</span>
+              <span className="rounded-full border border-blue-800/60 bg-blue-950/80 px-2.5 py-0.5 text-xs font-semibold text-blue-300">Non-custodial</span>
             </div>
             <p className="text-xs text-slate-400">
-              {selectedNetwork.name} (Chain #{selectedNetwork.chainId}) · Block {blockNumber === null ? 'unavailable' : blockNumber.toLocaleString()} · Gas {gasPriceGwei === null ? 'unavailable' : `${gasPriceGwei} Gwei`}
+              {selectedNetwork.name} (Chain #{selectedNetwork.chainId}){walletChainId !== null && walletChainId !== selectedNetwork.chainId ? ` · Wallet chain #${walletChainId} mismatch` : ''} · Block {blockNumber === null ? 'unavailable' : blockNumber.toLocaleString()} · Gas {gasPriceGwei === null ? 'unavailable' : `${gasPriceGwei} Gwei`}
             </p>
           </div>
         </div>
@@ -534,24 +747,31 @@ export default function BlockchainWalletComponent({
         <div className="flex flex-wrap items-center gap-2">
           <select
             value={selectedNetwork.id}
-            onChange={(event) => {
-              const network = SUPPORTED_NETWORKS.find((candidate) => candidate.id === event.target.value);
-              if (network) setSelectedNetwork(network);
-            }}
+            onChange={(event) => void handleNetworkSelection(event.target.value)}
             className="cursor-pointer rounded-xl border border-slate-800 bg-slate-950 px-3 py-1.5 text-xs font-semibold text-slate-200 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
-            aria-label="Network for read-only asset synchronization"
+            aria-label="Active network for verified on-chain asset synchronization"
           >
-            {SUPPORTED_NETWORKS.map((network) => <option key={network.id} value={network.id}>{network.name}{network.isTestnet ? ' (Testnet)' : ''}</option>)}
+            {SUPPORTED_EVM_NETWORKS.map((network) => <option key={network.id} value={network.id}>{network.name}{network.isTestnet ? ' (Testnet)' : ''}</option>)}
           </select>
-          <button
-            type="button"
-            onClick={handleConnectBrowserWallet}
-            disabled={isConnectingBrowser || isBrowserWalletConnected}
-            className="flex cursor-pointer items-center gap-1.5 rounded-xl border border-indigo-500 bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-indigo-700 disabled:cursor-default disabled:border-emerald-700 disabled:bg-emerald-950 disabled:text-emerald-300"
-          >
-            <Link className="h-3.5 w-3.5" />
-            {isBrowserWalletConnected ? `Connected (${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)})` : isConnectingBrowser ? 'Connecting…' : 'Connect MetaMask / Web3'}
-          </button>
+          {isBrowserWalletConnected ? (
+            <button
+              type="button"
+              onClick={handleDisconnectWallet}
+              className="flex cursor-pointer items-center gap-1.5 rounded-xl border border-amber-700 bg-amber-950 px-3 py-1.5 text-xs font-semibold text-amber-200 transition hover:bg-amber-900"
+            >
+              Disconnect App
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={handleConnectBrowserWallet}
+              disabled={isConnectingBrowser}
+              className="flex cursor-pointer items-center gap-1.5 rounded-xl border border-indigo-500 bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-indigo-700 disabled:cursor-wait disabled:opacity-70"
+            >
+              <Link className="h-3.5 w-3.5" />
+              {isConnectingBrowser ? 'Connecting…' : 'Connect MetaMask / Web3'}
+            </button>
+          )}
           <button
             type="button"
             onClick={() => void fetchBlockchainBalances()}
@@ -560,6 +780,14 @@ export default function BlockchainWalletComponent({
           >
             <RefreshCw className={`h-3.5 w-3.5 ${isRefreshing ? 'animate-spin text-blue-400' : ''}`} />
             {isRefreshing ? 'Synchronizing…' : 'Sync Balances'}
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowNativeSendForm((current) => !current)}
+            disabled={!isBrowserWalletConnected || walletChainId !== selectedNetwork.chainId || isSendingNativeAsset}
+            className="rounded-xl border border-emerald-700 bg-emerald-950 px-3 py-1.5 text-xs font-semibold text-emerald-200 transition hover:bg-emerald-900 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Send {selectedNetwork.symbol}
           </button>
           {walletAddress && (
             <a
@@ -577,7 +805,7 @@ export default function BlockchainWalletComponent({
       <div className="border-b border-slate-800/80 bg-gradient-to-r from-slate-900 via-blue-950/30 to-slate-900 p-5">
         <div className="grid grid-cols-1 items-center gap-4 md:grid-cols-2">
           <div>
-            <span className="mb-1 block text-xs font-medium uppercase tracking-wider text-slate-400">Connected Web3 Wallet Address</span>
+            <span className="mb-1 block text-xs font-medium uppercase tracking-wider text-slate-400">Connected Web3 Wallet Address{walletChainId !== null ? ` · Chain #${walletChainId}` : ''}</span>
             <div className="flex items-center gap-2 rounded-xl border border-slate-800 bg-slate-950/80 px-3 py-2.5">
               <span className="min-w-0 flex-1 truncate font-mono text-xs font-semibold text-blue-300">{walletAddress || 'No browser wallet connected'}</span>
               <button type="button" onClick={() => void handleCopyAddress()} disabled={!walletAddress} className="cursor-pointer rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-800 hover:text-white disabled:cursor-not-allowed disabled:opacity-40" title="Copy connected wallet address">
@@ -616,6 +844,27 @@ export default function BlockchainWalletComponent({
         {rpcError && (
           <div className="mt-3 flex items-center gap-2 rounded-xl border border-amber-800/50 bg-amber-950/40 p-2.5 text-xs text-amber-300"><AlertCircle className="h-4 w-4 shrink-0" /><span>{rpcError}</span></div>
         )}
+        {nativeTransactionStatus && (
+          <div className={`mt-3 rounded-xl border p-3 text-xs ${nativeTransactionStatus.state === 'confirmed' ? 'border-emerald-800/60 bg-emerald-950/50 text-emerald-200' : nativeTransactionStatus.state === 'failed' ? 'border-rose-800/60 bg-rose-950/50 text-rose-200' : 'border-blue-800/60 bg-blue-950/50 text-blue-200'}`}>
+            <div className="flex items-start gap-2"><AlertCircle className="mt-0.5 h-4 w-4 shrink-0" /><div><div className="font-bold uppercase tracking-wide">Transaction {nativeTransactionStatus.state}</div><div className="mt-1 leading-5">{nativeTransactionStatus.message}</div>{nativeTransactionStatus.hash && <a href={`${selectedNetwork.explorerUrl}/tx/${nativeTransactionStatus.hash}`} target="_blank" rel="noopener noreferrer" className="mt-1 inline-flex items-center gap-1 font-mono text-[11px] underline">{nativeTransactionStatus.hash.slice(0, 12)}…{nativeTransactionStatus.hash.slice(-10)} <ExternalLink className="h-3 w-3" /></a>}</div></div>
+          </div>
+        )}
+        {showNativeSendForm && (
+          <form onSubmit={handleSubmitNativeSend} className="mt-3 space-y-3 rounded-xl border border-emerald-800/60 bg-slate-950 p-4">
+            <div className="flex items-start justify-between gap-3"><div><h3 className="text-xs font-bold text-white">Send {selectedNetwork.symbol} from Your Connected Wallet</h3><p className="mt-1 text-[11px] leading-4 text-slate-400">Your wallet will display the recipient, amount, network, and fees for approval. The application records no success until it receives a valid transaction hash and an on-chain confirmation.</p></div><button type="button" onClick={() => setShowNativeSendForm(false)} disabled={isSendingNativeAsset} className="text-xs text-slate-400 hover:text-white">Close</button></div>
+            <label className="block text-[11px] text-slate-400">Recipient address on {selectedNetwork.name}<input required type="text" autoComplete="off" placeholder="0x…" value={sendRecipient} onChange={(event) => setSendRecipient(event.target.value)} disabled={isSendingNativeAsset} className="mt-1.5 w-full rounded-lg border border-slate-700 bg-slate-900 p-2 font-mono text-xs text-white placeholder:text-slate-600 focus:outline-hidden focus:ring-2 focus:ring-emerald-500 disabled:opacity-60" /></label>
+            <label className="block text-[11px] text-slate-400">Amount of {selectedNetwork.symbol}<input required type="text" inputMode="decimal" autoComplete="off" placeholder="0.00" value={sendAmount} onChange={(event) => setSendAmount(event.target.value)} disabled={isSendingNativeAsset} className="mt-1.5 w-full rounded-lg border border-slate-700 bg-slate-900 p-2 font-mono text-xs text-white placeholder:text-slate-600 focus:outline-hidden focus:ring-2 focus:ring-emerald-500 disabled:opacity-60" /></label>
+            <div className="flex justify-end gap-2"><button type="button" onClick={() => setShowNativeSendForm(false)} disabled={isSendingNativeAsset} className="rounded-lg bg-slate-800 px-3 py-1.5 text-xs font-semibold text-slate-300 hover:bg-slate-700 disabled:opacity-50">Cancel</button><button type="submit" disabled={isSendingNativeAsset} className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-500 disabled:opacity-50">{isSendingNativeAsset ? 'Waiting for Wallet / Chain…' : `Request Wallet Approval`}</button></div>
+          </form>
+        )}
+        {showTokenSendForm && selectedTokenForSend && (
+          <form onSubmit={handleSubmitTokenSend} className="mt-3 space-y-3 rounded-xl border border-emerald-800/60 bg-slate-950 p-4">
+            <div className="flex items-start justify-between gap-3"><div><h3 className="text-xs font-bold text-white">Send Verified {selectedTokenForSend.symbol}</h3><p className="mt-1 text-[11px] leading-4 text-slate-400">The wallet will present a standard ERC-20 transfer for contract {selectedTokenForSend.contractAddress}. Review the contract, recipient, amount, network, and gas in your wallet before approving. This application never requests token approvals in this flow.</p></div><button type="button" onClick={() => { setShowTokenSendForm(false); setSelectedTokenForSend(null); }} disabled={isSendingToken} className="text-xs text-slate-400 hover:text-white">Close</button></div>
+            <label className="block text-[11px] text-slate-400">Recipient address on {selectedNetwork.name}<input required type="text" autoComplete="off" placeholder="0x…" value={tokenSendRecipient} onChange={(event) => setTokenSendRecipient(event.target.value)} disabled={isSendingToken} className="mt-1.5 w-full rounded-lg border border-slate-700 bg-slate-900 p-2 font-mono text-xs text-white placeholder:text-slate-600 focus:outline-hidden focus:ring-2 focus:ring-emerald-500 disabled:opacity-60" /></label>
+            <label className="block text-[11px] text-slate-400">Amount of {selectedTokenForSend.symbol}<input required type="text" inputMode="decimal" autoComplete="off" placeholder="0.00" value={tokenSendAmount} onChange={(event) => setTokenSendAmount(event.target.value)} disabled={isSendingToken} className="mt-1.5 w-full rounded-lg border border-slate-700 bg-slate-900 p-2 font-mono text-xs text-white placeholder:text-slate-600 focus:outline-hidden focus:ring-2 focus:ring-emerald-500 disabled:opacity-60" /></label>
+            <div className="flex justify-end gap-2"><button type="button" onClick={() => { setShowTokenSendForm(false); setSelectedTokenForSend(null); }} disabled={isSendingToken} className="rounded-lg bg-slate-800 px-3 py-1.5 text-xs font-semibold text-slate-300 hover:bg-slate-700 disabled:opacity-50">Cancel</button><button type="submit" disabled={isSendingToken} className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-500 disabled:opacity-50">{isSendingToken ? 'Waiting for Wallet / Chain…' : 'Request Wallet Approval'}</button></div>
+          </form>
+        )}
       </div>
 
       <div className="space-y-4 p-5">
@@ -647,7 +896,7 @@ export default function BlockchainWalletComponent({
         {displayedTokens.map((token) => (
           <article key={token.contractAddress || token.symbol} className="flex flex-col justify-between gap-3 rounded-xl border border-slate-800/80 bg-slate-950/40 p-3.5 sm:flex-row sm:items-center">
             <div className="flex min-w-0 items-center gap-3"><div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-700 bg-slate-800 text-xs font-bold text-slate-300">{token.symbol.slice(0, 3)}</div><div className="min-w-0"><div className="flex items-center gap-2"><span className="truncate text-xs font-bold text-white">{token.name}</span><span className="font-mono text-[10px] font-semibold text-slate-400">{token.symbol}</span></div><div className="mt-1 flex flex-wrap items-center gap-1.5 text-[10px] text-slate-400"><span>{token.unitPriceUsd === null ? 'Live price unavailable' : `$${token.unitPriceUsd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 })} / unit`}</span>{token.contractAddress && <><span>·</span><a href={`${selectedNetwork.explorerUrl}/token/${token.contractAddress}`} target="_blank" rel="noopener noreferrer" className="flex items-center gap-0.5 text-blue-400 hover:underline"><span>{token.contractAddress.slice(0, 6)}…{token.contractAddress.slice(-4)}</span><ExternalLink className="h-2.5 w-2.5" /></a></>}</div></div></div>
-            <div className="text-right"><div className="font-mono text-xs font-bold text-white">{token.balanceFormatted} {token.symbol}</div><div className="text-[11px] text-slate-400">{token.fiatValueUsd === null ? 'Live price unavailable' : `≈ $${token.fiatValueUsd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD`}</div></div>
+            <div className="flex shrink-0 flex-col items-end gap-2 text-right"><div><div className="font-mono text-xs font-bold text-white">{token.balanceFormatted} {token.symbol}</div><div className="text-[11px] text-slate-400">{token.fiatValueUsd === null ? 'Live price unavailable' : `≈ $${token.fiatValueUsd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD`}</div></div>{token.contractAddress && <button type="button" onClick={() => { setSelectedTokenForSend(token); setTokenSendRecipient(''); setTokenSendAmount(''); setShowNativeSendForm(false); setShowTokenSendForm(true); setNativeTransactionStatus(null); }} disabled={!isBrowserWalletConnected || walletChainId !== selectedNetwork.chainId || isSendingToken} className="rounded-lg border border-emerald-800 bg-emerald-950 px-2.5 py-1 text-[11px] font-semibold text-emerald-200 hover:bg-emerald-900 disabled:cursor-not-allowed disabled:opacity-50">Send {token.symbol}</button>}</div>
           </article>
         ))}
 

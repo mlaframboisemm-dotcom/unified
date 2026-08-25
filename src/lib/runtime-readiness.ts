@@ -44,20 +44,11 @@ export async function buildRuntimeReadinessReport(env: NodeJS.ProcessEnv): Promi
   if (!env.JWT_SECRET || env.JWT_SECRET.trim().length < 32) {
     missingConfig.push('JWT_SECRET(>=32 chars)');
   }
-  if (!env.MARSHALL_WALLET_PRIVATE_KEY) {
-    missingConfig.push('MARSHALL_WALLET_PRIVATE_KEY');
-  }
-  if (!hasExchangeProviderConfigured(env)) {
-    missingConfig.push('Coinbase or Kraken exchange API credentials');
-  }
   if (!hasEmailProviderConfigured(env)) {
     missingConfig.push('MAILERSEND_API_KEY or SMTP credentials');
   }
   if (!env.SOVEREIGN_ADMIN_EMAILS || !env.SOVEREIGN_ADMIN_EMAILS.trim()) {
     missingConfig.push('SOVEREIGN_ADMIN_EMAILS');
-  }
-  if (!hasAtmProviderConfigured(env)) {
-    missingConfig.push('ATM provider configuration (disabled until explicitly enabled)');
   }
 
   const enforcementState = getCriticalOperationsEnforcementState();
@@ -73,12 +64,16 @@ export async function buildRuntimeReadinessReport(env: NodeJS.ProcessEnv): Promi
       status: env.JWT_SECRET && env.JWT_SECRET.trim().length >= 32 ? 'configured' : 'missing'
     },
     {
-      name: 'MARSHALL_WALLET_PRIVATE_KEY',
-      status: env.MARSHALL_WALLET_PRIVATE_KEY ? 'configured' : 'missing'
+      name: 'Non-custodial wallet signing',
+      status: 'safe',
+      details: 'Transactions must be signed by a connected user-owned wallet. No server-held private key is required or accepted for wallet execution.'
     },
     {
       name: 'Exchange credentials',
-      status: hasExchangeProviderConfigured(env) ? 'configured' : 'missing'
+      status: hasExchangeProviderConfigured(env) ? 'configured' : 'safe',
+      details: hasExchangeProviderConfigured(env)
+        ? 'An exchange provider is configured for the explicitly supported exchange workflow.'
+        : 'No exchange provider is configured; exchange routes must fail closed.'
     },
     {
       name: 'Email credentials',
@@ -90,7 +85,7 @@ export async function buildRuntimeReadinessReport(env: NodeJS.ProcessEnv): Promi
     },
     {
       name: 'Bitcoin ATM provider',
-      status: hasAtmProviderConfigured(env) ? 'configured' : 'missing',
+      status: hasAtmProviderConfigured(env) ? 'configured' : 'safe',
       details: hasAtmProviderConfigured(env)
         ? 'Live ATM operations are explicitly enabled with provider credentials and webhook verification.'
         : 'ATM live operations are disabled until an operator API, merchant ID, webhook secret, and explicit enablement are configured.'

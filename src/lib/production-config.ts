@@ -23,9 +23,9 @@ function validateProviderSecrets(env: NodeJS.ProcessEnv, operation: ProductionSe
   }
 
   if (operation === 'wallet') {
-    return !isStrongSecret(env.MARSHALL_WALLET_PRIVATE_KEY, 32)
-      ? ['MARSHALL_WALLET_PRIVATE_KEY is required for wallet operations in production.']
-      : [];
+    // Browser-wallet signing is user-authorized and non-custodial. A production wallet flow
+    // must never depend on a server-held private key; RPC availability is verified at runtime.
+    return [];
   }
 
   if (operation === 'exchange') {

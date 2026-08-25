@@ -70,11 +70,11 @@ if (!isProduction) {
 const requiredChecks = [
   { name: 'SOVEREIGN_ENCRYPTION_KEY', minLength: 32 },
   { name: 'JWT_SECRET', minLength: 32 },
-  { name: 'SOVEREIGN_ADMIN_EMAILS', minLength: 3 },
-  { name: 'COINBASE_API_KEY_ID', minLength: 8 },
-  { name: 'COINBASE_API_SECRET_RAW', minLength: 8 },
-  { name: 'MARSHALL_WALLET_PRIVATE_KEY', minLength: 32 }
+  { name: 'SOVEREIGN_ADMIN_EMAILS', minLength: 3 }
 ];
+
+// Wallet execution is non-custodial and therefore must not require a server-held private key.
+// Exchange credentials remain optional because routes must fail closed until a provider is configured.
 
 const errors = [];
 for (const check of requiredChecks) {
