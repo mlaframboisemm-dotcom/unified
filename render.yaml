@@ -11,6 +11,8 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      - key: APP_URL
+        value: https://sovereigns-pay-direct.onrender.com
       - key: WISE_PROFILE_ID
         value: "101924589"
       # Durable application state is deliberately stored on Render's mounted disk,

@@ -79,7 +79,7 @@ export function verifyPassword(password: string, salt: string, expectedHashHex: 
     return false;
   }
 
-  const candidateIterations = [100000, 10000, 1000];
+  const candidateIterations = [310000, 100000, 10000, 1000];
   const expected = Buffer.from(normalizedHash, 'hex');
   if (expected.length === 0) {
     return false;

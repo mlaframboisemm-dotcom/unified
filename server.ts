@@ -2868,20 +2868,21 @@ app.get('/api/marshall/config', requireAuth, requireMfa, (req: any, res: any) =>
 const GATEWAY_FILE = path.join(process.cwd(), 'routing_gateway.json');
 
 function readGatewayConfig() {
-  if (fs.existsSync(GATEWAY_FILE)) {
-    try {
-      return JSON.parse(fs.readFileSync(GATEWAY_FILE, 'utf-8'));
-    } catch (e) {
-      logSystemEvent('ERROR', { message: 'Failed to parse gateway file, returning default', error: e });
-    }
-  }
-  return {
+  const defaults = {
     phoneNumber: '905-718-4275',
     contactEmail: 'mlaframboisemm@gmail.com',
     routeAlertsToPhone: true,
     routeTransfersToPhone: true,
     routeEmailsEnabled: true
   };
+  if (fs.existsSync(GATEWAY_FILE)) {
+    try {
+      return { ...defaults, ...JSON.parse(fs.readFileSync(GATEWAY_FILE, 'utf-8')) };
+    } catch (e) {
+      logSystemEvent('ERROR', { message: 'Failed to parse gateway file, returning default', error: e });
+    }
+  }
+  return defaults;
 }
 
 function writeGatewayConfig(config: any) {
@@ -4337,7 +4338,7 @@ async function lockAccountToIdentity(user: any, source: 'register' | 'login') {
 }
 
 // Mail Delivery Core with External Verification
-async function sendETransferEmail(email: string, subject: string, htmlContent: string) {
+async function sendETransferEmail(email: string, subject: string, htmlContent: string): Promise<boolean> {
   const gateway = readGatewayConfig();
 
   const targetEmail = email;
@@ -4360,7 +4361,7 @@ async function sendETransferEmail(email: string, subject: string, htmlContent: s
   // Enforce dynamic email delivery toggling according to gateway routing config
   if (!gateway.routeEmailsEnabled) {
     logSystemEvent('WARNING', { message: 'Email delivery skipped: routeEmailsEnabled is disabled in gateway config' });
-    return;
+    return false;
   }
 
   // In production, fail fast if no provider is configured when emails are enabled
@@ -4370,7 +4371,7 @@ async function sendETransferEmail(email: string, subject: string, htmlContent: s
     if (!smtpConfigured && !mailerConfigured) {
       const errMsg = 'Email delivery is enabled but no MailerSend or SMTP provider is configured for production. Skipping email transmission.';
       logSystemEvent('WARNING', { message: errMsg, environment: 'production' });
-      return;
+      return false;
     }
   }
 
@@ -4415,7 +4416,7 @@ async function sendETransferEmail(email: string, subject: string, htmlContent: s
           logProviderEvent('mailersend', 'ERROR', { message: 'Email verification failed (non-critical)', error: verifyErr });
         }
       }
-      return; // Succeeded! Skip SMTP fallback.
+      return true; // Succeeded! Skip SMTP fallback.
     } catch (err: any) {
       logProviderEvent('mailersend', 'ERROR', { message: 'MailerSend transmission failed', error: err.message || err });
       logProviderEvent('mailersend', 'TIMEOUT', { message: 'Falling back to SMTP relay' });
@@ -4445,12 +4446,14 @@ async function sendETransferEmail(email: string, subject: string, htmlContent: s
         html: htmlContent
       });
       logProviderEvent('smtp', 'CONNECTED', { message: 'Email successfully sent via SMTP', recipient: targetEmail });
+      return true;
     } catch (err) {
       logProviderEvent('smtp', 'ERROR', { message: 'SMTP transmission failed', error: err, recipient: targetEmail });
     }
   } else {
     logProviderEvent('smtp', 'DISCONNECTED', { message: 'SMTP fallback skipped: credentials not configured', recipient: targetEmail });
   }
+  return false;
 }
 
 /**
@@ -6681,7 +6684,10 @@ app.post('/api/auth/request-password-reset', async (req, res) => {
       '<p style="word-break:break-all;color:#334155;">' + resetUrl + '</p>' +
       '<p>If you did not request this, you can ignore this email.</p>' +
       '</div>';
-    await sendETransferEmail(email, subject, html);
+    const delivered = await sendETransferEmail(email, subject, html);
+    if (!delivered) {
+      logSystemEvent('WARNING', { message: 'Password reset requested but no email provider delivered the reset link.' });
+    }
     db.execute(
       'INSERT INTO audit_logs (id, user_id, action, timestamp, ip_address, status, details) VALUES (?, ?, ?, ?, ?, ?, ?)',
       [`audit_${crypto.randomUUID()}`, user.id, 'PASSWORD_RESET_REQUESTED', Date.now(), String(req.ip || 'unknown'), 'success', 'Password reset link issued']
