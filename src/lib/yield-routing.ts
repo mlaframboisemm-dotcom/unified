@@ -1,4 +1,4 @@
-import { ethers } from 'ethers';
+import * as ethers from 'ethers';
 
 export type YieldAddressType = 'evm' | 'bitcoin' | 'solana' | 'provider-managed' | 'other';
 export type YieldCollectionMode = 'manual' | 'automatic';

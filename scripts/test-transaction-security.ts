@@ -5,8 +5,9 @@ import net from 'net';
 import crypto from 'crypto';
 
 const repoRoot = process.cwd();
-const dbPath = path.join(repoRoot, 'src', 'db', 'database.json');
-const verificationPath = path.join(repoRoot, 'src', 'db', 'email_verifications.json');
+const runtimeDataDir = path.join(repoRoot, 'data');
+const dbPath = path.join(runtimeDataDir, 'transaction-security-database.json');
+const verificationPath = path.join(runtimeDataDir, 'email_verifications.json');
 const nodeExecPath = process.execPath;
 const tsxCliPath = path.join(repoRoot, 'node_modules', 'tsx', 'dist', 'cli.mjs');
 
@@ -87,6 +88,7 @@ async function main() {
   try {
     const port = await getAvailablePort();
 
+    fs.mkdirSync(runtimeDataDir, { recursive: true });
     fs.writeFileSync(
       dbPath,
       JSON.stringify({ users: [], wallets: [], transactions: [], auditLogs: [] }, null, 2),
@@ -104,7 +106,8 @@ async function main() {
         PORT: String(port),
         JWT_SECRET: '12345678901234567890123456789012',
         SOVEREIGN_ENCRYPTION_KEY: 'abcdefghijklmnopqrstuvwxyzABCDEF',
-        SOVEREIGN_ADMIN_EMAILS: 'tx@test.local'
+        SOVEREIGN_ADMIN_EMAILS: 'tx@test.local',
+        SOVEREIGN_DB_FILE_PATH: dbPath
       }
     });
 

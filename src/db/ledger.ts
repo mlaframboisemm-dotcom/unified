@@ -145,8 +145,12 @@ export interface LedgerIntegrityReport {
   warnings: LedgerIntegrityFinding[];
 }
 
-const configuredDbFilePath = String(process.env.SOVEREIGN_DB_FILE_PATH || '').trim();
-const defaultDbFilePath = path.join(process.cwd(), 'src', 'db', 'database.json');
+const configuredDbFilePath = String(
+  process.env.SOVEREIGN_DB_FILE_PATH || process.env.LEDGER_JSON_DB_PATH || ''
+).trim();
+// Runtime state must never be written into the source tree. Render supplies a
+// persistent disk at /data in production; local development uses an ignored data directory.
+const defaultDbFilePath = path.join(process.cwd(), 'data', 'database.json');
 const DB_FILE_PATH = configuredDbFilePath
   ? path.resolve(process.cwd(), configuredDbFilePath)
   : defaultDbFilePath;
@@ -196,14 +200,14 @@ class RelationalLedgerDatabase {
       this.state = this.normalizeState(JSON.parse(fileContent));
       this.enforceBootstrapEnvGuard();
       this.maybeBootstrapAdminUser();
-      this.maybeBootstrapUserMlaframboise();
+      this.initializeConfiguredOwnerWallets();
       this.lastLoadedAt = fs.statSync(DB_FILE_PATH).mtimeMs;
       return;
     }
 
     this.initializeEmptyState();
     this.maybeBootstrapAdminUser();
-    this.maybeBootstrapUserMlaframboise();
+    this.initializeConfiguredOwnerWallets();
     this.save();
   }
 
@@ -422,7 +426,7 @@ class RelationalLedgerDatabase {
     this.save();
   }
 
-  private maybeBootstrapUserMlaframboise() {
+  private initializeConfiguredOwnerWallets() {
     const configuredOwnerId = String(process.env.OWNER_OPEN_ID || '').trim();
     const configuredOwnerEmail = String(process.env.OWNER_EMAIL || process.env.BOOTSTRAP_ADMIN_EMAIL || '').trim().toLowerCase();
     if (!configuredOwnerId && !configuredOwnerEmail) {

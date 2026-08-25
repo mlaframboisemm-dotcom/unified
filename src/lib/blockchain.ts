@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { ethers } from 'ethers';
+import * as ethers from 'ethers';
 import { ChainType, ChainConfig, BlockchainTransaction } from '../types';
 
 // Standard Base58 alphabet

@@ -353,7 +353,7 @@ export default function BitcoinAtmHub({
               <button type="button" onClick={() => setOrderReview(null)} className="text-slate-400 hover:text-white" aria-label="Dismiss payment request">Dismiss</button>
             </div>
             <div className="mt-3 grid gap-2 sm:grid-cols-2">
-              <div><span className="text-slate-500">Amount</span><div className="font-mono font-bold text-white">{orderReview.amountBtc.toFixed(8)} BTC</div></div>
+              <div><span className="text-slate-500">Amount</span><div className="font-mono font-bold text-white">{orderReview.amount.toFixed(8)} BTC</div></div>
               <div><span className="text-slate-500">Destination</span><div className="break-all font-mono text-amber-200">{orderReview.address}</div></div>
             </div>
             {orderReview.memo && <p className="mt-2 text-slate-400">Memo: {orderReview.memo}</p>}

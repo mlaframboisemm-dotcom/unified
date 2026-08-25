@@ -4,7 +4,7 @@
  * Universal Token, Network Recognition, Gas Calculation & Immutable Ledger Engine
  */
 
-import { ethers } from 'ethers';
+import * as ethers from 'ethers';
 
 export interface TokenNetworkInfo {
   symbol: string;

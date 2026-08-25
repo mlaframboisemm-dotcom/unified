@@ -1,6 +1,10 @@
 import crypto from 'crypto';
 import * as bitcoin from 'bitcoinjs-lib';
+import { ECPairFactory } from 'ecpair';
+import * as ecc from 'tiny-secp256k1';
 import QRCode from 'qrcode';
+
+const ECPair = ECPairFactory(ecc);
 
 export interface BitcoinInvoiceRecord {
   orderId: string;
@@ -68,7 +72,7 @@ export async function createBitcoinInvoice(amountBtc: number, addressOverride?: 
   }
 
   const network = bitcoin.networks.bitcoin;
-  const keyPair = bitcoin.ECPair.makeRandom({ network });
+  const keyPair = ECPair.makeRandom({ network });
   const payment = bitcoin.payments.p2wpkh({
     pubkey: keyPair.publicKey,
     network

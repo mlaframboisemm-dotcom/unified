@@ -2051,7 +2051,8 @@ export default function App() {
       }
 
       if (!broadcastSuccess) {
-        txHash = `0x${Math.random().toString(16).substring(2, 14)}${Date.now().toString(16)}`;
+        showToast('The transaction was not broadcast. Your local balance has not been changed.', 'error');
+        return;
       }
 
       setHoldings((prev) =>

@@ -13,8 +13,12 @@ services:
         value: production
       - key: WISE_PROFILE_ID
         value: "101924589"
-      - key: LEDGER_DB_PATH
-        value: "/data/ledger.sqlite"
+      # Durable application state is deliberately stored on Render's mounted disk,
+      # not in the source tree or a tracked database artifact.
+      - key: SOVEREIGN_DB_FILE_PATH
+        value: "/data/database.json"
+      - key: SOVEREIGN_LEDGER_PATH
+        value: "/data/ledger_db.json"
       - key: RENDER_SERVICE_ID
         value: "srv-d99sus57vvec7386p2p0"
     disk:

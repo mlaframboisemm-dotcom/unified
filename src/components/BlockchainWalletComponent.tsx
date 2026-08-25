@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { ethers } from 'ethers';
+import * as ethers from 'ethers';
 import {
   AlertCircle, ArrowDownLeft, ArrowRightLeft, ArrowUpRight, Check, Coins, Copy,
   ExternalLink, Eye, EyeOff, Fuel, Key, Link, Lock, PlusCircle, QrCode, RefreshCw,

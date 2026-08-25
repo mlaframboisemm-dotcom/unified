@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import { getBlockchainBalance } from '../lib/blockchain';
-import { ethers } from 'ethers';
+import * as ethers from 'ethers';
 import { LedgerBalanceD3Chart } from './LedgerBalanceD3Chart';
 import { SettlementRegistryTable } from './SettlementRegistryTable';
 

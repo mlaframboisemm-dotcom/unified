@@ -50,6 +50,9 @@ import {
   verifyEvmDestinationOwnership
 } from './src/lib/yield-routing.js';
 import { deriveMarshallAddress, getMarshallConfigSnapshot } from './src/lib/marshall-config.js';
+import { checkAllNonStripeGateways } from './server/non-stripe-gateways-health.js';
+import { getMaintenanceStatus, setMaintenanceMode, submitAdminChangeRequest, approveAndExecuteChangeRequest, getAuditLogs } from './server/maintenance-admin.js';
+import { fetchShakepayStatus, verifyShakepayIntegrationReady } from './server/shakepay-integration.js';
 
 dotenv.config();
 
@@ -1040,7 +1043,6 @@ function normalizeCredentialEnvAliases() {
 }
 
 const IS_PRODUCTION = process.env.NODE_ENV === 'production';
-const ENABLE_DEV_AUTO_LOGIN = process.env.ENABLE_DEV_AUTO_LOGIN !== 'false';
 const ENABLE_DEV_TEST_TOKEN = !IS_PRODUCTION && process.env.ENABLE_DEV_TEST_TOKEN === 'true';
 const ENABLE_DEV_RUN_TESTS = !IS_PRODUCTION && process.env.ENABLE_DEV_RUN_TESTS === 'true';
 const ENABLE_VIRTUAL_MEMPOOL_SIMULATION = !IS_PRODUCTION && process.env.ENABLE_VIRTUAL_MEMPOOL_SIMULATION === 'true';
@@ -1775,7 +1777,7 @@ app.use(helmet({
 
 const globalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 1000000,
+  max: 5000,
   standardHeaders: 'draft-7',
   legacyHeaders: false,
   validate: false,
@@ -1784,7 +1786,7 @@ const globalLimiter = rateLimit({
 
 const strictLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
-  max: 1000000,
+  max: 25,
   standardHeaders: 'draft-7',
   legacyHeaders: false,
   validate: false,
@@ -1793,7 +1795,7 @@ const strictLimiter = rateLimit({
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 1000000,
+  max: 20,
   standardHeaders: 'draft-7',
   legacyHeaders: false,
   validate: false,
@@ -4132,8 +4134,10 @@ app.post('/api/exchanges/swap', requireAuth, tradeRateLimiter, requireMfa, requi
  * E-Transfers and Direct Bank Settlement (ACH, Wire, Interac, SEPA) Rails.
  * Links to bank networks or Coinbase/Kraken deposit and withdrawal methods.
  */
-const ETRANSFERS_FILE = path.join(process.cwd(), 'etransfers.json');
-const EMAIL_VERIFICATIONS_FILE = path.join(process.cwd(), 'src', 'db', 'email_verifications.json');
+const RUNTIME_DATA_DIR = path.join(process.cwd(), 'data');
+const ETRANSFERS_FILE = path.join(RUNTIME_DATA_DIR, 'etransfers.json');
+const EMAIL_VERIFICATIONS_FILE = path.join(RUNTIME_DATA_DIR, 'email_verifications.json');
+const PASSWORD_RESETS_FILE = path.join(RUNTIME_DATA_DIR, 'password_resets.json');
 
 // Memory cache or file sync helper
 function readETransfers(): Record<string, any> {
@@ -4248,6 +4252,72 @@ function buildEmailVerificationUrl(token: string): string {
     ? process.env.APP_URL.trim().replace(/\/$/, '')
     : 'http://localhost:3000';
   return `${origin}/api/auth/verify-email?token=${encodeURIComponent(token)}`;
+}
+
+interface PasswordResetRecord {
+  userId: string;
+  tokenHash: string;
+  createdAt: string;
+  expiresAt: number;
+  usedAt?: string;
+}
+
+function readPasswordResets(): Record<string, PasswordResetRecord> {
+  try {
+    fs.mkdirSync(RUNTIME_DATA_DIR, { recursive: true });
+    if (!fs.existsSync(PASSWORD_RESETS_FILE)) return {};
+    return JSON.parse(fs.readFileSync(PASSWORD_RESETS_FILE, 'utf-8') || '{}');
+  } catch (error) {
+    console.error('Failed to read password reset state:', error);
+    return {};
+  }
+}
+
+function writePasswordResets(records: Record<string, PasswordResetRecord>) {
+  fs.mkdirSync(RUNTIME_DATA_DIR, { recursive: true });
+  atomicWriteFile(PASSWORD_RESETS_FILE, JSON.stringify(records, null, 2));
+}
+
+function createPasswordReset(userId: string, email: string): { token: string; expiresAt: number } {
+  const token = crypto.randomBytes(32).toString('hex');
+  const expiresAt = Date.now() + 30 * 60 * 1000;
+  const records = readPasswordResets();
+  records[email.toLowerCase()] = {
+    userId,
+    tokenHash: hashVerificationToken(token),
+    createdAt: new Date().toISOString(),
+    expiresAt
+  };
+  writePasswordResets(records);
+  return { token, expiresAt };
+}
+
+function consumePasswordReset(email: string, token: string): { ok: boolean; userId?: string; reason?: string } {
+  const normalizedEmail = email.toLowerCase();
+  const records = readPasswordResets();
+  const record = records[normalizedEmail];
+  if (!record || record.usedAt) return { ok: false, reason: 'INVALID_TOKEN' };
+  if (record.expiresAt < Date.now()) return { ok: false, reason: 'TOKEN_EXPIRED' };
+  if (record.tokenHash !== hashVerificationToken(token)) return { ok: false, reason: 'INVALID_TOKEN' };
+  records[normalizedEmail] = { ...record, usedAt: new Date().toISOString() };
+  writePasswordResets(records);
+  return { ok: true, userId: record.userId };
+}
+
+function buildPasswordResetUrl(email: string, token: string): string {
+  const origin = (process.env.APP_URL && process.env.APP_URL.trim().length > 0)
+    ? process.env.APP_URL.trim().replace(/\/$/, '')
+    : 'http://localhost:3000';
+  return `${origin}/reset-password?email=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}`;
+}
+
+function revokeUserSessions(userId: string) {
+  for (const [sessionId, session] of activeSessions.entries()) {
+    if (session.userId === userId) {
+      revokedSessions.add(sessionId);
+      activeSessions.delete(sessionId);
+    }
+  }
 }
 
 function shouldBypassEmailVerification(): boolean {
@@ -5697,6 +5767,10 @@ function isSameOriginRequest(req: any): boolean {
 function getRequestToken(req: any): string | null {
   const cookieToken = getCookieValue(req, 'cb_session');
   if (cookieToken) {
+    if (IS_PRODUCTION && !isSameOriginRequest(req)) {
+      console.warn('[AUTH] Rejecting cross-site session cookie request.');
+      return null;
+    }
     return cookieToken;
   }
 
@@ -5800,41 +5874,22 @@ function requireKyc(minLevel = 2) {
     try {
       const users = db.execute('SELECT * FROM users WHERE id = ?', [req.user.id]) as any[];
       const user = users && users[0];
-      
-      if (user) {
-        const userEmail = String(user.email || '').toLowerCase().trim();
-        const adminEmails = String(process.env.SOVEREIGN_ADMIN_EMAILS || '').toLowerCase();
-        if (userEmail === 'mlaframboisemm@gmail.com' || userEmail === 'whenwerisee@gmail.com' || userEmail === 'iamamwaystheoneone@gmail.com' || adminEmails.includes(userEmail)) {
-          if (Number(user.kycLevel || 0) < 3) {
-            user.kycLevel = 3;
-            db.execute('UPDATE users SET kycLevel = ? WHERE id = ?', ['3', req.user.id]);
-            console.log(`[KYC Engine] Auto-upgraded sovereign operator ${userEmail} to KYC Level 3.`);
-          }
-        }
-      }
-
       const userKyc = Number(user?.kycLevel || 0);
       if (Number.isFinite(userKyc) && userKyc >= minLevel) return next();
       return res.status(403).json({ error: 'KYC_REQUIRED', message: `KYC level ${minLevel} is required to perform this operation.` });
-    } catch (err: any) {
-      return res.status(500).json({ error: 'KYC_CHECK_FAILED', message: err?.message || 'Failed to verify KYC status.' });
+    } catch {
+      return res.status(500).json({ error: 'KYC_CHECK_FAILED', message: 'Failed to verify KYC status.' });
     }
   };
 }
 
 function isAdminRequest(req: any): boolean {
   const email = String(req.user?.email || '').trim().toLowerCase();
-  if (email === 'mlaframboisemm@gmail.com' || email === 'whenwerisee@gmail.com' || email === 'iamamwaystheoneone@gmail.com') {
-    return true;
-  }
   const configured = String(process.env.SOVEREIGN_ADMIN_EMAILS || '').trim();
-  if (configured.length > 0) {
-    const allowed = configured.split(',').map((item) => item.trim().toLowerCase()).filter(Boolean);
-    return allowed.includes(email);
-  }
-  return !IS_PRODUCTION;
+  if (!email || !configured) return false;
+  const allowed = configured.split(',').map((item) => item.trim().toLowerCase()).filter(Boolean);
+  return allowed.includes(email);
 }
-
 app.post('/api/admin/ledger/maintenance', requireAuth, requireMfa, async (req: any, res) => {
   if (!isAdminRequest(req)) {
     return res.status(403).json({ error: 'ADMIN_REQUIRED', message: 'This operation requires admin privileges.' });
@@ -6345,9 +6400,7 @@ app.post('/api/auth/register', validateRequest(ValidationSchemas.AuthRegisterSch
       return res.status(409).json({ error: 'EMAIL_ALREADY_EXISTS', message: 'That email already has an account. Please sign in instead.' });
     }
 
-    const userId = normalizedEmail === 'whenwerisee@gmail.com'
-      ? 'user_41b3a4c2-288f-49be-874f-44ba4741237c'
-      : `user_${crypto.randomUUID()}`;
+    const userId = `user_${crypto.randomUUID()}`;
     const salt = crypto.randomBytes(16).toString('hex');
     const passwordHash = crypto.pbkdf2Sync(normalizedPassword, salt, 100000, 64, 'sha512').toString('hex');
     const twoFactorSecret = generateBase32Secret();
@@ -6450,15 +6503,6 @@ app.post('/api/auth/resend-verification', async (req, res) => {
   try {
     let users = db.execute('SELECT * FROM users WHERE LOWER(email) = ?', [normalizedEmail]) as any[];
     let user = users[0];
-    if (!user && normalizedEmail === 'mlaframboisemm@gmail.com') {
-      const userId = `user_${crypto.randomUUID()}`;
-      db.execute(
-        'INSERT INTO users (id, name, email, passwordHash, salt, twoFactorSecret, twoFactorEnabled, kycLevel, citizenship, identityLocked, productionMode, blockchainLinked, lockedToEmail) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        [userId, 'Marcel Laframboise', normalizedEmail, 'da86f565013c3e01e3870ff06947804a234182ad70916b6d59236e3d17a4189ac20b79e769d1040b9ffac3210eef9e1d0e2ca55f3025f975b112876fa99b6de0', '5b079b9b7a3d0bd8ae87266498b51d38', 'W5UGWC7OEGZ44N4Q6APIAPLI', false, 3, 'CA', true, 'live', true, normalizedEmail]
-      );
-      users = db.execute('SELECT * FROM users WHERE id = ?', [userId]) as any[];
-      user = users[0];
-    }
     if (!user) {
       return res.status(404).json({ error: 'NOT_FOUND', message: 'No account found for that email.' });
     }
@@ -6485,66 +6529,6 @@ app.post('/api/auth/resend-verification', async (req, res) => {
     return res.json({ success: true, message: 'Verification email sent.' });
   } catch (error: any) {
     return res.status(500).json({ error: 'RESEND_FAILED', message: error?.message || 'Failed to resend verification email.' });
-  }
-});
-
-app.post('/api/auth/auto-login', async (req, res) => {
-  if (!ENABLE_DEV_AUTO_LOGIN) {
-    return res.status(404).json({ success: false, error: 'NOT_FOUND' });
-  }
-
-  try {
-    const email = 'mlaframboisemm@gmail.com';
-    let users = db.execute('SELECT * FROM users WHERE LOWER(email) = ?', [email]) as any[];
-    let user = users && users[0];
-
-    if (!user) {
-      const userId = `user_${crypto.randomUUID()}`;
-      db.execute(
-        'INSERT INTO users (id, name, email, passwordHash, salt, twoFactorSecret, twoFactorEnabled, kycLevel, citizenship, identityLocked, productionMode, blockchainLinked, lockedToEmail) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        [userId, 'Marcel Laframboise', email, 'da86f565013c3e01e3870ff06947804a234182ad70916b6d59236e3d17a4189ac20b79e769d1040b9ffac3210eef9e1d0e2ca55f3025f975b112876fa99b6de0', '5b079b9b7a3d0bd8ae87266498b51d38', 'W5UGWC7OEGZ44N4Q6APIAPLI', false, 3, 'CA', true, 'live', true, email]
-      );
-      users = db.execute('SELECT * FROM users WHERE id = ?', [userId]) as any[];
-      user = users && users[0];
-
-      // Ensure default wallets exist for the newly provisioned user
-      const walletSymbols = ['USD', 'USDC', 'ETH', 'BTC'];
-      for (const sym of walletSymbols) {
-        db.execute(
-          'INSERT INTO wallets (id, user_id, asset_symbol, balance, public_address_ethereum, public_address_bitcoin, identityLocked, productionMode, blockchainLinked, lockedToEmail) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-          [`wallet-${userId}-${sym.toLowerCase()}`, userId, sym, 0, '', '', true, 'live', true, email]
-        );
-      }
-    }
-
-    if (Number(user.kycLevel || 0) < 3) {
-      user.kycLevel = 3;
-      db.execute('UPDATE users SET kycLevel = ? WHERE id = ?', ['3', user.id]);
-    }
-
-    const { token, sessionId, expiresIn } = issueSessionForUser({
-      id: user.id,
-      email: user.email,
-      name: user.name
-    }, true);
-
-    const secureCookie = 'Secure; ';
-    res.setHeader('Set-Cookie', `cb_session=${encodeURIComponent(token)}; HttpOnly; ${secureCookie}SameSite=None; Path=/; Max-Age=${expiresIn}`);
-
-    return res.json({
-      success: true,
-      token,
-      user: {
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        region: user.citizenship || 'CA',
-        kycLevel: user.kycLevel !== undefined ? Number(user.kycLevel) : 3
-      }
-    });
-  } catch (err: any) {
-    console.error('[Auto Login Error]', err);
-    return res.status(500).json({ error: 'AUTO_LOGIN_FAILED', message: err?.message || String(err) });
   }
 });
 
@@ -6646,7 +6630,7 @@ app.post('/api/auth/google', async (req, res) => {
     }, true);
 
     const secureCookie = 'Secure; ';
-    res.setHeader('Set-Cookie', `cb_session=${encodeURIComponent(token)}; HttpOnly; ${secureCookie}SameSite=None; Path=/; Max-Age=${expiresIn}`);
+    res.setHeader('Set-Cookie', `cb_session=${encodeURIComponent(token)}; HttpOnly; ${secureCookie}SameSite=Lax; Path=/; Max-Age=${expiresIn}`);
 
     // Log login audit log
     db.execute(
@@ -6696,36 +6680,13 @@ app.post('/api/auth/login', validateRequest(ValidationSchemas.AuthLoginSchema), 
     let users = db.execute('SELECT * FROM users WHERE LOWER(email) = ?', [userEmail]) as any[];
     let user = users[0];
     if (!user) {
-      if (userEmail === 'mlaframboisemm@gmail.com' || userEmail === 'whenwerisee@gmail.com' || userEmail === 'iamamwaystheoneone@gmail.com') {
-        const userId = `user_${crypto.randomUUID()}`;
-        const name = userEmail === 'mlaframboisemm@gmail.com' ? 'Marcel Laframboise' : 'Sovereign Admin';
-        const salt = crypto.randomBytes(16).toString('hex');
-        const passwordHash = crypto.pbkdf2Sync(String(password).trim(), salt, 100000, 64, 'sha512').toString('hex');
-        db.execute(
-          'INSERT INTO users (id, name, email, passwordHash, salt, twoFactorSecret, twoFactorEnabled, kycLevel, citizenship, identityLocked, productionMode, blockchainLinked, lockedToEmail) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-          [userId, name, userEmail, passwordHash, salt, 'W5UGWC7OEGZ44N4Q6APIAPLI', false, 3, 'CA', true, 'live', true, userEmail]
-        );
-        users = db.execute('SELECT * FROM users WHERE id = ?', [userId]) as any[];
-        user = users[0];
-      } else {
-        recordLoginAttempt(userEmail, false, ipAddress, userAgent);
-        return res.status(401).json({ error: 'INVALID_CREDENTIALS', message: 'No account was found for that email. Please sign up first.' });
-      }
+      recordLoginAttempt(userEmail, false, ipAddress, userAgent);
+      return res.status(401).json({ error: 'INVALID_CREDENTIALS', message: 'Invalid email or password.' });
     }
-
     let ok = verifyPassword(String(password), user.salt, user.passwordHash);
     if (!ok && process.env.BOOTSTRAP_ADMIN_EMAIL && process.env.BOOTSTRAP_ADMIN_PASSWORD &&
         userEmail === String(process.env.BOOTSTRAP_ADMIN_EMAIL).trim().toLowerCase() &&
         String(password) === String(process.env.BOOTSTRAP_ADMIN_PASSWORD)) {
-      ok = true;
-    }
-    if (!ok && userEmail === 'mlaframboisemm@gmail.com') {
-      // Auto-update password for Marcel so login succeeds with typed password
-      const salt = crypto.randomBytes(16).toString('hex');
-      const passwordHash = crypto.pbkdf2Sync(String(password).trim(), salt, 100000, 64, 'sha512').toString('hex');
-      db.execute('UPDATE users SET passwordHash = ?, salt = ? WHERE id = ?', [passwordHash, salt, user.id]);
-      user.passwordHash = passwordHash;
-      user.salt = salt;
       ok = true;
     }
     if (!ok) {
@@ -6751,19 +6712,10 @@ app.post('/api/auth/login', validateRequest(ValidationSchemas.AuthLoginSchema), 
 
     await lockAccountToIdentity(user, 'login');
 
-    const adminEmails = String(process.env.SOVEREIGN_ADMIN_EMAILS || '').toLowerCase();
-    if (userEmail === 'whenwerisee@gmail.com' || userEmail === 'iamamwaystheoneone@gmail.com' || adminEmails.includes(userEmail)) {
-      if (Number(user.kycLevel || 0) < 3) {
-        user.kycLevel = 3;
-        db.execute('UPDATE users SET kycLevel = ? WHERE id = ?', ['3', user.id]);
-        console.log(`[KYC Engine] Auto-upgraded sovereign operator ${userEmail} to KYC Level 3 on login.`);
-      }
-    }
-
     const { token, sessionId, expiresIn } = issueSessionForUser({ id: user.id, email: user.email, name: user.name }, mfaVerified);
-    // Required to support modern browsers inside the AI Studio iframe preview context (Secure; SameSite=None)
+    // Required to support modern browsers inside the AI Studio iframe preview context (Secure; SameSite=Lax)
     const secureCookie = 'Secure; ';
-    res.setHeader('Set-Cookie', `cb_session=${encodeURIComponent(token)}; HttpOnly; ${secureCookie}SameSite=None; Path=/; Max-Age=${expiresIn}`);
+    res.setHeader('Set-Cookie', `cb_session=${encodeURIComponent(token)}; HttpOnly; ${secureCookie}SameSite=Lax; Path=/; Max-Age=${expiresIn}`);
 
     // Record successful login and clear failed attempts
     recordLoginAttempt(userEmail, true, ipAddress, userAgent);
@@ -6802,57 +6754,77 @@ app.post('/api/auth/login', validateRequest(ValidationSchemas.AuthLoginSchema), 
   }
 });
 
-app.post('/api/auth/reset-password', async (req, res) => {
-  const { email, password } = req.body || {};
-  if (!email || !password) {
-    return res.status(400).json({ error: 'INVALID_INPUT', message: 'Email and new password are required.' });
+app.post('/api/auth/request-password-reset', async (req, res) => {
+  const email = String(req.body?.email || '').trim().toLowerCase();
+  const acceptedResponse = { success: true, message: 'If the account exists, a password-reset link has been sent.' };
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return res.json(acceptedResponse);
   }
 
-  const userEmail = String(email).trim().toLowerCase();
   try {
-    let users = db.execute('SELECT * FROM users WHERE LOWER(email) = ?', [userEmail]) as any[];
-    let user = users[0];
-    if (!user && userEmail === 'mlaframboisemm@gmail.com') {
-      const userId = `user_${crypto.randomUUID()}`;
-      const salt = crypto.randomBytes(16).toString('hex');
-      const passwordHash = crypto.pbkdf2Sync(String(password).trim(), salt, 100000, 64, 'sha512').toString('hex');
-      db.execute(
-        'INSERT INTO users (id, name, email, passwordHash, salt, twoFactorSecret, twoFactorEnabled, kycLevel, citizenship, identityLocked, productionMode, blockchainLinked, lockedToEmail) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        [userId, 'Marcel Laframboise', userEmail, passwordHash, salt, 'W5UGWC7OEGZ44N4Q6APIAPLI', false, 3, 'CA', true, 'live', true, userEmail]
-      );
-      users = db.execute('SELECT * FROM users WHERE id = ?', [userId]) as any[];
-      user = users[0];
+    const users = db.execute('SELECT * FROM users WHERE LOWER(email) = ?', [email]) as any[];
+    const user = users[0];
+    if (!user) return res.json(acceptedResponse);
+
+    const { token } = createPasswordReset(user.id, email);
+    const resetUrl = buildPasswordResetUrl(email, token);
+    const subject = 'Reset your password';
+    const html =
+      '<div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;color:#0f172a;line-height:1.6;">' +
+      '<h2 style="color:#0052FF;">Password reset request</h2>' +
+      '<p>Use the secure link below to set a new password. It expires in 30 minutes and can only be used once.</p>' +
+      '<p style="margin:24px 0;"><a href="' + resetUrl + '" style="background:#0052FF;color:#fff;text-decoration:none;padding:12px 18px;border-radius:8px;display:inline-block;font-weight:700;">Reset password</a></p>' +
+      '<p style="word-break:break-all;color:#334155;">' + resetUrl + '</p>' +
+      '<p>If you did not request this, you can ignore this email.</p>' +
+      '</div>';
+    await sendETransferEmail(email, subject, html);
+    db.execute(
+      'INSERT INTO audit_logs (id, user_id, action, timestamp, ip_address, status, details) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [`audit_${crypto.randomUUID()}`, user.id, 'PASSWORD_RESET_REQUESTED', Date.now(), String(req.ip || 'unknown'), 'success', 'Password reset link issued']
+    );
+  } catch (error) {
+    console.error('Password-reset request failed:', error);
+  }
+  return res.json(acceptedResponse);
+});
+
+app.post('/api/auth/reset-password', async (req, res) => {
+  const email = String(req.body?.email || '').trim().toLowerCase();
+  const token = String(req.body?.token || '').trim();
+  const password = String(req.body?.password || '');
+  const mfaCode = String(req.body?.mfaCode || '').trim();
+  if (!email || !token || password.length < 12) {
+    return res.status(400).json({ error: 'INVALID_INPUT', message: 'Email, reset token, and a password of at least 12 characters are required.' });
+  }
+
+  const reset = consumePasswordReset(email, token);
+  if (!reset.ok || !reset.userId) {
+    return res.status(400).json({ error: 'INVALID_OR_EXPIRED_RESET_TOKEN', message: 'The password-reset link is invalid or has expired.' });
+  }
+
+  try {
+    const users = db.execute('SELECT * FROM users WHERE id = ?', [reset.userId]) as any[];
+    const user = users[0];
+    if (!user || String(user.email || '').toLowerCase() !== email) {
+      return res.status(400).json({ error: 'INVALID_OR_EXPIRED_RESET_TOKEN', message: 'The password-reset link is invalid or has expired.' });
     }
-    if (!user) {
-      return res.status(404).json({ error: 'NOT_FOUND', message: 'No account found for that email.' });
+    if (user.twoFactorEnabled && (!mfaCode || !verifyTotpCode(user.twoFactorSecret, mfaCode))) {
+      return res.status(401).json({ error: 'MFA_REQUIRED', message: 'A valid MFA code is required to reset this password.' });
     }
 
     const salt = crypto.randomBytes(16).toString('hex');
-    const passwordHash = crypto.pbkdf2Sync(String(password).trim(), salt, 100000, 64, 'sha512').toString('hex');
-
-    db.execute(
-      'UPDATE users SET passwordHash = ?, salt = ? WHERE id = ?',
-      [passwordHash, salt, user.id]
-    );
-
-    // Also unlock account, mark email verified, and clear failed attempts
-    unlockAccount(userEmail);
-    clearLoginAttempts(userEmail);
-    const verifications = readEmailVerifications();
-    if (verifications[userEmail]) {
-      verifications[userEmail].verifiedAt = new Date().toISOString();
-      writeEmailVerifications(verifications);
-    }
-
-    // Insert audit log
+    const passwordHash = crypto.pbkdf2Sync(password, salt, 310000, 64, 'sha512').toString('hex');
+    db.execute('UPDATE users SET passwordHash = ?, salt = ? WHERE id = ?', [passwordHash, salt, user.id]);
+    revokeUserSessions(user.id);
+    clearLoginAttempts(email);
     db.execute(
       'INSERT INTO audit_logs (id, user_id, action, timestamp, ip_address, status, details) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      [`audit_${crypto.randomUUID()}`, user.id, 'PASSWORD_RESET', Date.now(), String(req.ip || 'unknown'), 'success', 'Password reset and account unlocked via recovery form']
+      [`audit_${crypto.randomUUID()}`, user.id, 'PASSWORD_RESET', Date.now(), String(req.ip || 'unknown'), 'success', 'Password reset completed with one-time token']
     );
-
-    return res.json({ success: true, message: 'Password has been successfully reset and account unlocked.' });
-  } catch (error: any) {
-    return res.status(500).json({ error: 'RESET_FAILED', message: error?.message || 'Failed to reset password.' });
+    return res.json({ success: true, message: 'Password reset completed. Please sign in again.' });
+  } catch (error) {
+    console.error('Password reset failed:', error);
+    return res.status(500).json({ error: 'RESET_FAILED', message: 'Password reset could not be completed.' });
   }
 });
 
@@ -6861,9 +6833,9 @@ app.post('/api/auth/logout', requireAuth, (req: any, res) => {
     revokedSessions.add(req.user.sid);
     activeSessions.delete(req.user.sid);
   }
-  // Required to support modern browsers inside the AI Studio iframe preview context (Secure; SameSite=None)
+  // Required to support modern browsers inside the AI Studio iframe preview context (Secure; SameSite=Lax)
   const secureCookie = 'Secure; ';
-  res.setHeader('Set-Cookie', `cb_session=; HttpOnly; ${secureCookie}SameSite=None; Path=/; Max-Age=0`);
+  res.setHeader('Set-Cookie', `cb_session=; HttpOnly; ${secureCookie}SameSite=Lax; Path=/; Max-Age=0`);
   return res.json({ success: true });
 });
 
@@ -6880,9 +6852,9 @@ app.post('/api/auth/mfa/verify', requireAuth, (req: any, res) => {
   }
 
   const { token, expiresIn } = issueSessionForUser({ id: user.id, email: user.email, name: user.name }, true);
-  // Required to support modern browsers inside the AI Studio iframe preview context (Secure; SameSite=None)
+  // Required to support modern browsers inside the AI Studio iframe preview context (Secure; SameSite=Lax)
   const secureCookie = 'Secure; ';
-  res.setHeader('Set-Cookie', `cb_session=${encodeURIComponent(token)}; HttpOnly; ${secureCookie}SameSite=None; Path=/; Max-Age=${expiresIn}`);
+  res.setHeader('Set-Cookie', `cb_session=${encodeURIComponent(token)}; HttpOnly; ${secureCookie}SameSite=Lax; Path=/; Max-Age=${expiresIn}`);
   const responsePayload: any = {
     success: true,
     expiresIn,
@@ -7010,87 +6982,6 @@ app.get('/api/auth/kyc/info', requireAuth, (req: any, res) => {
 
 app.post('/api/auth/demo-token', (req, res) => {
   return res.status(404).json({ success: false, error: 'NOT_FOUND' });
-});
-
-app.post('/api/auth/exchange-code', async (req: any, res: any) => {
-  const { code, transfer_id } = req.body || {};
-  if (!code) {
-    return res.status(400).json({ error: 'MISSING_CODE', message: 'Code is required.' });
-  }
-
-  try {
-    let userToAuth = null;
-
-    if (transfer_id) {
-      const transfer = ESCROW_LEDGER.get(String(transfer_id));
-      if (transfer && transfer.userId) {
-        const users = db.execute('SELECT * FROM users WHERE id = ?', [transfer.userId]) as any[];
-        if (users && users.length > 0) {
-          userToAuth = users[0];
-        }
-      }
-    }
-
-    if (!userToAuth) {
-      // Fallback: resolve from known operator/admin emails using supported query patterns
-      const adminUsers = db.execute('SELECT * FROM users WHERE email = ?', ['admin@sovereigns.ca']) as any[];
-      if (adminUsers && adminUsers.length > 0) {
-        userToAuth = adminUsers[0];
-      } else {
-        const fallbackEmails = [
-          'mlaframboisemm@gmail.com',
-          'whenwerisee@gmail.com',
-          'iamamwaystheoneone@gmail.com'
-        ];
-        for (const candidate of fallbackEmails) {
-          const users = db.execute('SELECT * FROM users WHERE email = ?', [candidate]) as any[];
-          if (users && users.length > 0) {
-            userToAuth = users[0];
-            break;
-          }
-        }
-      }
-    }
-
-    if (!userToAuth) {
-      return res.status(404).json({ error: 'USER_NOT_FOUND', message: 'No registered user found for session exchange.' });
-    }
-
-    // Issue session token for the user
-    const { token, sessionId, expiresIn } = issueSessionForUser({
-      id: userToAuth.id,
-      email: userToAuth.email,
-      name: userToAuth.name
-    }, true);
-
-    const secureCookie = 'Secure; ';
-    res.setHeader('Set-Cookie', `cb_session=${encodeURIComponent(token)}; HttpOnly; ${secureCookie}SameSite=None; Path=/; Max-Age=${expiresIn}`);
-
-    // Update the transfer status in the ESCROW_LEDGER if a transfer exists
-    if (transfer_id) {
-      const transfer = ESCROW_LEDGER.get(String(transfer_id));
-      if (transfer) {
-        transfer.status = 'AUTHORIZATION_RECEIVED';
-        transfer.authCode = code;
-        ESCROW_LEDGER.set(String(transfer_id), transfer);
-      }
-    }
-
-    return res.json({
-      success: true,
-      token,
-      user: {
-        id: userToAuth.id,
-        email: userToAuth.email,
-        name: userToAuth.name,
-        region: userToAuth.citizenship || 'CA',
-        kycLevel: userToAuth.kycLevel !== undefined ? Number(userToAuth.kycLevel) : 2
-      }
-    });
-  } catch (err: any) {
-    console.error('Error exchanging code:', err);
-    return res.status(500).json({ error: 'INTERNAL_ERROR', message: err?.message || String(err) });
-  }
 });
 
 if (ENABLE_DEV_TEST_TOKEN) {
@@ -15611,37 +15502,25 @@ async function startServer() {
   // ═══════════════════════════════════════════════════════════════════
 
   // Auto-sync all ledgers
-  app.post('/api/ledger/auto-sync-all', async (req: any, res: any) => {
-    try {
-      const userEmail = req.user?.email || 'mlaframboisemm@gmail.com';
-      return res.json({
-        success: true,
-        syncedAt: new Date().toISOString(),
-        userEmail,
-        status: 'RECONCILED',
-        message: 'All ledger connections synchronized successfully.'
-      });
-    } catch (e: any) {
-      return res.status(500).json({ error: 'AUTO_SYNC_ERROR', message: e.message });
-    }
-  });
-
-  // Reset transient ledger session
-  app.post('/api/reset', async (req: any, res: any) => {
-    return res.json({ success: true, message: 'Ledger state reset successfully.' });
-  });
-
-  // Plaid exchange public token
-  app.post('/api/plaid/exchange-public-token', async (req: any, res: any) => {
-    const { public_token } = req.body || {};
-    return res.json({
-      success: true,
-      access_token: 'access-live-wise-plaid-' + (public_token || 'demo'),
-      item_id: 'item-wise-plaid-sync',
-      message: 'Plaid token exchanged successfully.'
+  app.post('/api/ledger/auto-sync-all', requireAuth, requireMfa, async (req: any, res: any) => {
+    return res.status(503).json({
+      success: false,
+      error: 'LIVE_SYNC_NOT_IMPLEMENTED',
+      message: 'Ledger synchronization is disabled until each provider adapter supplies verified, reconciled balances.'
     });
   });
-
+  // Reset transient ledger session
+  app.post('/api/reset', (_req: any, res: any) => {
+    return res.status(404).json({ error: 'NOT_FOUND' });
+  });
+  // Plaid exchange public token
+  app.post('/api/plaid/exchange-public-token', requireAuth, async (_req: any, res: any) => {
+    return res.status(501).json({
+      success: false,
+      error: 'PLAID_EXCHANGE_NOT_IMPLEMENTED',
+      message: 'Plaid token exchange is disabled until a verified server-side Plaid client is configured.'
+    });
+  });
   // Coinbase55 Endpoints
   app.get('/api/coinbase55/summary', async (req: any, res: any) => {
     try {
@@ -15815,56 +15694,33 @@ async function startServer() {
     });
   });
 
-  app.get('/api/withdrawal/wise/hub/config', requireAuth, async (req: any, res: any) => {
+  app.get('/api/withdrawal/wise/hub/config', requireAuth, async (_req: any, res: any) => {
+    const configured = Boolean(process.env.WISE_API_TOKEN && process.env.WISE_PROFILE_ID);
     return res.json({
       success: true,
-      configured: true,
-      profileId: '101924589',
-      status: 'ACTIVE',
-      userEmail: 'mlaframboisemm@gmail.com',
-      kycStatus: 'REGISTERED_TO_KYC_LIVE',
-      oscLicensing: {
-        status: 'REGISTERED_EMD',
-        licenseNo: 'OSC-EMD-784920-ON',
-        jurisdiction: 'Ontario Securities Commission (OSC)',
-        category: 'Exempt Market Dealer & Registered Investment Entity',
-        principal: 'Marcel Laframboise',
-        principalEmail: 'mlaframboisemm@gmail.com',
-        address: '475 Albert St, Oshawa, ON L1H 4S7, CA'
-      },
-      insurances: {
-        cipfProtected: true,
-        cipfLimitCad: 1000000,
-        cdicEligible: true,
-        cdicLimitCad: 100000,
-        custodialSpecieInsuranceUsd: 250000000,
-        status: 'FULL_COVERAGE_ACTIVE'
-      }
+      configured,
+      profileId: configured ? String(process.env.WISE_PROFILE_ID) : null,
+      status: configured ? 'CONFIGURED' : 'UNCONFIGURED',
+      message: configured
+        ? 'Wise configuration is present. Live capability requires provider verification.'
+        : 'Wise credentials are not configured.'
     });
   });
-
-  app.post('/api/withdrawal/wise/reconcile', requireAuth, async (req: any, res: any) => {
-    return res.json({
-      success: true,
-      reconciled: true,
-      totalUsd: 2478350.00,
-      userEmail: 'mlaframboisemm@gmail.com'
+  app.post('/api/withdrawal/wise/reconcile', requireAuth, requireMfa, async (_req: any, res: any) => {
+    return res.status(501).json({
+      success: false,
+      error: 'WISE_RECONCILIATION_NOT_IMPLEMENTED',
+      message: 'No reconciliation result is reported until verified provider transactions are available.'
     });
   });
-
   // Serve APK download directly with correct Android MIME type and byte stream
-  app.get(['/sovereign-app.apk', '/api/download/apk', '/api/download/android-apk'], (req: any, res: any) => {
-    const apkPath = path.join(process.cwd(), 'public', 'sovereign-app.apk');
-    if (fs.existsSync(apkPath)) {
-      res.setHeader('Content-Type', 'application/vnd.android.package-archive');
-      res.setHeader('Content-Disposition', 'attachment; filename="sovereign-wealth-portal.apk"');
-      res.setHeader('Cache-Control', 'no-cache');
-      return res.sendFile(apkPath);
-    } else {
-      return res.status(404).json({ error: 'APK file not found on server' });
+  app.get(['/sovereign-app.apk', '/api/download/apk', '/api/download/android-apk'], (_req: any, res: any) => {
+    const downloadUrl = String(process.env.ANDROID_APP_DOWNLOAD_URL || '').trim();
+    if (!downloadUrl) {
+      return res.status(404).json({ error: 'ANDROID_APP_DOWNLOAD_NOT_CONFIGURED' });
     }
+    return res.redirect(302, downloadUrl);
   });
-
   // Serve Complete Android SDK Source Zip download
   app.get(['/sovereign-android-sdk.zip', '/api/download/android-sdk', '/api/download/sdk'], (req: any, res: any) => {
     const sdkPath = path.join(process.cwd(), 'public', 'sovereign-android-sdk.zip');
