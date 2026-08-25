@@ -1721,7 +1721,7 @@ export default function App() {
     fiatAmount: number,
     details: string,
     recipientAddress?: string
-  ) => {
+  ): Promise<boolean> => {
     const coin = coins.find((c) => c && c.symbol === symbol);
     if (!coin) return false;
 
@@ -1833,7 +1833,7 @@ export default function App() {
     amountReceived: number,
     orderId?: string,
     address?: string
-  ) => {
+  ): Promise<boolean> => {
     const btcAmount = Number(amountReceived || 0);
     if (!Number.isFinite(btcAmount) || btcAmount <= 0) {
       return false;
@@ -1886,8 +1886,7 @@ export default function App() {
       showToast(`QR Cash Payment of $${amount.toFixed(2)} ${assetSymbol} sent to ${recipient}!`, 'success');
       return true;
     } else {
-      await handleExecuteSendReceive('SEND', assetSymbol, amount, amount * 10, recipient);
-      return true;
+      return handleExecuteSendReceive('SEND', assetSymbol, amount, amount * 10, recipient);
     }
   };
 

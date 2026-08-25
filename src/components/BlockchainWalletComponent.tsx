@@ -11,6 +11,7 @@ import {
   Search,
   Wallet
 } from 'lucide-react';
+import { Transaction } from '../types';
 
 export interface TokenBalance {
   symbol: string;
@@ -146,7 +147,7 @@ export interface BlockchainWalletComponentProps {
   onWalletStateChange?: (address: string, spendable: boolean) => void;
   onBalancesChange?: (snapshot: BlockchainWalletSnapshot | null) => void;
   onTransactionSuccess?: (txHash: string) => void;
-  onRecordTransaction?: (tx: unknown) => void;
+  onRecordTransaction?: (tx: Transaction) => void;
   onAddTransaction?: (type: 'SEND' | 'RECEIVE' | 'BUY' | 'SELL' | 'CONVERT', symbol: string, amount: number, fiatAmount: number, details: string) => void;
   className?: string;
 }

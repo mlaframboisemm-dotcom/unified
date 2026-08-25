@@ -45,10 +45,12 @@ export default function AuthScreen({
 
   const [isSignUp, setIsSignUp] = useState(false);
   const [isResetPassword, setIsResetPassword] = useState(false);
+  const [resetRequested, setResetRequested] = useState(false);
+  const [resetToken, setResetToken] = useState('');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('mlaframboisemm@gmail.com');
-  const [password, setPassword] = useState('Password123456!');
+  const [password, setPassword] = useState('');
   const [mfaCode, setMfaCode] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [region, setRegion] = useState<'US' | 'CA'>('US');
@@ -134,22 +136,64 @@ export default function AuthScreen({
     }
   }, [isResetPassword]);
 
+  useEffect(() => {
+    if (typeof window === 'undefined' || window.location.pathname !== '/reset-password') return;
+    const params = new URLSearchParams(window.location.search);
+    const resetEmail = params.get('email')?.trim().toLowerCase();
+    const token = params.get('token')?.trim();
+    if (!resetEmail || !token) return;
+    setEmail(resetEmail);
+    setResetToken(token);
+    setIsResetPassword(true);
+    setResetRequested(true);
+  }, []);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email || !password) {
+    if (!email || (!isResetPassword && !password)) {
       showToast('Please fill out all credentials.', 'error');
       return;
     }
 
     if (isResetPassword) {
+      if (!resetRequested) {
+        setIsLoading(true);
+        setLoadingStep('Sending a one-time password reset link...');
+        try {
+          const response = await fetch(buildApiUrl('/api/auth/request-password-reset'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ email })
+          });
+          const result = await response.json();
+          if (!response.ok) {
+            showToast(result?.message || 'Password reset request failed.', 'error');
+            return;
+          }
+          setResetRequested(true);
+          showToast('If that account exists, a reset link was sent. Enter the token from the link below.', 'info');
+        } catch (err: any) {
+          showToast(err?.message || 'Password reset request failed.', 'error');
+        } finally {
+          setIsLoading(false);
+        }
+        return;
+      }
+
+      if (!resetToken.trim() || !password) {
+        showToast('Enter the reset token and a new password.', 'error');
+        return;
+      }
+
       setIsLoading(true);
-      setLoadingStep('Authorizing password reset and clearing security lockouts...');
+      setLoadingStep('Validating the one-time reset token...');
       try {
         const response = await fetch(buildApiUrl('/api/auth/reset-password'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
-          body: JSON.stringify({ email, password })
+          body: JSON.stringify({ email, token: resetToken.trim(), password, mfaCode })
         });
 
         const result = await response.json();
@@ -160,6 +204,8 @@ export default function AuthScreen({
 
         showToast('Password successfully reset and account lockout has been cleared! You can now sign in.', 'success');
         setIsResetPassword(false);
+        setResetRequested(false);
+        setResetToken('');
         setPassword('');
       } catch (err: any) {
         showToast(err?.message || 'Password reset failed.', 'error');
@@ -352,6 +398,20 @@ export default function AuthScreen({
             </div>
 
             <div>
+              {isResetPassword && resetRequested && (
+                <div>
+                  <label className="text-[10px] font-bold text-gray-400 uppercase block mb-1">One-Time Reset Token</label>
+                  <input
+                    type="text"
+                    required
+                    value={resetToken}
+                    onChange={(e) => setResetToken(e.target.value.trim())}
+                    placeholder="Paste the token from your reset link"
+                    className="w-full bg-gray-50 hover:bg-gray-100/50 focus:bg-white border border-gray-200 focus:border-[#0052FF] text-xs sm:text-sm px-3 py-2 rounded-xl focus:outline-none focus:ring-1 focus:ring-[#0052FF] transition-all font-mono"
+                  />
+                </div>
+              )}
+
               <label className="text-[10px] font-bold text-gray-400 uppercase block mb-1">
                 {isResetPassword ? 'New Secure Password' : 'Secure Password'}
               </label>
@@ -359,7 +419,7 @@ export default function AuthScreen({
                 <Lock className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
                 <input
                   type={showPassword ? 'text' : 'password'}
-                  required
+                  required={!isResetPassword || resetRequested}
                   placeholder="••••••••••••"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
@@ -386,6 +446,21 @@ export default function AuthScreen({
                   placeholder="123456"
                   value={mfaCode}
                   onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  className="w-full bg-gray-50 hover:bg-gray-100/50 focus:bg-white border border-gray-200 focus:border-[#0052FF] text-xs sm:text-sm px-3 py-2 rounded-xl focus:outline-none focus:ring-1 focus:ring-[#0052FF] transition-all font-mono"
+                />
+              </div>
+            )}
+
+            {isResetPassword && resetRequested && (
+              <div>
+                <label className="text-[10px] font-bold text-gray-400 uppercase block mb-1">MFA Code (If Enabled)</label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={6}
+                  value={mfaCode}
+                  onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  placeholder="123456"
                   className="w-full bg-gray-50 hover:bg-gray-100/50 focus:bg-white border border-gray-200 focus:border-[#0052FF] text-xs sm:text-sm px-3 py-2 rounded-xl focus:outline-none focus:ring-1 focus:ring-[#0052FF] transition-all font-mono"
                 />
               </div>
@@ -445,7 +520,7 @@ export default function AuthScreen({
               disabled={isSignUp && !agreedToTerms}
               className="w-full py-3.5 bg-[#0052FF] hover:bg-blue-700 disabled:bg-gray-300 text-white font-bold text-xs sm:text-sm rounded-xl transition-all shadow-md shadow-blue-500/10 cursor-pointer flex items-center justify-center space-x-1"
             >
-              <span>{isResetPassword ? 'Reset Password & Unlock Account' : isSignUp ? 'Verify & Create Coinbase Vault' : 'Secure Account Sign In'}</span>
+              <span>{isResetPassword ? (resetRequested ? 'Reset Password & Unlock Account' : 'Email Reset Link') : isSignUp ? 'Verify & Create Coinbase Vault' : 'Secure Account Sign In'}</span>
               <ArrowRight className="h-4 w-4" />
             </button>
 
@@ -490,6 +565,9 @@ export default function AuthScreen({
                 <button
                   onClick={() => {
                     setIsResetPassword(true);
+                    setResetRequested(false);
+                    setResetToken('');
+                    setPassword('');
                     setLocalStateAndErrors();
                   }}
                   className="text-xs font-medium text-gray-500 hover:text-[#0052FF] hover:underline cursor-pointer"

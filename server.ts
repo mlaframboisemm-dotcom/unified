@@ -1809,6 +1809,7 @@ const apiCallRateLimiter = PerUserApiCallLimiter();
 app.use('/api/', globalLimiter);
 app.use('/api/auth/login', authLimiter);
 app.use('/api/auth/register', authLimiter);
+app.use('/api/auth/request-password-reset', authLimiter);
 app.use('/api/auth/reset-password', authLimiter);
 app.use('/api/auth/resend-verification', authLimiter);
 app.use('/api/auth/mfa/verify', authLimiter);
@@ -4251,14 +4252,24 @@ function createPasswordReset(userId: string, email: string): { token: string; ex
 }
 
 function consumePasswordReset(email: string, token: string): { ok: boolean; userId?: string; reason?: string } {
+  const validation = validatePasswordReset(email, token);
+  if (!validation.ok || !validation.userId) return validation;
+
+  const normalizedEmail = email.toLowerCase();
+  const records = readPasswordResets();
+  const record = records[normalizedEmail];
+  records[normalizedEmail] = { ...record, usedAt: new Date().toISOString() };
+  writePasswordResets(records);
+  return { ok: true, userId: validation.userId };
+}
+
+function validatePasswordReset(email: string, token: string): { ok: boolean; userId?: string; reason?: string } {
   const normalizedEmail = email.toLowerCase();
   const records = readPasswordResets();
   const record = records[normalizedEmail];
   if (!record || record.usedAt) return { ok: false, reason: 'INVALID_TOKEN' };
   if (record.expiresAt < Date.now()) return { ok: false, reason: 'TOKEN_EXPIRED' };
   if (record.tokenHash !== hashVerificationToken(token)) return { ok: false, reason: 'INVALID_TOKEN' };
-  records[normalizedEmail] = { ...record, usedAt: new Date().toISOString() };
-  writePasswordResets(records);
   return { ok: true, userId: record.userId };
 }
 
@@ -6690,7 +6701,7 @@ app.post('/api/auth/reset-password', async (req, res) => {
     return res.status(400).json({ error: 'INVALID_INPUT', message: 'Email, reset token, and a password of at least 12 characters are required.' });
   }
 
-  const reset = consumePasswordReset(email, token);
+  const reset = validatePasswordReset(email, token);
   if (!reset.ok || !reset.userId) {
     return res.status(400).json({ error: 'INVALID_OR_EXPIRED_RESET_TOKEN', message: 'The password-reset link is invalid or has expired.' });
   }
@@ -6703,6 +6714,11 @@ app.post('/api/auth/reset-password', async (req, res) => {
     }
     if (user.twoFactorEnabled && (!mfaCode || !verifyTotpCode(user.twoFactorSecret, mfaCode))) {
       return res.status(401).json({ error: 'MFA_REQUIRED', message: 'A valid MFA code is required to reset this password.' });
+    }
+
+    const consumedReset = consumePasswordReset(email, token);
+    if (!consumedReset.ok) {
+      return res.status(400).json({ error: 'INVALID_OR_EXPIRED_RESET_TOKEN', message: 'The password-reset link is invalid or has expired.' });
     }
 
     const salt = crypto.randomBytes(16).toString('hex');
