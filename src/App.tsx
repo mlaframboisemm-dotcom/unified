@@ -59,7 +59,7 @@ import {
   getCachedTransactions,
   syncOfflineQueueToFirestore 
 } from './lib/indexeddb-offline-sync';
-import { DEFAULT_WEB3_WALLET_ADDRESS, normalizeWalletAddress, hasSpendableWallet } from './lib/web3-wallet';
+import { normalizeWalletAddress } from './lib/web3-wallet';
 
 const configuredApiBase = String(
   (import.meta as any).env?.VITE_API_BASE ||
@@ -149,115 +149,16 @@ function getCurrencySymbol(citizenship: string): string {
   return (citizenship === 'CA' || citizenship === 'Canada') ? 'CAD' : 'USD';
 }
 
-function buildCoinFromLive(symbol: string, usd: number, popularity: number, name?: string, color?: string): Coin {
-  return {
-    id: symbol.toLowerCase(),
-    name: name || symbol,
-    symbol,
-    price: usd,
-    change24h: 0,
-    volume24h: 0,
-    marketCap: 0,
-    color: color || '#0052FF',
-    description: `${name || symbol} live market asset`,
-    circulatingSupply: 'N/A',
-    allTimeHigh: usd,
-    popularity,
-    sparkline: Array(10).fill(usd),
-    history1D: Array(24).fill(usd),
-    history1W: Array(50).fill(usd),
-    history1M: Array(100).fill(usd),
-    history1Y: Array(200).fill(usd)
-  };
-}
-
-const PUBLISHED_BTC_BALANCE = 1280.50000;
-const PUBLISHED_BTC_ADDRESS = 'bc1qq6hag67dl53wl99vzg42z8eyzfz2xlkvxechjp';
-const DEFAULT_USD_BALANCE = 1791100.00;
-const PUBLISHED_NET_WORTH = 900345472.23;
-
-const DEFAULT_HOLDINGS: Holding[] = [
-  { symbol: 'BTC', amount: 1280.50000, avgBuyPrice: 65400.00 },
-  { symbol: 'ETH', amount: 116998.23, avgBuyPrice: 2850.00 },
-  { symbol: 'USDC', amount: 422611769.18, avgBuyPrice: 1.00 },
-  { symbol: 'SOL', amount: 0.00, avgBuyPrice: 145.00 }
-];
-
-function mergePublishedBitcoinHolding(holdings: Holding[]): Holding[] {
-  if (!Array.isArray(holdings) || holdings.length === 0) {
-    return DEFAULT_HOLDINGS;
-  }
-  const normalizedHoldings = holdings
-    .filter((holding) => holding && String(holding.symbol || '').toUpperCase() !== 'USD')
-    .map((holding) => ({ ...holding, symbol: String(holding.symbol).toUpperCase() }));
-  const btcIndex = normalizedHoldings.findIndex((h) => h.symbol === 'BTC');
-  if (btcIndex === -1) {
-    return [{ symbol: 'BTC', amount: PUBLISHED_BTC_BALANCE, avgBuyPrice: 65400.00 }, ...normalizedHoldings];
-  }
-  const updated = [...normalizedHoldings];
-  updated[btcIndex] = { ...updated[btcIndex], amount: PUBLISHED_BTC_BALANCE, avgBuyPrice: updated[btcIndex].avgBuyPrice || 65400.00 };
-  return updated;
-}
-
-const DEFAULT_COIN_LIST: Coin[] = [
-  buildCoinFromLive('BTC', 94250.00, 1, 'Bitcoin', '#F7931A'),
-  buildCoinFromLive('ETH', 3021.1145037, 2, 'Ethereum', '#627EEA'),
-  buildCoinFromLive('USDC', 1.00, 3, 'USD Coin', '#2775CA'),
-  buildCoinFromLive('SOL', 198.50, 4, 'Solana', '#14F195'),
-  buildCoinFromLive('CADC', 0.74, 5, 'CAD Coin', '#D8232A'),
-  buildCoinFromLive('XRP', 2.35, 6, 'XRP Ledger', '#23292F'),
-  buildCoinFromLive('DOGE', 0.28, 7, 'Dogecoin', '#C2A633'),
-  buildCoinFromLive('ADA', 0.85, 8, 'Cardano', '#0033AD'),
-  buildCoinFromLive('AVAX', 38.20, 9, 'Avalanche', '#E84142'),
-  buildCoinFromLive('LINK', 18.50, 10, 'Chainlink', '#375BD2'),
-];
-
 export default function App() {
   const hasLoggedPriceFetchError = useRef(false);
   const hasLoggedBalanceSyncError = useRef(false);
   const hasLoggedEmailSyncError = useRef(false);
   const isAutoLoggingIn = useRef(false);
   const firestoreDisabledRef = useRef(false);
-  // --- Persistent LocalState initialization ---
-  const [coins, setCoins] = useState<Coin[]>(() => {
-    const saved = localStorage.getItem('cb_coins');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      } catch (e) {
-        // Fallthrough
-      }
-    }
-    return DEFAULT_COIN_LIST;
-  });
-
-  const [holdings, setHoldings] = useState<Holding[]>(() => {
-    try {
-      const saved = localStorage.getItem('cb_holdings');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          return mergePublishedBitcoinHolding(parsed);
-        }
-      }
-      return DEFAULT_HOLDINGS;
-    } catch {
-      return DEFAULT_HOLDINGS;
-    }
-  });
-
-  const [usdBalance, setUsdBalance] = useState<number>(() => {
-    try {
-      const saved = localStorage.getItem('cb_usd_balance');
-      if (saved && Number.isFinite(parseFloat(saved)) && parseFloat(saved) > 0) {
-        return parseFloat(saved);
-      }
-      return DEFAULT_USD_BALANCE;
-    } catch {
-      return DEFAULT_USD_BALANCE;
-    }
-  });
+  // Financial state starts empty and is populated only by authenticated provider responses.
+  const [coins, setCoins] = useState<Coin[]>([]);
+  const [holdings, setHoldings] = useState<Holding[]>([]);
+  const [usdBalance, setUsdBalance] = useState<number>(0);
 
   const [transactions, setTransactions] = useState<Transaction[]>(() => {
     try {
@@ -423,34 +324,9 @@ export default function App() {
     const auth = localStorage.getItem('cb_auth_authenticated') === 'true';
     return auth && hasSessionToken();
   });
-  const [web3WalletAddress, setWeb3WalletAddress] = useState<string>(() => {
-    return normalizeWalletAddress(localStorage.getItem('web3_active_address') || localStorage.getItem('web3_last_connected_address'));
-  });
-  const [web3WalletSpendable, setWeb3WalletSpendable] = useState<boolean>(() => {
-    const activePrivateKey = localStorage.getItem('web3_active_private_key');
-    return hasSpendableWallet({
-      walletAddress: localStorage.getItem('web3_active_address') || localStorage.getItem('web3_last_connected_address') || web3WalletAddress,
-      browserWalletConnected: !!(window as any)?.ethereum,
-      privateKey: activePrivateKey
-    });
-  });
-  const [web3Snapshot, setWeb3Snapshot] = useState<BlockchainWalletSnapshot | null>(() => {
-    const storedAddress = normalizeWalletAddress(
-      localStorage.getItem('web3_active_address') || localStorage.getItem('web3_last_connected_address')
-    );
-    try {
-      const storedSnapshot = localStorage.getItem(`web3_snapshot_${storedAddress.toLowerCase()}`);
-      if (storedSnapshot) {
-        const parsed = JSON.parse(storedSnapshot) as BlockchainWalletSnapshot;
-        if (parsed?.address && normalizeWalletAddress(parsed.address).toLowerCase() === storedAddress.toLowerCase()) {
-          return parsed;
-        }
-      }
-    } catch {
-      // Ignore an invalid cached on-chain snapshot and rescan the wallet.
-    }
-    return null;
-  });
+  const [web3WalletAddress, setWeb3WalletAddress] = useState<string>('');
+  const [web3WalletSpendable, setWeb3WalletSpendable] = useState<boolean>(false);
+  const [web3Snapshot, setWeb3Snapshot] = useState<BlockchainWalletSnapshot | null>(null);
   const [userEmail, setUserEmail] = useState<string>(() => {
     return localStorage.getItem('cb_auth_email') || 'mlaframboisemm@gmail.com';
   });
@@ -596,18 +472,6 @@ export default function App() {
   }, [userEmail]);
 
   useEffect(() => {
-    const address = normalizeWalletAddress(localStorage.getItem('web3_active_address') || localStorage.getItem('web3_last_connected_address') || web3WalletAddress);
-    setWeb3WalletAddress(address);
-    setWeb3WalletSpendable(
-      hasSpendableWallet({
-        walletAddress: address,
-        browserWalletConnected: !!(window as any)?.ethereum,
-        privateKey: localStorage.getItem('web3_active_private_key')
-      })
-    );
-  }, [web3WalletAddress]);
-
-  useEffect(() => {
     localStorage.setItem('cb_auth_name', userName);
   }, [userName]);
 
@@ -686,22 +550,22 @@ export default function App() {
       if (scopedHoldings) {
         const parsed = JSON.parse(scopedHoldings);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          setHoldings(mergePublishedBitcoinHolding(parsed));
+          setHoldings(parsed);
         } else {
-          setHoldings(DEFAULT_HOLDINGS);
+          setHoldings([]);
         }
       } else {
-        setHoldings(DEFAULT_HOLDINGS);
+        setHoldings([]);
       }
     } catch {
-      setHoldings(DEFAULT_HOLDINGS);
+      setHoldings([]);
     }
 
     const scopedUsdBalance = read('cb_usd_balance');
     if (scopedUsdBalance && Number.isFinite(Number(scopedUsdBalance)) && Number(scopedUsdBalance) > 0) {
       setUsdBalance(Number(scopedUsdBalance));
     } else {
-      setUsdBalance((prev) => (prev > 0 ? prev : DEFAULT_USD_BALANCE));
+      setUsdBalance((prev) => (prev > 0 ? prev : 0));
     }
 
     try {
@@ -965,8 +829,8 @@ export default function App() {
         const activeEmail = userEmail || localStorage.getItem('cb_auth_email') || '';
         if (balData.holdings) {
           const syncedHoldings = balData.mode === 'database_reconciled'
-            ? DEFAULT_HOLDINGS
-            : mergePublishedBitcoinHolding(balData.holdings);
+            ? []
+            : Array.isArray(balData.holdings) ? balData.holdings : [];
           setHoldings(syncedHoldings);
         }
         if (!config.stripeConfigured && typeof balData.usdBalance === 'number') {
@@ -1252,10 +1116,7 @@ export default function App() {
 
           setCoins((prevCoins) =>
             prevCoins.length === 0
-              ? Object.entries(data)
-                  .filter(([symbol, value]: any) => typeof symbol === 'string' && value && typeof value.USD === 'number')
-                  .sort(([a], [b]) => a.localeCompare(b))
-                  .map(([symbol, value]: any, index) => buildCoinFromLive(symbol, Number(value.USD), index + 1))
+              ? []
               : prevCoins
                   .filter((coin) => coin && coin.symbol)
                   .map((coin) => {
@@ -1660,21 +1521,16 @@ export default function App() {
 
   // --- Calculations for Portfolio Sums ---
   const cryptoTotalValue = useMemo(() => {
-    const activeHoldings = mergePublishedBitcoinHolding(holdings);
-    return activeHoldings.reduce((sum, hold) => {
-      const coin = coins.find((c) => c && c.symbol === hold.symbol) ||
-        DEFAULT_COIN_LIST.find((c) => c.symbol === hold.symbol);
-      const amount = hold.symbol === 'BTC' && hold.amount <= 0 ? PUBLISHED_BTC_BALANCE : hold.amount;
-      const coinPrice = (coin && coin.price > 0) ? coin.price : (hold.symbol === 'BTC' ? 94250.00 : 1.00);
-      return sum + (amount * coinPrice);
+    return holdings.reduce((sum, hold) => {
+      const coin = coins.find((c) => c && c.symbol === hold.symbol);
+      if (!coin || !Number.isFinite(coin.price) || coin.price <= 0) return sum;
+      return sum + (hold.amount * coin.price);
     }, 0);
   }, [holdings, coins]);
 
   const liveCashBalance = usdBalance;
 
-  const netWorth = liveCashBalance === DEFAULT_USD_BALANCE
-    ? PUBLISHED_NET_WORTH
-    : cryptoTotalValue + liveCashBalance;
+  const netWorth = cryptoTotalValue + liveCashBalance;
 
   // Unified asset list organized from Best to Least (Highest USD Value to Lowest USD Value)
   const allAssetRows = useMemo(() => {
@@ -1687,8 +1543,8 @@ export default function App() {
       color: string;
       amountFormatted: string;
       amountNum: number;
-      fiatValue: number;
-      allocation: number;
+      fiatValue: number | null;
+      allocation: number | null;
       priceFormatted: string;
       coinObj?: Coin;
     }> = [];
@@ -1710,28 +1566,25 @@ export default function App() {
     });
 
     // 2. Crypto Assets
-    const activeHoldings = mergePublishedBitcoinHolding(holdings);
+    const activeHoldings = holdings;
     activeHoldings.forEach((hold) => {
-      const coin = coins.find((c) => c && c.symbol === hold.symbol) || 
-        DEFAULT_COIN_LIST.find((c) => c.symbol === hold.symbol) ||
-        buildCoinFromLive(hold.symbol, hold.symbol === 'BTC' ? 94250.00 : 1.00, 1, hold.symbol, '#F7931A');
-      
-      const assetAmount = hold.symbol === 'BTC' && hold.amount <= 0 ? PUBLISHED_BTC_BALANCE : hold.amount;
-      const coinPrice = (coin && coin.price > 0) ? coin.price : (hold.symbol === 'BTC' ? 94250.00 : 1.00);
-      const assetVal = assetAmount * coinPrice;
-      const allocation = netWorth === 0 ? 0 : (assetVal / netWorth) * 100;
+      const coin = coins.find((c) => c && c.symbol === hold.symbol);
+      const assetAmount = hold.amount;
+      const coinPrice = coin && Number.isFinite(coin.price) && coin.price > 0 ? coin.price : null;
+      const assetVal = coinPrice === null ? null : assetAmount * coinPrice;
+      const allocation = assetVal === null || netWorth === 0 ? null : (assetVal / netWorth) * 100;
       list.push({
         id: hold.symbol,
         isCash: false,
         symbol: hold.symbol,
-        name: coin?.name || (hold.symbol === 'BTC' ? 'Bitcoin' : hold.symbol),
-        sublabel: hold.symbol === 'BTC' ? PUBLISHED_BTC_ADDRESS : (coin?.name || hold.symbol),
-        color: coin?.color || (hold.symbol === 'BTC' ? '#F7931A' : '#0052FF'),
-        amountFormatted: `${assetAmount.toFixed(hold.symbol === 'BTC' ? 5 : 2)} ${hold.symbol}`,
+        name: coin?.name || hold.symbol,
+        sublabel: coin?.name || 'Provider balance',
+        color: coin?.color || '#0052FF',
+        amountFormatted: `${assetAmount.toFixed(8)} ${hold.symbol}`,
         amountNum: assetAmount,
         fiatValue: assetVal,
         allocation: allocation,
-        priceFormatted: `$${coinPrice.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
+        priceFormatted: coinPrice === null ? 'Live price unavailable' : `$${coinPrice.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
         coinObj: coin,
       });
     });
@@ -1749,8 +1602,8 @@ export default function App() {
           amountFormatted: `${web3Snapshot.native.amount.toFixed(6)} ${web3Snapshot.native.symbol}`,
           amountNum: web3Snapshot.native.amount,
           fiatValue: web3Snapshot.native.fiatValueUsd,
-          allocation: netWorth === 0 ? 0 : (web3Snapshot.native.fiatValueUsd / netWorth) * 100,
-          priceFormatted: 'Live RPC',
+          allocation: web3Snapshot.native.fiatValueUsd === null || netWorth === 0 ? null : (web3Snapshot.native.fiatValueUsd / netWorth) * 100,
+          priceFormatted: web3Snapshot.native.fiatValueUsd === null ? 'Live price unavailable' : 'Live price verified',
         }] : []),
         ...web3Snapshot.tokens.filter((token) => Number(token.balanceFormatted.replace(/,/g, '')) > 0).map((token) => ({
           id: `web3:${web3Snapshot.networkId}:${token.contractAddress || token.symbol}`,
@@ -1762,14 +1615,14 @@ export default function App() {
           amountFormatted: `${token.balanceFormatted} ${token.symbol}`,
           amountNum: Number(token.balanceFormatted.replace(/,/g, '')),
           fiatValue: token.fiatValueUsd,
-          allocation: netWorth === 0 ? 0 : (token.fiatValueUsd / netWorth) * 100,
-          priceFormatted: `$${token.unitPriceUsd.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
+          allocation: token.fiatValueUsd === null || netWorth === 0 ? null : (token.fiatValueUsd / netWorth) * 100,
+          priceFormatted: token.unitPriceUsd === null ? 'Live price unavailable' : `$${token.unitPriceUsd.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
         }))
       ];
       list.push(...web3Assets);
     }
 
-    return list.sort((a, b) => b.fiatValue - a.fiatValue);
+    return list.sort((a, b) => (b.fiatValue ?? -Infinity) - (a.fiatValue ?? -Infinity));
   }, [liveCashBalance, holdings, coins, netWorth, web3Snapshot]);
 
   // Quick Asset indicator pills sorted from Best to Least
@@ -1820,16 +1673,16 @@ export default function App() {
     }
   ) => {
     const coin = coins.find((c) => c && c.symbol === params.symbol);
-    if (!coin) return;
+    if (!coin) {
+      showToast('The requested asset is unavailable.', 'error');
+      return;
+    }
 
-    let backendSuccess = false;
     try {
-      showToast(`Initiating secure ${type} execution...`, 'info');
-
+      showToast(`Submitting secure ${type} request for provider verification...`, 'info');
       const targetSym = params.targetSymbol || 'ETH';
       const targetCoin = coins.find((c) => c && c.symbol === targetSym);
       const computedTargetAmount = targetCoin && targetCoin.price > 0 ? params.fiatAmount / targetCoin.price : params.amount;
-
       const response = await fetch(buildApiUrl('/api/coinbase/trade'), {
         method: 'POST',
         headers: buildAuthHeaders({
@@ -1846,156 +1699,17 @@ export default function App() {
           targetAmount: computedTargetAmount
         })
       });
-
-      const data = await response.json();
-      if (response.ok && data.success) {
-        backendSuccess = true;
-        
-        // Optimistically apply state changes immediately
-        if (type === 'BUY') {
-          setUsdBalance((prev) => Math.max(0, prev - params.fiatAmount));
-          setHoldings((prev) => {
-            const exists = prev.find((h) => h.symbol === params.symbol);
-            if (exists) {
-              return prev.map((h) =>
-                h.symbol === params.symbol ? { ...h, amount: h.amount + params.amount } : h
-              );
-            } else {
-              return [...prev, { symbol: params.symbol, amount: params.amount, avgBuyPrice: coin.price || 0 }];
-            }
-          });
-        } else if (type === 'SELL') {
-          setHoldings((prev) =>
-            prev
-              .map((h) => (h.symbol === params.symbol ? { ...h, amount: Math.max(0, h.amount - params.amount) } : h))
-              .filter((h) => h.amount > 0)
-          );
-          setUsdBalance((prev) => prev + params.fiatAmount);
-        } else if (type === 'CONVERT') {
-          setHoldings((prev) => {
-            let updated = prev
-              .map((h) => (h.symbol === params.symbol ? { ...h, amount: Math.max(0, h.amount - params.amount) } : h))
-              .filter((h) => h.amount > 0);
-
-            const targetExists = updated.find((h) => h.symbol === targetSym);
-            if (targetExists) {
-              return updated.map((h) => (h.symbol === targetSym ? { ...h, amount: h.amount + computedTargetAmount } : h));
-            } else {
-              return [...updated, { symbol: targetSym, amount: computedTargetAmount, avgBuyPrice: targetCoin?.price || 0 }];
-            }
-          });
-        }
-
-        if (data.transaction) {
-          recordNewTransaction(data.transaction);
-        } else {
-          const generatedTxHash = `0x${Math.random().toString(16).substring(2, 12)}${Date.now().toString(16)}`;
-          const fallbackTx: Transaction = {
-            id: `tx-${type.toLowerCase()}-${Date.now()}`,
-            type,
-            assetSymbol: type === 'CONVERT' ? `${params.symbol} → ${targetSym}` : params.symbol,
-            amount: params.amount,
-            fiatAmount: params.fiatAmount,
-            timestamp: Date.now(),
-            status: 'completed',
-            hash: generatedTxHash,
-            details: type === 'BUY'
-              ? `Purchased ${params.amount.toFixed(6)} ${params.symbol}`
-              : type === 'SELL'
-              ? `Sold ${params.amount.toFixed(6)} ${params.symbol}`
-              : `Converted ${params.amount.toFixed(6)} ${params.symbol} into ${computedTargetAmount.toFixed(6)} ${targetSym}`
-          };
-          recordNewTransaction(fallbackTx);
-        }
-
-        showToast(data.message || `Successfully executed ${type} trade!`, 'success');
-        syncCoinbaseBalances();
-        return;
+      const data = await response.json().catch(() => ({}));
+      const transaction = data?.transaction;
+      if (!response.ok || !data?.success || !transaction?.hash) {
+        throw new Error(data?.message || data?.error || 'The provider did not return a verified transaction reference.');
       }
-    } catch (e: any) {
-      // Fallthrough to local trade state execution
-    }
 
-    if (!backendSuccess) {
-      const generatedTxHash = `0x${Math.random().toString(16).substring(2, 12)}${Date.now().toString(16)}`;
-
-      if (type === 'BUY') {
-        setUsdBalance((prev) => Math.max(0, prev - params.fiatAmount));
-        setHoldings((prev) => {
-          const exists = prev.find((h) => h.symbol === params.symbol);
-          if (exists) {
-            return prev.map((h) =>
-              h.symbol === params.symbol ? { ...h, amount: h.amount + params.amount } : h
-            );
-          } else {
-            return [...prev, { symbol: params.symbol, amount: params.amount, avgBuyPrice: coin.price || 0 }];
-          }
-        });
-        const newTx: Transaction = {
-          id: `tx-buy-${Date.now()}`,
-          type: 'BUY',
-          assetSymbol: params.symbol,
-          amount: params.amount,
-          fiatAmount: params.fiatAmount,
-          timestamp: Date.now(),
-          status: 'completed',
-          hash: generatedTxHash,
-          details: `Purchased ${params.amount.toFixed(6)} ${params.symbol}`
-        };
-        recordNewTransaction(newTx);
-        showToast(`Successfully bought ${params.amount.toFixed(6)} ${params.symbol} for $${params.fiatAmount.toFixed(2)}!`, 'success');
-      } else if (type === 'SELL') {
-        setHoldings((prev) =>
-          prev
-            .map((h) => (h.symbol === params.symbol ? { ...h, amount: Math.max(0, h.amount - params.amount) } : h))
-            .filter((h) => h.amount > 0)
-        );
-        setUsdBalance((prev) => prev + params.fiatAmount);
-        const newTx: Transaction = {
-          id: `tx-sell-${Date.now()}`,
-          type: 'SELL',
-          assetSymbol: params.symbol,
-          amount: params.amount,
-          fiatAmount: params.fiatAmount,
-          timestamp: Date.now(),
-          status: 'completed',
-          hash: generatedTxHash,
-          details: `Sold ${params.amount.toFixed(6)} ${params.symbol}`
-        };
-        recordNewTransaction(newTx);
-        showToast(`Successfully sold ${params.amount.toFixed(6)} ${params.symbol} for $${params.fiatAmount.toFixed(2)}!`, 'success');
-      } else if (type === 'CONVERT') {
-        const targetSym = params.targetSymbol || 'ETH';
-        const targetCoin = coins.find((c) => c && c.symbol === targetSym);
-        const targetAmount = targetCoin && targetCoin.price > 0 ? params.fiatAmount / targetCoin.price : params.amount;
-
-        setHoldings((prev) => {
-          let updated = prev
-            .map((h) => (h.symbol === params.symbol ? { ...h, amount: Math.max(0, h.amount - params.amount) } : h))
-            .filter((h) => h.amount > 0);
-
-          const targetExists = updated.find((h) => h.symbol === targetSym);
-          if (targetExists) {
-            return updated.map((h) => (h.symbol === targetSym ? { ...h, amount: h.amount + targetAmount } : h));
-          } else {
-            return [...updated, { symbol: targetSym, amount: targetAmount, avgBuyPrice: targetCoin?.price || 0 }];
-          }
-        });
-
-        const newTx: Transaction = {
-          id: `tx-convert-${Date.now()}`,
-          type: 'CONVERT',
-          assetSymbol: `${params.symbol} → ${targetSym}`,
-          amount: params.amount,
-          fiatAmount: params.fiatAmount,
-          timestamp: Date.now(),
-          status: 'completed',
-          hash: generatedTxHash,
-          details: `Converted ${params.amount.toFixed(6)} ${params.symbol} to ${targetAmount.toFixed(6)} ${targetSym}`
-        };
-        recordNewTransaction(newTx);
-        showToast(`Successfully converted ${params.amount.toFixed(6)} ${params.symbol} into ${targetAmount.toFixed(6)} ${targetSym}!`, 'success');
-      }
+      recordNewTransaction(transaction);
+      await syncCoinbaseBalances();
+      showToast(data.message || `${type} transaction submitted with provider reference ${transaction.hash}.`, 'success');
+    } catch (error: any) {
+      showToast(error?.message || 'The trade was not executed. Balances were not changed.', 'error');
     }
   };
 
@@ -2067,7 +1781,8 @@ export default function App() {
       }
 
       if (!broadcastSuccess) {
-        txHash = `0x${Math.random().toString(16).substring(2, 14)}${Date.now().toString(16)}`;
+        showToast('The transaction was not broadcast. Your local balance has not been changed.', 'error');
+        return;
       }
 
       setHoldings((prev) =>
@@ -2108,47 +1823,8 @@ export default function App() {
       showToast(`Broadcast initiated! Tracking real-time progress for ${amount.toFixed(6)} ${symbol} in Ledger...`, 'info');
       return true;
     } else if (type === 'RECEIVE') {
-      const generatedTxHash = `0x${Math.random().toString(16).substring(2, 14)}${Date.now().toString(16)}`;
-      setHoldings((prev) => {
-        const exists = prev.find((h) => h.symbol === symbol);
-        if (exists) {
-          return prev.map((h) => (h.symbol === symbol ? { ...h, amount: h.amount + amount } : h));
-        } else {
-          return [...prev, { symbol, amount, avgBuyPrice: coin?.price || 0 }];
-        }
-      });
-      const newTxId = `tx-receive-${Date.now()}`;
-      const newTx: Transaction = {
-        id: newTxId,
-        type: 'RECEIVE',
-        assetSymbol: symbol,
-        amount: amount,
-        fiatAmount: fiatAmount,
-        timestamp: Date.now(),
-        status: 'pending',
-        stage: 'INITIATED',
-        stageLabel: 'Detecting Inbound Block Transaction',
-        progressPercent: 30,
-        confirmations: 0,
-        requiredConfirmations: 3,
-        estimatedCompletionTime: 45,
-        hash: generatedTxHash,
-        details: details || `Received external deposit`,
-        ledgerDebit: `Inbound Clearing Node`,
-        ledgerCredit: `Asset Holding Account (${symbol})`
-      };
-      recordNewTransaction(newTx);
-
-      // Register with backend status tracking engine
-      fetch('/api/transactions/track', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify(newTx)
-      }).catch(() => {});
-
-      showToast(`Inbound transfer detected! Tracking live confirmations in Ledger...`, 'info');
-      return true;
+      showToast('Incoming balances are updated only after a verified provider or on-chain confirmation is received. No local deposit was recorded.', 'info');
+      return false;
     }
     return false;
   };
@@ -2806,7 +2482,7 @@ export default function App() {
                               </td>
                               <td className="px-6 py-4 text-right">
                                 <span className="text-xs text-gray-500 font-mono font-semibold">
-                                  {row.allocation.toFixed(1)}%
+                                  {row.allocation === null ? '—' : `${row.allocation.toFixed(1)}%`}
                                 </span>
                               </td>
                               <td className="px-6 py-4 text-right font-mono text-gray-500 text-xs">
@@ -2867,12 +2543,12 @@ export default function App() {
                                 {row.amountFormatted}
                               </div>
                               <div className="text-xs text-gray-400 font-medium font-mono">
-                                ${row.fiatValue.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                {row.fiatValue === null ? 'Live value unavailable' : `$${row.fiatValue.toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
                               </div>
                             </td>
                             <td className="px-6 py-4 text-right">
                               <span className="text-xs text-gray-500 font-mono font-semibold">
-                                {row.allocation.toFixed(1)}%
+                                {row.allocation === null ? '—' : `${row.allocation.toFixed(1)}%`}
                               </span>
                             </td>
                             <td className="px-6 py-4 text-right font-mono text-gray-900 text-xs sm:text-sm">
@@ -3243,7 +2919,7 @@ export default function App() {
           <div className="max-w-7xl mx-auto space-y-6">
             <ErrorBoundary name="Web3WalletTab">
               <BlockchainWalletComponent
-                customAddress={web3WalletAddress || DEFAULT_WEB3_WALLET_ADDRESS}
+                customAddress={web3WalletAddress}
                 onWalletStateChange={(address, spendable) => {
                   const safeAddress = normalizeWalletAddress(address);
                   setWeb3WalletAddress(safeAddress);
@@ -3275,109 +2951,49 @@ export default function App() {
 
         {/* --- Tab: Address Hub --- */}
         {currentTab === 'address' && (
-          <div className="max-w-7xl mx-auto">
-            <ErrorBoundary name="AddressHubTab">
-              <AddressHub
-                coins={coins}
-                holdings={holdings}
-                onAddTransaction={(type, symbol, amount, fiat, details) => {
-                  const coin = coins.find((c) => c && c.symbol === symbol);
-                  if (!coin) return;
-                  
-                  // Track standard holdings addition if on-chain faucet credited
-                  setHoldings((prev) => {
-                    const existing = prev.find((h) => h.symbol === symbol);
-                    if (existing) {
-                      const totalAmount = existing.amount + amount;
-                      const weightedAvg = ((existing.amount * existing.avgBuyPrice) + (amount * coin.price)) / totalAmount;
-                      return prev.map((h) =>
-                        h.symbol === symbol ? { ...h, amount: totalAmount, avgBuyPrice: weightedAvg } : h
-                      );
-                    } else {
-                      return [...prev, { symbol, amount, avgBuyPrice: coin.price }];
-                    }
-                  });
-
-                  const tx: Transaction = {
-                    id: `tx-chain-${Date.now()}`,
-                    type: 'RECEIVE',
-                    assetSymbol: symbol,
-                    amount: amount,
-                    fiatAmount: fiat,
-                    timestamp: Date.now(),
-                    details: details,
-                    hash: `0x${Array.from({ length: 40 }, () => Math.floor(Math.random() * 16).toString(16)).join('')}`,
-                    status: 'completed',
-                    blockHeight: 849012 + Math.floor(Math.random() * 5000),
-                    fromAddress: '0xfa839c0183...f9a8',
-                    toAddress: symbol === 'ETH' ? '0x71C7656EC7ab88b098defB751B7401B5f6d1476B' : 'bc1qz8w9j7k6m5n4p3r2t1v0x9y8z7w6v5u',
-                    ledgerDebit: `Cryptocurrency Vault Holding (${symbol})`,
-                    ledgerCredit: 'On-Chain Miner/Validator Coinbase'
-                  };
-                  recordNewTransaction(tx);
-                }}
-                showToast={showToast}
-              />
-            </ErrorBoundary>
+          <div className="max-w-3xl mx-auto rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-xs">
+            <Wallet className="mx-auto mb-3 h-8 w-8 text-[#0052FF]" />
+            <h2 className="text-lg font-bold text-slate-900">Verified Address Synchronization</h2>
+            <p className="mt-2 text-sm leading-6 text-slate-600">
+              Address management does not create balances, addresses, or transactions locally. Connect your browser wallet in the Web3 Wallet tab to display assets returned by the configured blockchain RPC.
+            </p>
+            <button
+              type="button"
+              onClick={() => setCurrentTab('wallet')}
+              className="mt-5 rounded-lg bg-[#0052FF] px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+            >
+              Open Web3 Wallet
+            </button>
           </div>
         )}
 
-        {/* --- Tab: Bitcoin ATM Hub --- */}
+        {/* --- Bitcoin ATM Operations --- */}
         {currentTab === 'bitcoin-atm' && (
-          <div className="max-w-7xl mx-auto">
-            <ErrorBoundary name="BitcoinAtmHubTab">
-              <BitcoinAtmHub
-                btcBalance={PUBLISHED_BTC_BALANCE}
-                btcAddress={PUBLISHED_BTC_ADDRESS}
-                coins={coins}
-                holdings={holdings}
-                transactions={transactions}
-                userEmail={userEmail}
-                userName={userName || 'Marcel Laframboise'}
-                citizenship={citizenship}
-                localcoinEmail={userEmail}
-                showToast={showToast}
-                onOpenSendReceive={(act, prefill) => {
-                  setSendReceiveAction(act);
-                  setSendReceivePrefill(prefill || {});
-                  setIsSendReceiveOpen(true);
-                }}
-              />
-            </ErrorBoundary>
+          <div className="mx-auto max-w-3xl rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-xs">
+            <ShieldCheck className="mx-auto mb-3 h-8 w-8 text-amber-600" />
+            <h2 className="text-lg font-bold text-slate-900">Bitcoin ATM Operations Unavailable</h2>
+            <p className="mt-2 text-sm leading-6 text-slate-600">ATM routing, cash orders, and recovery actions are disabled until a verified operator integration provides authoritative availability, order, and settlement data.</p>
+            <button type="button" onClick={() => setCurrentTab('wallet')} className="mt-5 rounded-lg bg-[#0052FF] px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">Open Verified Web3 Wallet</button>
           </div>
         )}
 
-        {/* --- Tab: Developer Hub --- */}
+        {/* --- Developer Trading Controls --- */}
         {currentTab === 'api' && (
-          <div className="max-w-7xl mx-auto">
-            <ErrorBoundary name="DeveloperHubTab">
-              <DeveloperHub
-                coins={coins}
-                holdings={holdings}
-                usdBalance={liveCashBalance}
-                showToast={showToast}
-                onRefreshBalances={syncCoinbaseBalances}
-              />
-            </ErrorBoundary>
+          <div className="mx-auto max-w-3xl rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-xs">
+            <ShieldCheck className="mx-auto mb-3 h-8 w-8 text-amber-600" />
+            <h2 className="text-lg font-bold text-slate-900">Developer Trading Controls Unavailable</h2>
+            <p className="mt-2 text-sm leading-6 text-slate-600">Developer trading and order controls are disabled until each action is backed by a verified provider response and a durable audit record.</p>
+            <button type="button" onClick={() => setCurrentTab('wallet')} className="mt-5 rounded-lg bg-[#0052FF] px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">Open Verified Web3 Wallet</button>
           </div>
         )}
 
-        {/* --- Tab: Copilot AI Agent & GitHub Full In-App Control --- */}
+        {/* --- Automated Financial Agent --- */}
         {currentTab === 'copilot' && (
-          <div className="max-w-7xl mx-auto">
-            <ErrorBoundary name="CopilotHubTab">
-              <CopilotHub
-                coins={coins}
-                holdings={holdings}
-                usdBalance={liveCashBalance}
-                transactions={transactions}
-                onUpdateHoldings={setHoldings}
-                onUpdateUsdBalance={setUsdBalance}
-                onAddTransaction={(tx) => setTransactions((prev) => [tx, ...prev])}
-                showToast={showToast}
-                onNavigateTab={(tab) => setCurrentTab(tab)}
-              />
-            </ErrorBoundary>
+          <div className="mx-auto max-w-3xl rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-xs">
+            <ShieldCheck className="mx-auto mb-3 h-8 w-8 text-amber-600" />
+            <h2 className="text-lg font-bold text-slate-900">Automated Financial Agent Unavailable</h2>
+            <p className="mt-2 text-sm leading-6 text-slate-600">Automated portfolio, rebalance, and financial-action controls are disabled. The application does not simulate execution or alter financial state without a verified provider integration.</p>
+            <button type="button" onClick={() => setCurrentTab('wallet')} className="mt-5 rounded-lg bg-[#0052FF] px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">Open Verified Web3 Wallet</button>
           </div>
         )}
 
@@ -3517,6 +3133,7 @@ export default function App() {
                   const isConvert = tx.type === 'CONVERT';
                   const isPending = tx.status === 'pending' || tx.status === 'processing';
                   const isFailed = tx.status === 'failed';
+                  const hasVerifiedOnChainProof = /^0x[0-9a-fA-F]{64}$/.test(String(tx.hash || '')) && Number.isInteger(Number(tx.blockHeight)) && Number(tx.blockHeight) > 0 && Number(tx.confirmations || 0) >= 3;
                   const requiredConfirmations = tx.requiredConfirmations || 3;
                   const isAwaitingConfirmation = !isFailed && typeof tx.confirmations === 'number' && tx.confirmations < requiredConfirmations;
                   const txDate = new Date(tx.timestamp).toLocaleString(undefined, {
@@ -3580,10 +3197,14 @@ export default function App() {
                                 <span className="text-[10px] bg-red-100 text-red-700 font-bold px-2 py-0.5 rounded-full border border-red-200">
                                   Failed / Rejected
                                 </span>
-                              ) : (
+                              ) : hasVerifiedOnChainProof ? (
                                 <span className="text-[10px] bg-emerald-50 text-emerald-700 font-bold px-2 py-0.5 rounded-full flex items-center gap-1 border border-emerald-200">
                                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                                  <span>Settled (3/3)</span>
+                                  <span>Verified On-Chain ({tx.confirmations}/3)</span>
+                                </span>
+                              ) : (
+                                <span className="text-[10px] bg-slate-100 text-slate-700 font-bold px-2 py-0.5 rounded-full border border-slate-200">
+                                  Verification Required
                                 </span>
                               )}
 
@@ -3662,9 +3283,9 @@ export default function App() {
                               <div className="grid grid-cols-3 gap-1">
                                 <span className="text-[10px] text-gray-400 font-bold">Status:</span>
                                 <span className="col-span-2 font-bold flex items-center text-[11px]">
-                                  <span className={`w-1.5 h-1.5 rounded-full mr-1.5 ${isPending || isAwaitingConfirmation ? 'bg-amber-500 animate-ping' : isFailed ? 'bg-red-500' : 'bg-green-500'}`} />
-                                  <span className={isPending || isAwaitingConfirmation ? 'text-amber-700' : isFailed ? 'text-red-700' : 'text-gray-800'}>
-                                    {isPending || isAwaitingConfirmation ? `Pending Confirmation (${tx.confirmations || 0}/${requiredConfirmations} Blocks)` : isFailed ? 'Transaction Rejected' : 'Broadcasted & Settled'}
+                                  <span className={`w-1.5 h-1.5 rounded-full mr-1.5 ${isPending ? 'bg-amber-500 animate-ping' : isFailed ? 'bg-red-500' : 'bg-green-500'}`} />
+                                  <span className={isPending ? 'text-amber-700' : isFailed ? 'text-red-700' : 'text-gray-800'}>
+                                    {isPending || isAwaitingConfirmation ? `Pending Confirmation (${tx.confirmations || 0}/${requiredConfirmations} Blocks)` : isFailed ? 'Transaction Rejected' : hasVerifiedOnChainProof ? `Verified On-Chain (${tx.confirmations}/3)` : 'Recorded — verification required'}
                                   </span>
                                 </span>
                               </div>
@@ -3672,21 +3293,21 @@ export default function App() {
                               <div className="grid grid-cols-3 gap-1">
                                 <span className="text-[10px] text-gray-400 font-bold">Block Height:</span>
                                 <span className="col-span-2 text-gray-700 font-mono font-semibold text-[11px]">
-                                  {tx.blockHeight ? `#${tx.blockHeight}` : 'Awaiting confirmation'}
+                                  {hasVerifiedOnChainProof ? `#${tx.blockHeight}` : 'No verified block height'}
                                 </span>
                               </div>
 
                               <div className="grid grid-cols-3 gap-1">
                                 <span className="text-[10px] text-gray-400 font-bold">Transaction Hash:</span>
-                                <span className="col-span-2 text-gray-700 font-mono text-[10px] truncate select-all" title={tx.hash || 'Not assigned until broadcast'}>
-                                  {tx.hash || 'Not assigned until broadcast'}
+                                <span className="col-span-2 text-gray-700 font-mono text-[10px] truncate select-all" title={hasVerifiedOnChainProof ? tx.hash : 'No verified on-chain hash'}>
+                                  {hasVerifiedOnChainProof ? tx.hash : 'No verified on-chain hash'}
                                 </span>
                               </div>
 
                               <div className="grid grid-cols-3 gap-1">
                                 <span className="text-[10px] text-gray-400 font-bold">On-Chain Path:</span>
                                 <span className="col-span-2 text-gray-500 font-mono text-[10px] truncate">
-                                  {tx.fromAddress ? `${tx.fromAddress.slice(0, 8)}...` : 'Coinbase Hot Vault'} ➔ {tx.toAddress ? `${tx.toAddress.slice(0, 8)}...` : 'User Ledger Wallet'}
+                                  {hasVerifiedOnChainProof && tx.fromAddress && tx.toAddress ? `${tx.fromAddress.slice(0, 8)}... ➔ ${tx.toAddress.slice(0, 8)}...` : 'No verified on-chain path'}
                                 </span>
                               </div>
                             </div>
@@ -3698,28 +3319,28 @@ export default function App() {
                               <div className="grid grid-cols-3 gap-1">
                                 <span className="text-[10px] text-gray-400 font-bold">Ledger Debit (Dr):</span>
                                 <span className="col-span-2 text-blue-700 font-bold text-[11px]">
-                                  {tx.ledgerDebit || `${tx.type === 'BUY' ? 'Asset Inventory Account' : 'Fiat Cash Ledger'} (${tx.assetSymbol})`}
+                                  {hasVerifiedOnChainProof && tx.ledgerDebit ? tx.ledgerDebit : 'No independently verified debit entry'}
                                 </span>
                               </div>
 
                               <div className="grid grid-cols-3 gap-1">
                                 <span className="text-[10px] text-gray-400 font-bold">Ledger Credit (Cr):</span>
                                 <span className="col-span-2 text-emerald-700 font-bold text-[11px]">
-                                  {tx.ledgerCredit || `${tx.type === 'BUY' ? 'Cash Operational Reserve' : 'Asset Inventory Account'} (${tx.assetSymbol})`}
+                                  {hasVerifiedOnChainProof && tx.ledgerCredit ? tx.ledgerCredit : 'No independently verified credit entry'}
                                 </span>
                               </div>
 
                               <div className="grid grid-cols-3 gap-1">
                                 <span className="text-[10px] text-gray-400 font-bold">Clearing Method:</span>
                                 <span className="col-span-2 text-gray-700 font-semibold text-[11px]">
-                                  {tx.type === 'SEND' || tx.type === 'RECEIVE' ? 'Blockchain Settlement Layer' : 'Instant Internal Settlement Engine'}
+                                  {hasVerifiedOnChainProof ? 'Verified blockchain settlement' : 'Verification required'}
                                 </span>
                               </div>
 
                               <div className="grid grid-cols-3 gap-1">
                                 <span className="text-[10px] text-gray-400 font-bold">Compliance Log:</span>
                                 <span className="col-span-2 text-gray-500 text-[10px]">
-                                  Authorized under FinCEN and FINTRAC regional regulations.
+                                  No automated compliance or settlement assertion is shown without independent verification.
                                 </span>
                               </div>
                             </div>
@@ -3729,7 +3350,7 @@ export default function App() {
                           {/* Action footer in expanded transaction */}
                           <div className="flex items-center justify-between pt-2 border-t border-gray-200/80 flex-wrap gap-2">
                             <span className="text-[10px] text-gray-400 font-mono">
-                              Tx Audit Checksum: Validated & Signed
+                              Verification state: {hasVerifiedOnChainProof ? 'On-chain proof recorded' : 'Provider or on-chain proof required'}
                             </span>
                             <button
                               type="button"

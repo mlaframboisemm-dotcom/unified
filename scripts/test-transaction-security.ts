@@ -5,8 +5,9 @@ import net from 'net';
 import crypto from 'crypto';
 
 const repoRoot = process.cwd();
-const dbPath = path.join(repoRoot, 'src', 'db', 'database.json');
-const verificationPath = path.join(repoRoot, 'src', 'db', 'email_verifications.json');
+const runtimeDataDir = path.join(repoRoot, 'data');
+const dbPath = path.join(runtimeDataDir, 'transaction-security-database.json');
+const verificationPath = path.join(runtimeDataDir, 'email_verifications.json');
 const nodeExecPath = process.execPath;
 const tsxCliPath = path.join(repoRoot, 'node_modules', 'tsx', 'dist', 'cli.mjs');
 
@@ -87,6 +88,7 @@ async function main() {
   try {
     const port = await getAvailablePort();
 
+    fs.mkdirSync(runtimeDataDir, { recursive: true });
     fs.writeFileSync(
       dbPath,
       JSON.stringify({ users: [], wallets: [], transactions: [], auditLogs: [] }, null, 2),
@@ -104,7 +106,8 @@ async function main() {
         PORT: String(port),
         JWT_SECRET: '12345678901234567890123456789012',
         SOVEREIGN_ENCRYPTION_KEY: 'abcdefghijklmnopqrstuvwxyzABCDEF',
-        SOVEREIGN_ADMIN_EMAILS: 'tx@test.local'
+        SOVEREIGN_ADMIN_EMAILS: 'tx@test.local',
+        SOVEREIGN_DB_FILE_PATH: dbPath
       }
     });
 
@@ -219,6 +222,37 @@ async function main() {
     assert(typeof spendabilityBody.assetsSafe === 'boolean', 'Expected assetsSafe boolean in spendability payload.');
     assert(typeof spendabilityBody.allRailsSpendable === 'boolean', 'Expected allRailsSpendable boolean in spendability payload.');
     assert(spendabilityBody.rails?.walletSend, 'Expected rails.walletSend in spendability payload.');
+
+    const manualTrackingRes = await fetch(`${base}/api/transactions/track`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', cookie },
+      body: JSON.stringify({ assetSymbol: 'BTC', amount: 1, hash: 'verified-reference-test' })
+    });
+    assert(manualTrackingRes.status === 501, `Expected manual transaction tracking to be disabled with 501, got ${manualTrackingRes.status}`);
+
+    const speedUpRes = await fetch(`${base}/api/transactions/speed-up`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', cookie },
+      body: JSON.stringify({ id: 'tx-test' })
+    });
+    assert(speedUpRes.status === 501, `Expected transaction speed-up to be disabled with 501, got ${speedUpRes.status}`);
+
+    const virtualCardsRes = await fetch(`${base}/api/virtual-cards`, { headers: { cookie } });
+    assert(virtualCardsRes.status === 501, `Expected virtual-card operations to be disabled with 501, got ${virtualCardsRes.status}`);
+
+    const plaidLinkRes = await fetch(`${base}/api/plaid/create-link-token`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', cookie },
+      body: JSON.stringify({})
+    });
+    assert(plaidLinkRes.status === 501, `Expected Plaid linking to be disabled with 501, got ${plaidLinkRes.status}`);
+
+    const wisePayoutRes = await fetch(`${base}/api/wise/payout`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', cookie },
+      body: JSON.stringify({ amount: 1, currency: 'USD' })
+    });
+    assert(wisePayoutRes.status === 501, `Expected Wise payout to be disabled with 501, got ${wisePayoutRes.status}`);
 
     const unknownTransferRes = await fetch(`${base}/api/exchanges/etransfer/get/non-existent-transfer-id`, {
       headers: { cookie }

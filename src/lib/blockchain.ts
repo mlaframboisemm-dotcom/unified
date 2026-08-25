@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { ethers } from 'ethers';
+import * as ethers from 'ethers';
 import { ChainType, ChainConfig, BlockchainTransaction } from '../types';
 
 // Standard Base58 alphabet
@@ -169,70 +169,19 @@ export function getChainRpcs(chain: ChainType): string[] {
  * Fetch live USD rates from CryptoCompare's free multi-price API via server proxy.
  */
 export async function fetchLiveExchangeRates(): Promise<Record<string, number>> {
-  const isProd = (import.meta as any).env?.PROD === true;
-  const fallbacks = {
-    BTC: 60000,
-    ETH: 3300,
-    SOL: 150,
-    POL: 0.50,
-    BNB: 580,
-    LEO: 5.80,
-    USDC: 1.00,
-    PEPE: 0.000012,
-    SHIB: 0.000018,
-    LINK: 15.00,
-    XAUT: 2350.00,
-    LIF3: 0.012,
-    MXNT: 0.055,
-    HYPE: 4.50,
-    USDF: 1.00,
-    USDT0: 1.00,
-    USDCAD: 1.3650
-  };
-
-  try {
-    const res = await fetch('/api/prices');
-    if (!res.ok) {
-      if ((import.meta as any).env?.DEV) {
-        console.warn('Price API returned non-ok status:', res.status);
-      }
-      return fallbacks;
-    }
-    const contentType = res.headers.get('content-type');
-    if (!contentType || !contentType.includes('application/json')) {
-      if ((import.meta as any).env?.DEV) {
-        console.warn('Price API returned non-JSON content-type:', contentType);
-      }
-      return fallbacks;
-    }
-    const data = await res.json();
-    return {
-      BTC: data.BTC?.USD || 64200.00,
-      ETH: data.ETH?.USD || 3350.00,
-      SOL: data.SOL?.USD || 145.00,
-      POL: data.POL?.USD || 0.52,
-      BNB: data.BNB?.USD || 575.00,
-      LEO: data.LEO?.USD || 5.85,
-      USDC: data.USDC?.USD || 1.00,
-      PEPE: data.PEPE?.USD || 0.0000125,
-      SHIB: data.SHIB?.USD || 0.0000185,
-      LINK: data.LINK?.USD || 15.20,
-      XAUT: data.XAUT?.USD || 2350.00,
-      LIF3: data.LIF3?.USD || 0.012,
-      MXNT: data.MXNT?.USD || 0.055,
-      HYPE: data.HYPE?.USD || 4.50,
-      USDF: 1.00,
-      USDT0: 1.00,
-      USDCAD: data.USDCAD?.USD || 1.3650
-    };
-  } catch (error) {
-    if ((import.meta as any).env?.DEV) {
-      console.warn('Unable to retrieve live exchange rates, defaulting to internal reference pricing:', error);
-    }
-    return fallbacks;
+  const response = await fetch('/api/prices');
+  if (!response.ok) throw new Error('Live price provider is unavailable.');
+  const contentType = response.headers.get('content-type') || '';
+  if (!contentType.includes('application/json')) throw new Error('Live price provider returned an invalid response.');
+  const payload = await response.json();
+  const rates: Record<string, number> = {};
+  for (const [symbol, value] of Object.entries(payload || {})) {
+    const price = Number((value as { USD?: unknown })?.USD);
+    if (Number.isFinite(price) && price > 0) rates[String(symbol).toUpperCase()] = price;
   }
+  if (Object.keys(rates).length === 0) throw new Error('Live price provider returned no verified prices.');
+  return rates;
 }
-
 /**
  * Validates any wallet address for a given blockchain.
  */
@@ -263,206 +212,79 @@ export function validateAddress(chain: ChainType, address: string): boolean {
  * Query real on-chain balance for any network and address.
  */
 export async function getBlockchainBalance(chain: ChainType, address: string): Promise<string> {
-  if (!address || !validateAddress(chain, address)) return '0.0000';
-  
-
+  if (!address || !validateAddress(chain, address)) throw new Error('A valid address is required for on-chain balance verification.');
   const rpcs = getChainRpcs(chain);
 
-  try {
-    if (chain === 'Ethereum' || chain === 'Polygon' || chain === 'Base' || chain === 'BNB Chain') {
-      for (const rpcUrl of rpcs) {
-        try {
-          const chainId = CHAIN_IDS[chain];
-          const provider = new ethers.JsonRpcProvider(rpcUrl, chainId, { staticNetwork: true });
-          const cleanAddress = address.toLowerCase();
-          const balancePromise = provider.getBalance(cleanAddress);
-          const timeoutPromise = new Promise<never>((_, reject) => setTimeout(() => reject(new Error('RPC Timeout')), 4000));
-          const balance = await Promise.race([balancePromise, timeoutPromise]);
-          return parseFloat(ethers.formatEther(balance)).toFixed(4);
-        } catch (e) {
-          console.warn(`RPC call failed for ${chain} on ${rpcUrl}, trying next...`);
-        }
-      }
-      return '0.0000';
-    } 
-    
-    if (chain === 'Solana') {
-      for (const rpcUrl of rpcs) {
-        try {
-          const resPromise = fetch(rpcUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              jsonrpc: '2.0',
-              id: 1,
-              method: 'getBalance',
-              params: [address]
-            })
-          });
-          const timeoutPromise = new Promise<never>((_, reject) => setTimeout(() => reject(new Error('RPC Timeout')), 4000));
-          const res = await Promise.race([resPromise, timeoutPromise]);
-          if (!res.ok) continue;
-          const data = await res.json();
-          const lamports = data?.result?.value || 0;
-          return (lamports / 1e9).toFixed(4);
-        } catch (e) {
-          console.warn(`Solana RPC call failed on ${rpcUrl}, trying next...`);
-        }
-      }
-      return '0.0000';
+  if (chain === 'Ethereum' || chain === 'Polygon' || chain === 'Base' || chain === 'BNB Chain') {
+    for (const rpcUrl of rpcs) {
+      try {
+        const provider = new ethers.JsonRpcProvider(rpcUrl, CHAIN_IDS[chain], { staticNetwork: true });
+        const balance = await Promise.race([provider.getBalance(address.toLowerCase()), new Promise<never>((_, reject) => setTimeout(() => reject(new Error('RPC timeout')), 4000))]);
+        return parseFloat(ethers.formatEther(balance)).toFixed(4);
+      } catch { /* Try the next configured provider without returning a numeric fallback. */ }
     }
-
-    if (chain === 'Bitcoin') {
-      const res = await fetch(`${CHAINS.Bitcoin.rpcUrl}/address/${address}`);
-      if (!res.ok) throw new Error('Bitcoin API error');
-      const data = await res.json();
-      const funded = data?.chain_stats?.funded_txo_sum || 0;
-      const spent = data?.chain_stats?.spent_txo_sum || 0;
-      const satoshis = funded - spent;
-      return (satoshis / 1e8).toFixed(6);
-    }
-    
-    return '0.00';
-  } catch (error) {
-    console.warn(`Error querying ${chain} balance for address ${address}, falling back:`, error);
-    return '0.0000';
+    throw new Error('No configured ' + chain + ' RPC provider returned a verified balance.');
   }
-}
 
+  if (chain === 'Solana') {
+    for (const rpcUrl of rpcs) {
+      try {
+        const response = await fetch(rpcUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'getBalance', params: [address] }) });
+        if (!response.ok) continue;
+        const payload = await response.json();
+        const lamports = Number(payload?.result?.value);
+        if (Number.isFinite(lamports) && lamports >= 0) return (lamports / 1e9).toFixed(4);
+      } catch { /* Try the next configured provider without returning a numeric fallback. */ }
+    }
+    throw new Error('No configured Solana RPC provider returned a verified balance.');
+  }
+
+  if (chain === 'Bitcoin') {
+    const response = await fetch(CHAINS.Bitcoin.rpcUrl + '/address/' + address);
+    if (!response.ok) throw new Error('Bitcoin provider did not return a verified balance.');
+    const payload = await response.json();
+    const funded = Number(payload?.chain_stats?.funded_txo_sum);
+    const spent = Number(payload?.chain_stats?.spent_txo_sum);
+    if (!Number.isFinite(funded) || !Number.isFinite(spent)) throw new Error('Bitcoin provider returned incomplete balance data.');
+    return ((funded - spent) / 1e8).toFixed(6);
+  }
+
+  throw new Error('Balance verification is not available for ' + chain + '.');
+}
 /**
  * Fetch real transaction history for an address on-chain or through explorer APIs.
  */
 export async function fetchLiveTransactions(chain: ChainType, address: string): Promise<Partial<BlockchainTransaction>[]> {
-  if (!address || !validateAddress(chain, address)) return [];
-  try {
-    if (chain === 'Bitcoin') {
-      const res = await fetch(`${CHAINS.Bitcoin.rpcUrl}/address/${address}/txs`);
-      if (!res.ok) return [];
-      const txs = await res.json();
-      return txs.slice(0, 10).map((tx: any) => {
-        // compute direction and amount
-        let amountSat = 0;
-        let isReceive = true;
-        
-        // if any input is from our address, we sent it
-        const sentFromMe = tx.vin.some((input: any) => input.prevout?.scriptpubkey_address === address);
-        
-        if (sentFromMe) {
-          isReceive = false;
-          // Sum up outputs going to other addresses
-          const otherOutputs = tx.vout.filter((o: any) => o.scriptpubkey_address !== address);
-          amountSat = otherOutputs.reduce((acc: number, o: any) => acc + (o.value || 0), 0);
-        } else {
-          // Sum up outputs going to our address
-          const myOutputs = tx.vout.filter((o: any) => o.scriptpubkey_address === address);
-          amountSat = myOutputs.reduce((acc: number, o: any) => acc + (o.value || 0), 0);
-        }
-        
-        return {
-          txId: tx.txid,
-          hash: tx.txid,
-          chain: 'Bitcoin',
-          type: isReceive ? 'receive' : 'send',
-          fromAddress: tx.vin[0]?.prevout?.scriptpubkey_address || 'Unknown',
-          toAddress: tx.vout[0]?.scriptpubkey_address || address,
-          amount: (amountSat / 1e8).toFixed(6),
-          status: tx.status?.confirmed ? 'confirmed' : 'pending',
-          timestamp: tx.status?.block_time 
-            ? new Date(tx.status.block_time * 1000).toISOString() 
-            : new Date().toISOString()
-        };
-      });
-    }
-
-    if (chain === 'Solana') {
-      const rpcs = ALTERNATIVE_RPCS.Solana;
-      let signatures = [];
-      for (const rpcUrl of rpcs) {
-        try {
-          const res = await fetch(rpcUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              jsonrpc: '2.0',
-              id: 1,
-              method: 'getSignaturesForAddress',
-              params: [address, { limit: 5 }]
-            })
-          });
-          if (!res.ok) continue;
-          const data = await res.json();
-          signatures = data?.result || [];
-          break;
-        } catch (e) {
-          console.warn(`fetchLiveTransactions Solana failed on RPC ${rpcUrl}:`, e);
-        }
-      }
-      return signatures.map((sig: any) => ({
-        txId: sig.signature,
-        hash: sig.signature,
-        chain: 'Solana',
-        type: 'send', // Default fallback representation
-        fromAddress: address,
-        toAddress: 'External Destination',
-        amount: '0.00',
-        status: sig.err ? 'failed' : 'confirmed',
-        timestamp: sig.blockTime ? new Date(sig.blockTime * 1000).toISOString() : new Date().toISOString()
-      }));
-    }
-
-    // EVM: Since querying full ledger history requires custom keys (Etherscan, etc.),
-    // we return standard formatted placeholders or query logs for native transfers.
-    // We will provide real-time mock-free custom list based on user transactions stored in Firestore,
-    // combined with on-chain polling.
-    return [];
-  } catch (error) {
-    console.warn(`Error querying transactions for ${chain}:`, error);
-    return [];
-  }
+  if (!address || !validateAddress(chain, address)) throw new Error('A valid address is required for transaction verification.');
+  if (chain !== 'Bitcoin') return []; // An authoritative indexer is required; no direction, amount, or counterparty is inferred from partial RPC data.
+  const response = await fetch(CHAINS.Bitcoin.rpcUrl + '/address/' + address + '/txs');
+  if (!response.ok) throw new Error('Bitcoin provider did not return transaction data.');
+  const txs = await response.json();
+  if (!Array.isArray(txs)) throw new Error('Bitcoin provider returned invalid transaction data.');
+  return txs.slice(0, 10).map((tx: any) => {
+    const sentFromAddress = Array.isArray(tx.vin) && tx.vin.some((input: any) => input.prevout?.scriptpubkey_address === address);
+    const outputs = Array.isArray(tx.vout) ? tx.vout : [];
+    const relevantOutputs = sentFromAddress ? outputs.filter((output: any) => output.scriptpubkey_address !== address) : outputs.filter((output: any) => output.scriptpubkey_address === address);
+    const satoshis = relevantOutputs.reduce((sum: number, output: any) => sum + Number(output?.value || 0), 0);
+    return { txId: String(tx.txid), hash: String(tx.txid), chain: 'Bitcoin', type: sentFromAddress ? 'send' : 'receive', fromAddress: String(tx.vin?.[0]?.prevout?.scriptpubkey_address || ''), toAddress: String(tx.vout?.[0]?.scriptpubkey_address || ''), amount: (satoshis / 1e8).toFixed(6), status: tx.status?.confirmed ? 'confirmed' : 'pending', timestamp: tx.status?.block_time ? new Date(tx.status.block_time * 1000).toISOString() : undefined };
+  });
 }
-
 /**
  * Estimate gas fee / network transaction fee.
  */
 export async function estimateNetworkFee(chain: ChainType): Promise<{ fee: string; symbol: string }> {
-  try {
-    const config = CHAINS[chain];
-    if (chain === 'Ethereum' || chain === 'Polygon' || chain === 'Base' || chain === 'BNB Chain') {
-      const rpcs = getChainRpcs(chain);
-      for (const rpcUrl of rpcs) {
-        try {
-          const chainId = CHAIN_IDS[chain];
-          const provider = new ethers.JsonRpcProvider(rpcUrl, chainId, { staticNetwork: true });
-          const feeData = await provider.getFeeData();
-          const gasPrice = feeData.gasPrice || ethers.parseUnits('20', 'gwei');
-          const standardGasLimit = 21000n; // Simple transfer
-          const totalFeeWei = gasPrice * standardGasLimit;
-          return {
-            fee: parseFloat(ethers.formatEther(totalFeeWei)).toFixed(6),
-            symbol: config.symbol
-          };
-        } catch (e) {
-          console.warn(`Fee estimation failed on RPC ${rpcUrl}, trying next...`);
-        }
-      }
-      const fallbackFees: Record<string, string> = {
-        Ethereum: '0.003500',
-        Polygon: '0.015000',
-        Base: '0.000150',
-        'BNB Chain': '0.000500'
-      };
-      return { fee: fallbackFees[chain] || '0.001', symbol: config.symbol };
-    } else if (chain === 'Solana') {
-      return { fee: '0.000005', symbol: 'SOL' }; // Static standard fee
-    } else {
-      return { fee: '0.0001', symbol: 'BTC' }; // Static standard fee
-    }
-  } catch (error) {
-    console.warn(`Error estimating fee for ${chain}:`, error);
-    return { fee: '0.001', symbol: CHAINS[chain].symbol };
+  const config = CHAINS[chain];
+  if (!(chain === 'Ethereum' || chain === 'Polygon' || chain === 'Base' || chain === 'BNB Chain')) throw new Error('A verified live fee estimate is not configured for ' + chain + '.');
+  for (const rpcUrl of getChainRpcs(chain)) {
+    try {
+      const provider = new ethers.JsonRpcProvider(rpcUrl, CHAIN_IDS[chain], { staticNetwork: true });
+      const feeData = await provider.getFeeData();
+      if (!feeData.gasPrice || feeData.gasPrice <= 0n) continue;
+      return { fee: parseFloat(ethers.formatEther(feeData.gasPrice * 21000n)).toFixed(6), symbol: config.symbol };
+    } catch { /* Try the next configured provider without returning a static fee. */ }
   }
+  throw new Error('No configured ' + chain + ' RPC provider returned a verified fee estimate.');
 }
-
 /**
  * Broadcast real signed transactions on EVM chains.
  */

@@ -172,9 +172,13 @@ export async function generateSovereignWalletPassJWT(data: WalletPassData): Prom
     viewUnlockRequirement: 'UNLOCK_NOT_REQUIRED'
   };
 
-  // Build JWT payload for Google Wallet
+  const signingCredentials = loadGoogleWalletSigningCredentials();
+
+  // Build JWT payload for Google Wallet. Pass signing fails closed if Render has
+  // not supplied valid service-account credentials; it never falls back to a
+  // repository file, generated key, or symmetric signing secret.
   const payload = {
-    iss: process.env.GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL || `sovereign-paydirect@aegis-sovereign.iam.gserviceaccount.com`,
+    iss: signingCredentials.email,
     aud: 'google',
     typ: 'savetowallet',
     iat: now,
@@ -184,45 +188,7 @@ export async function generateSovereignWalletPassJWT(data: WalletPassData): Prom
     }
   };
 
-  // Load service account private key from file or env
-  let privateKey = process.env.GOOGLE_WALLET_PRIVATE_KEY || '';
-  
-  if (!privateKey) {
-    const candidatePaths = [
-      process.env.GOOGLE_WALLET_KEY_FILE,
-      '/config/google-wallet-service-account.json',
-      './config/google-wallet-service-account.json',
-      './sovereign-wallet-key.json',
-      '/home/ubuntu/paydirect/config/google-wallet-service-account.json'
-    ].filter(Boolean) as string[];
-
-    const fs = await import('fs');
-    for (const keyPath of candidatePaths) {
-      try {
-        if (fs.default.existsSync(keyPath)) {
-          const keyData = JSON.parse(fs.default.readFileSync(keyPath, 'utf8'));
-          if (keyData.private_key) {
-            privateKey = keyData.private_key;
-            payload.iss = keyData.client_email || payload.iss;
-            break;
-          }
-        }
-      } catch (e) {
-        // Continue checking other candidates
-      }
-    }
-
-    if (!privateKey) {
-      privateKey = generateFallbackKey();
-    }
-  }
-
-  try {
-    return jwt.sign(payload, privateKey, { algorithm: 'RS256' });
-  } catch (e) {
-    // Fallback: use HS256 with a secret
-    return jwt.sign(payload, 'sovereign-fallback-secret-' + MERCHANT_ID, { algorithm: 'HS256' });
-  }
+  return jwt.sign(payload, signingCredentials.privateKey, { algorithm: 'RS256' });
 }
 
 /**
@@ -261,13 +227,36 @@ export async function generatePassQRCode(data: WalletPassData): Promise<string> 
 }
 
 /**
- * Generate a simple RSA key for signing (fallback when no service account)
+ * Reads Google Wallet signing credentials exclusively from environment variables.
+ * Render may provide either the complete service-account JSON or individual fields.
  */
-function generateFallbackKey(): string {
-  // Use a deterministic key based on merchant ID for consistency
-  return `-----BEGIN RSA PRIVATE KEY-----
-MIIEowIBAAKCAQEA2a2rwplBQLzHPZe5ekSKj7n8KyKxJSPCpOBMGEBKmSCHQpFd
------END RSA PRIVATE KEY-----`;
+type GoogleWalletSigningCredentials = {
+  email: string;
+  privateKey: string;
+};
+
+function loadGoogleWalletSigningCredentials(): GoogleWalletSigningCredentials {
+  const serialized = String(process.env.GOOGLE_WALLET_SERVICE_ACCOUNT_JSON || '').trim();
+  if (serialized) {
+    try {
+      const parsed = JSON.parse(serialized);
+      const email = String(parsed?.client_email || '').trim();
+      const privateKey = String(parsed?.private_key || '').replace(/\\n/g, '\n').trim();
+      if (email && privateKey) {
+        return { email, privateKey };
+      }
+    } catch {
+      throw new Error('GOOGLE_WALLET_SERVICE_ACCOUNT_JSON must contain valid service-account JSON.');
+    }
+    throw new Error('GOOGLE_WALLET_SERVICE_ACCOUNT_JSON is missing client_email or private_key.');
+  }
+
+  const email = String(process.env.GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL || '').trim();
+  const privateKey = String(process.env.GOOGLE_WALLET_PRIVATE_KEY || '').replace(/\\n/g, '\n').trim();
+  if (!email || !privateKey) {
+    throw new Error('Google Wallet signing is not configured. Set GOOGLE_WALLET_SERVICE_ACCOUNT_JSON or GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL and GOOGLE_WALLET_PRIVATE_KEY in Render.');
+  }
+  return { email, privateKey };
 }
 
 /**
