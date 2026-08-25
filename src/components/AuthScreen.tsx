@@ -49,7 +49,7 @@ export default function AuthScreen({
   const [resetToken, setResetToken] = useState('');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
-  const [email, setEmail] = useState('mlaframboisemm@gmail.com');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [mfaCode, setMfaCode] = useState('');
   const [showPassword, setShowPassword] = useState(false);

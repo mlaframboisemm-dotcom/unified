@@ -152,7 +152,6 @@ export default function App() {
   const hasLoggedPriceFetchError = useRef(false);
   const hasLoggedBalanceSyncError = useRef(false);
   const hasLoggedEmailSyncError = useRef(false);
-  const isAutoLoggingIn = useRef(false);
   const firestoreDisabledRef = useRef(false);
   // Financial state starts empty and is populated only by authenticated provider responses.
   const [coins, setCoins] = useState<Coin[]>([]);
@@ -253,7 +252,6 @@ export default function App() {
       cadBalance: 14850.00,
       usdBalance: 28400.00,
       totalUSD: 39350.00,
-      profileName: 'Marcel laframboise',
       accountNumber: '176576596814061',
       routingNumber: '084009519',
       bankName: 'Wise US Inc (Wilmington, DE, USA)'
@@ -327,10 +325,10 @@ export default function App() {
   const [web3WalletSpendable, setWeb3WalletSpendable] = useState<boolean>(false);
   const [web3Snapshot, setWeb3Snapshot] = useState<BlockchainWalletSnapshot | null>(null);
   const [userEmail, setUserEmail] = useState<string>(() => {
-    return localStorage.getItem('cb_auth_email') || 'mlaframboisemm@gmail.com';
+    return localStorage.getItem('cb_auth_email') || '';
   });
   const [userName, setUserName] = useState<string>(() => {
-    return localStorage.getItem('cb_auth_name') || 'Marcel Laframboise';
+    return localStorage.getItem('cb_auth_name') || '';
   });
   const [citizenship, setCitizenship] = useState<string>(() => {
     return localStorage.getItem('cb_citizenship') || 'US';
@@ -763,7 +761,7 @@ export default function App() {
             cadBalance: data.cadBalance || 0,
             usdBalance: data.usdBalance || 0,
             totalUSD: data.totalUSD || 0,
-            profileName: data.profileName || 'Marcel laframboise',
+            profileName: data.profileName || '',
             accountNumber: data.accountNumber || '176576596814061',
             routingNumber: data.routingNumber || '084009519',
             bankName: data.bankName || 'Wise US Inc (Wilmington, DE, USA)'
@@ -1283,64 +1281,6 @@ export default function App() {
       exchangeCodeForSession();
     }
   }, []);
-
-  // Auto-login to mlaframboisemm@gmail.com on startup
-  useEffect(() => {
-    let cancelled = false;
-    const autoLogin = async (attempt = 1) => {
-      const hasToken = hasSessionToken();
-      const explicitLogout = localStorage.getItem('cb_explicit_logout') === 'true';
-
-      if (!isAuthenticated && !hasToken && !explicitLogout && !isAutoLoggingIn.current) {
-        isAutoLoggingIn.current = true;
-        try {
-          const response = await fetch(buildApiUrl('/api/auth/auto-login'), {
-            method: 'POST',
-            headers: buildAuthHeaders({ 'Content-Type': 'application/json' })
-          });
-          if (cancelled) return;
-          if (response.ok) {
-            const data = await response.json();
-            if (data.success && data.token) {
-              sessionStorage.setItem('cb_auth_jwt_token', data.token);
-              localStorage.setItem('cb_auth_jwt_token', data.token);
-              localStorage.setItem('cb_auth_authenticated', 'true');
-              localStorage.setItem('cb_auth_email', data.user.email);
-              localStorage.setItem('cb_auth_name', data.user.name);
-
-              migrateGlobalStateToUserScope(data.user.email);
-              hydrateStateFromUserScope(data.user.email);
-              setUserName(data.user.name);
-              setUserEmail(data.user.email);
-              setCitizenship(data.user.region || 'CA');
-              setKycLevel(data.user.kycLevel !== undefined ? data.user.kycLevel : 3);
-              setIsAuthenticated(true);
-              showToast('Successfully signed in to your live profile & account!', 'success');
-            }
-          } else if (attempt < 3) {
-            setTimeout(() => {
-              if (!cancelled) autoLogin(attempt + 1);
-            }, 1000 * attempt);
-          }
-        } catch (error) {
-          if ((import.meta as any).env?.DEV) {
-            console.debug(`[Auto Login Mount Notice] Attempt ${attempt} failed:`, error);
-          }
-          if (attempt < 3 && !cancelled) {
-            setTimeout(() => {
-              if (!cancelled) autoLogin(attempt + 1);
-            }, 1000 * attempt);
-          }
-        } finally {
-          isAutoLoggingIn.current = false;
-        }
-      }
-    };
-    autoLogin();
-    return () => {
-      cancelled = true;
-    };
-  }, [isAuthenticated]);
 
   // Capture PWA installation prompts
   useEffect(() => {
@@ -2615,13 +2555,13 @@ export default function App() {
                   </div>
                   <div>
                     <div className="flex items-center space-x-2">
-                      <span className="font-extrabold text-sm text-gray-900">{userName || 'Marcel Laframboise'}</span>
+                      <span className="font-extrabold text-sm text-gray-900">{userName || 'Authenticated user'}</span>
                       <span className="text-[10px] bg-emerald-50 text-emerald-700 font-extrabold px-2 py-0.5 rounded-full border border-emerald-200">
                         Tier {kycLevel} Verified
                       </span>
                     </div>
                     <p className="text-xs text-gray-500 mt-0.5">
-                      {userEmail || 'mlaframboisemm@gmail.com'}
+                      {userEmail || 'No verified email available'}
                     </p>
                   </div>
                 </div>
@@ -2884,7 +2824,7 @@ export default function App() {
             <ErrorBoundary name="UserProfileHubTab">
               <UserProfileHub
                 userEmail={userEmail}
-                userName={userName || 'Marcel Laframboise'}
+                userName={userName || 'Authenticated user'}
                 kycLevel={kycLevel}
                 citizenship={citizenship}
                 onVerificationSuccess={(newLevel) => {
@@ -3581,7 +3521,7 @@ export default function App() {
                             exchangeRate: DEFAULT_USD_CAD_RATE,
                             bankName: 'Tangerine Bank / Chequing Account (Connected)',
                             accountMask: '•••••••• 6812',
-                            accountHolder: userName || 'Marcel Laframboise',
+                            accountHolder: userName || 'Account holder not available',
                             clearingMethod: 'Stripe ACH Express (Same-Day Clearing)',
                             stripePrimaryAvailableUsd: stripeAvailable,
                             stripeConnectedAvailableUsd: Math.max(0, stripeTotal - stripeAvailable),
@@ -3640,8 +3580,8 @@ export default function App() {
         {/* --- Google Pay & Pass Hub --- */}
         {currentTab === 'google-pay' && (
           <GooglePayAndPassHub
-            userName={userName || 'Marcel Laframboise'}
-            userEmail={userEmail || 'mlaframboisemm@gmail.com'}
+            userName={userName || 'Authenticated user'}
+            userEmail={userEmail || 'No verified email available'}
             usdBalance={usdBalance}
             portfolioValue={netWorth}
             onRefreshBalance={() => fetchStripeBalance(true)}
@@ -3652,8 +3592,8 @@ export default function App() {
         {/* --- Wise Card Dedicated Hub --- */}
         {currentTab === 'wise-card' && (
           <WiseCardDashboard
-            userName={userName || 'Marcel laframboise'}
-            userEmail={userEmail || 'mlaframboisemm@gmail.com'}
+            userName={userName || 'Authenticated user'}
+            userEmail={userEmail || 'No verified email available'}
             onRefreshGlobalState={() => fetchStripeBalance(true)}
             showToast={showToast}
           />
@@ -4149,7 +4089,7 @@ export default function App() {
                       </div>
                       <div className="flex justify-between items-center">
                         <span className="text-gray-500 font-medium">Account Beneficiary:</span>
-                        <span className="font-bold text-gray-800">{userName || 'Marcel Laframboise'}</span>
+                        <span className="font-bold text-gray-800">{userName || 'Authenticated user'}</span>
                       </div>
                       <div className="flex justify-between items-center">
                         <span className="text-gray-500 font-medium">Transfer Speed / Fee:</span>
@@ -4176,7 +4116,7 @@ export default function App() {
                             exchangeRate: DEFAULT_USD_CAD_RATE,
                             bankName: 'Tangerine Bank / Chequing Account (Connected)',
                             accountMask: '•••••••• 6812',
-                            accountHolder: userName || 'Marcel Laframboise',
+                            accountHolder: userName || 'Account holder not available',
                             clearingMethod: 'Stripe ACH Express (Same-Day Clearing)',
                             stripePrimaryAvailableUsd: stripeAvailable,
                             stripeConnectedAvailableUsd: Math.max(0, stripeTotal - stripeAvailable),

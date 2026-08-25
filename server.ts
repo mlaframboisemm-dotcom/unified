@@ -2038,7 +2038,6 @@ app.get('/api/health/bitcoin', async (_req, res) => {
     return res.status(503).json({
       status: 'unavailable',
       rpcConfigured,
-      rpcUrl: config.url,
       error: info.error || 'BITCOIN_RPC_UNAVAILABLE',
       time: new Date().toISOString()
     });
@@ -2047,7 +2046,6 @@ app.get('/api/health/bitcoin', async (_req, res) => {
   return res.json({
     status: 'connected',
     rpcConfigured,
-    rpcUrl: config.url,
     chain: info.chain,
     blocks: info.blocks,
     headers: info.headers,
@@ -2545,72 +2543,23 @@ app.get('/api/shakepay/status', async (req: any, res: any) => {
   }
 });
 
-app.get('/api/render/status', (req: any, res: any) => {
-  const serviceId = process.env.RENDER_SERVICE_ID || 'srv-d99sus57vvec7386p2p0';
-  const deployHookKey = process.env.RENDER_DEPLOY_HOOK_KEY || '';
-  const baseDeployUrl = process.env.RENDER_DEPLOY_HOOK_URL || `https://api.render.com/deploy/${serviceId}`;
-
+app.get('/api/render/status', requireAuth, requireMfa, (_req: any, res: any) => {
+  // Deployment identifiers and deploy-hook metadata are intentionally never exposed from a public endpoint.
   res.json({
     success: true,
-    serviceId,
-    serviceName: 'sovereigns-pay-direct',
-    deployHookUrl: deployHookKey ? `${baseDeployUrl}?key=••••••••` : baseDeployUrl,
-    hasDeployHookKey: !!deployHookKey,
-    autoDeployEnabled: true,
-    status: 'LIVE_PRODUCTION',
-    buildPlan: 'starter',
-    environment: 'node',
-    diskMounted: '/data (ledger-db-volume)',
+    deploymentMetadataAccess: 'restricted',
+    environment: process.env.NODE_ENV === 'production' ? 'production' : 'non-production',
     timestamp: new Date().toISOString()
   });
 });
 
-app.post('/api/render/deploy', requireAuth, async (req: any, res: any) => {
-  const serviceId = process.env.RENDER_SERVICE_ID || 'srv-d99sus57vvec7386p2p0';
-  const deployHookKey = req.body?.key || req.query?.key || process.env.RENDER_DEPLOY_HOOK_KEY || '';
-  let deployUrl = process.env.RENDER_DEPLOY_HOOK_URL || `https://api.render.com/deploy/${serviceId}`;
-
-  if (deployHookKey && !deployUrl.includes('key=')) {
-    deployUrl += `?key=${deployHookKey}`;
-  }
-
-  try {
-    let renderResponse: any = null;
-    let httpStatus = 200;
-
-    if (deployHookKey) {
-      const resp = await fetch(deployUrl, { method: 'POST' });
-      httpStatus = resp.status;
-      try {
-        renderResponse = await resp.json();
-      } catch {
-        renderResponse = { text: await resp.text() };
-      }
-    } else {
-      renderResponse = {
-        deployId: `dep-${Date.now().toString(36)}`,
-        status: 'QUEUED',
-        serviceId,
-        message: `Automatic deployment trigger dispatched for Render service ${serviceId}.`
-      };
-    }
-
-    return res.json({
-      success: true,
-      serviceId,
-      deployId: renderResponse?.deployId || renderResponse?.id || `dep_${Date.now().toString(36)}`,
-      status: 'DISPATCHED',
-      message: `Production deployment automatically triggered on Render for ${serviceId}!`,
-      details: renderResponse,
-      timestamp: new Date().toISOString()
-    });
-  } catch (err: any) {
-    return res.status(502).json({
-      success: false,
-      error: 'RENDER_DEPLOY_FAILED',
-      message: err?.message || 'Failed to trigger Render deployment webhook.'
-    });
-  }
+app.post('/api/render/deploy', requireAuth, requireMfa, (_req: any, res: any) => {
+  // Deploy hooks and Render credentials are managed only in Render's secure console.
+  // This application must not accept a deploy key or initiate a production deployment.
+  return res.status(501).json({
+    error: 'DEPLOYMENT_TRIGGER_DISABLED',
+    message: 'Production deployment triggers are disabled in the application. Use the Render dashboard to manage deployments.'
+  });
 });
 
 app.get('/api/verification/report', requireAuth, requireMfa, (req: any, res: any) => {
@@ -7018,7 +6967,7 @@ async function recordLedgerEntry(entryPayload: { type: string; status: string; p
   }
 }
 
-app.get('/api/coinbase/config', async (req: any, res) => {
+app.get('/api/coinbase/config', requireAuth, requireMfa, async (_req: any, res) => {
   const readiness = await buildRuntimeReadinessReport(process.env);
   const creds = parseCoinbaseCredentials();
   res.json({
@@ -7026,25 +6975,28 @@ app.get('/api/coinbase/config', async (req: any, res) => {
     readiness,
     isConfigured: creds.isValid,
     keyType: creds.keyType,
-    apiKeyIdPreview: creds.apiKeyId ? `${creds.apiKeyId.slice(0, 8)}...${creds.apiKeyId.slice(-4)}` : undefined,
     stripeConfigured: !!process.env.STRIPE_SECRET_KEY,
     enforcement: getCriticalOperationsEnforcementState()
   });
 });
 
-app.get('/api/coinbase/health', async (req: any, res) => {
+app.get('/api/coinbase/health', requireAuth, requireMfa, async (_req: any, res) => {
   try {
     const health = await checkCoinbaseHealth();
     res.json({
       success: health.isValid,
-      ...health
+      isConfigured: health.isConfigured,
+      isValid: health.isValid,
+      status: health.status,
+      keyType: health.keyType,
+      accountsCount: health.accountsCount
     });
-  } catch (err: any) {
+  } catch {
     res.status(500).json({
       success: false,
       isConfigured: false,
       isValid: false,
-      error: err?.message || 'Coinbase health check failed.'
+      error: 'COINBASE_HEALTH_CHECK_FAILED'
     });
   }
 });
@@ -7203,205 +7155,59 @@ app.post('/api/yield/claims/prepare', requireAuth, requireMfa, requireKyc(2), as
   }
 });
 
-app.post('/api/coinbase/config', requireAuth, requireMfa, async (req, res) => {
-  const { apiKeyName, privateKey } = req.body || {};
-
-  const parsed = parseCoinbaseCredentials(apiKeyName, privateKey);
-  if (parsed.apiKeyId) {
-    process.env.COINBASE_API_KEY_ID = parsed.apiKeyId;
-  }
-  if (parsed.privateKeyPem) {
-    process.env.COINBASE_API_SECRET_RAW = parsed.privateKeyPem;
-  }
-
-  try {
-    const envPath = path.join(process.cwd(), '.env');
-    let envContent = '';
-    if (fs.existsSync(envPath)) {
-      envContent = fs.readFileSync(envPath, 'utf8');
-    }
-
-    if (parsed.apiKeyId) {
-      if (envContent.includes('COINBASE_API_KEY_ID=')) {
-        envContent = envContent.replace(/COINBASE_API_KEY_ID=.*/g, `COINBASE_API_KEY_ID=${parsed.apiKeyId}`);
-      } else {
-        envContent += `\nCOINBASE_API_KEY_ID=${parsed.apiKeyId}`;
-      }
-    }
-    if (parsed.privateKeyPem) {
-      // Escape real newlines for single-line .env storage
-      const escapedKey = parsed.privateKeyPem.replace(/\n/g, '\\n');
-      if (envContent.includes('COINBASE_API_SECRET_RAW=')) {
-        envContent = envContent.replace(/COINBASE_API_SECRET_RAW=.*/g, `COINBASE_API_SECRET_RAW=${escapedKey}`);
-      } else {
-        envContent += `\nCOINBASE_API_SECRET_RAW=${escapedKey}`;
-      }
-    }
-
-    fs.writeFileSync(envPath, envContent.trim() + '\n', 'utf8');
-  } catch (err) {
-    console.error('Failed to write credentials to .env file:', err);
-  }
-
-  const readiness = await buildRuntimeReadinessReport(process.env);
-  res.json({
-    success: parsed.isValid,
-    message: parsed.isValid
-      ? 'Configuration saved and applied live to server process successfully.'
-      : (parsed.error || 'Configuration saved, but credentials appear incomplete.'),
-    mode: 'real',
-    keyType: parsed.keyType,
-    readiness,
-    enforcement: getCriticalOperationsEnforcementState()
+app.post('/api/coinbase/config', requireAuth, requireMfa, (_req: any, res: any) => {
+  // Provider credentials belong in the deployment environment and are never accepted from a browser request.
+  return res.status(403).json({
+    error: 'PROVIDER_CONFIGURATION_MANAGED_EXTERNALLY',
+    message: 'Coinbase credentials are managed through the secure deployment environment and cannot be changed through this application.'
   });
 });
 
 // Integrations Credentials (Wise & Plaid) Config API
-app.get('/api/integrations/credentials', async (req: any, res) => {
-  const wiseToken = process.env.WISE_API_TOKEN || process.env.WISE_ALL_ACCESS_KEY || process.env.WISE_PERSONAL_TOKEN || process.env.WISE_ACCESS_TOKEN || '';
-  const wiseProfileId = process.env.WISE_PROFILE_ID || '101924589';
-  const plaidClientId = process.env.PLAID_CLIENT_ID || '';
-  const plaidSecret = process.env.PLAID_SECRET || '';
-  const plaidEnv = process.env.PLAID_ENV || 'sandbox';
-
-  const maskString = (str: string) => {
-    if (!str) return '';
-    if (str.length <= 8) return '••••••••';
-    return str.slice(0, 4) + '••••••••' + str.slice(-4);
-  };
+app.get('/api/integrations/credentials', requireAuth, requireMfa, (_req: any, res: any) => {
+  const wiseConfigured = Boolean(process.env.WISE_API_TOKEN || process.env.WISE_ALL_ACCESS_KEY || process.env.WISE_PERSONAL_TOKEN || process.env.WISE_ACCESS_TOKEN);
+  const plaidConfigured = Boolean(process.env.PLAID_CLIENT_ID && process.env.PLAID_SECRET);
 
   return res.json({
     success: true,
-    wise: {
-      configured: !!wiseToken,
-      tokenMasked: maskString(wiseToken),
-      profileId: wiseProfileId,
-      status: wiseToken ? 'ACTIVE' : 'STANDBY'
-    },
+    wise: { configured: wiseConfigured, status: wiseConfigured ? 'CONFIGURED' : 'UNAVAILABLE' },
     plaid: {
-      configured: !!(plaidClientId && plaidSecret),
-      clientIdMasked: maskString(plaidClientId),
-      hasSecret: !!plaidSecret,
-      environment: plaidEnv,
-      status: (plaidClientId && plaidSecret) ? 'ACTIVE' : 'STANDBY'
+      configured: plaidConfigured,
+      environment: String(process.env.PLAID_ENV || 'sandbox').toLowerCase(),
+      status: plaidConfigured ? 'CONFIGURED' : 'UNAVAILABLE'
     }
   });
 });
 
-app.post('/api/integrations/credentials', async (req: any, res) => {
-  const { wiseApiToken, wiseProfileId, plaidClientId, plaidSecret, plaidEnv } = req.body || {};
-
-  const updates: Record<string, string> = {};
-
-  if (wiseApiToken && !wiseApiToken.includes('••••')) {
-    process.env.WISE_API_TOKEN = wiseApiToken.trim();
-    updates['WISE_API_TOKEN'] = wiseApiToken.trim();
-  }
-  if (wiseProfileId) {
-    process.env.WISE_PROFILE_ID = wiseProfileId.trim();
-    updates['WISE_PROFILE_ID'] = wiseProfileId.trim();
-  }
-  if (plaidClientId && !plaidClientId.includes('••••')) {
-    process.env.PLAID_CLIENT_ID = plaidClientId.trim();
-    updates['PLAID_CLIENT_ID'] = plaidClientId.trim();
-  }
-  if (plaidSecret && !plaidSecret.includes('••••')) {
-    process.env.PLAID_SECRET = plaidSecret.trim();
-    updates['PLAID_SECRET'] = plaidSecret.trim();
-  }
-  if (plaidEnv) {
-    process.env.PLAID_ENV = plaidEnv.trim();
-    updates['PLAID_ENV'] = plaidEnv.trim();
-  }
-
-  try {
-    const envPath = path.join(process.cwd(), '.env');
-    let envContent = fs.existsSync(envPath) ? fs.readFileSync(envPath, 'utf8') : '';
-
-    for (const [key, val] of Object.entries(updates)) {
-      const regex = new RegExp(`^${key}=.*`, 'm');
-      if (regex.test(envContent)) {
-        envContent = envContent.replace(regex, `${key}="${val}"`);
-      } else {
-        envContent += `\n${key}="${val}"`;
-      }
-    }
-    fs.writeFileSync(envPath, envContent.trim() + '\n', 'utf8');
-  } catch (err) {
-    console.warn('[CONFIG-PERSIST] Notice updating .env file:', err);
-  }
-
-  return res.json({
-    success: true,
-    message: 'Wise and Plaid API credentials saved and persisted to configuration storage.',
-    syncedAt: new Date().toISOString()
+app.post('/api/integrations/credentials', requireAuth, requireMfa, (_req: any, res: any) => {
+  // Never accept, persist, or preview third-party credentials from a client request.
+  return res.status(403).json({
+    error: 'PROVIDER_CONFIGURATION_MANAGED_EXTERNALLY',
+    message: 'Provider credentials are managed through the secure deployment environment and cannot be changed through this application.'
   });
 });
 
-app.post('/api/integrations/test-wise', async (req: any, res) => {
-  const token = req.body?.wiseApiToken && !req.body.wiseApiToken.includes('••••')
-    ? req.body.wiseApiToken
-    : (process.env.WISE_API_TOKEN || process.env.WISE_ALL_ACCESS_KEY || process.env.WISE_PERSONAL_TOKEN || process.env.WISE_ACCESS_TOKEN);
-
-  if (!token) {
-    return res.status(400).json({
-      success: false,
-      message: 'No Wise API Token provided or configured.'
-    });
-  }
-
-  try {
-    const { getWiseTotalCashUSD } = await import('./src/lib/wise-live-integration.js');
-    const wiseData = await getWiseTotalCashUSD();
-    return res.json({
-      success: true,
-      message: 'Wise API handshake successful! Live balances retrieved.',
-      data: wiseData
-    });
-  } catch (err: any) {
-    return res.json({
-      success: false,
-      message: `Wise API handshake warning: ${err.message || String(err)}`,
-      error: String(err)
-    });
-  }
+app.post('/api/integrations/test-wise', requireAuth, requireMfa, (_req: any, res: any) => {
+  // A browser must never submit a provider token, and operational provider testing is restricted to deployment administration.
+  return res.status(501).json({
+    error: 'PROVIDER_TESTING_DISABLED',
+    message: 'Wise credential testing is not available through the application.'
+  });
 });
 
-app.get('/api/wise/health', async (req: any, res: any) => {
-  try {
-    const { getSystemHealthReport } = await import('./src/lib/system-health.js');
-    return await getSystemHealthReport(req, res);
-  } catch (err: any) {
-    return res.status(500).json({
-      timestamp: new Date().toISOString(),
-      status: 'CRITICAL',
-      error: err.message || String(err)
-    });
-  }
-});
-
-app.post('/api/integrations/test-plaid', async (req: any, res) => {
-  const clientId = req.body?.plaidClientId && !req.body.plaidClientId.includes('••••')
-    ? req.body.plaidClientId
-    : process.env.PLAID_CLIENT_ID;
-  const secret = req.body?.plaidSecret && !req.body.plaidSecret.includes('••••')
-    ? req.body.plaidSecret
-    : process.env.PLAID_SECRET;
-  const plaidEnv = req.body?.plaidEnv || process.env.PLAID_ENV || 'sandbox';
-
-  if (!clientId || !secret) {
-    return res.json({
-      success: false,
-      message: 'Plaid credentials incomplete. Please set Plaid Client ID and Secret.',
-      configured: false
-    });
-  }
-
+app.get('/api/wise/health', requireAuth, requireMfa, (_req: any, res: any) => {
+  const configured = Boolean(process.env.WISE_API_TOKEN || process.env.WISE_ALL_ACCESS_KEY || process.env.WISE_PERSONAL_TOKEN || process.env.WISE_ACCESS_TOKEN);
   return res.json({
-    success: true,
-    message: `Plaid credential format verified in ${plaidEnv} mode. Handshake ready for ACH bank link.`,
-    environment: plaidEnv,
-    configured: true
+    configured,
+    status: configured ? 'CONFIGURED_NOT_PUBLICLY_PROBED' : 'UNAVAILABLE'
+  });
+});
+
+app.post('/api/integrations/test-plaid', requireAuth, requireMfa, (_req: any, res: any) => {
+  // A browser must never submit a Plaid client secret, and operational provider testing is restricted to deployment administration.
+  return res.status(501).json({
+    error: 'PROVIDER_TESTING_DISABLED',
+    message: 'Plaid credential testing is not available through the application.'
   });
 });
 

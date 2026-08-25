@@ -1,10 +1,10 @@
 import fs from 'fs';
 import path from 'path';
+import crypto from 'crypto';
 import { spawn } from 'child_process';
 import net from 'net';
 
 const repoRoot = process.cwd();
-const dbPath = path.join(repoRoot, 'src', 'db', 'database.json');
 
 function assert(condition: boolean, message: string) {
   if (!condition) throw new Error(message);
@@ -25,6 +25,7 @@ async function getAvailablePort(): Promise<number> {
 async function waitForServerReady(proc: ReturnType<typeof spawn>): Promise<void> {
   await new Promise<void>((resolve, reject) => {
     let settled = false;
+    let startupOutput = '';
     const timeout = setTimeout(() => {
       if (settled) return;
       settled = true;
@@ -33,6 +34,7 @@ async function waitForServerReady(proc: ReturnType<typeof spawn>): Promise<void>
 
     const handleData = (chunk: any) => {
       const text = String(chunk || '');
+      startupOutput = `${startupOutput}${text}`.slice(-8000);
       if (text.includes('Server running on port')) {
         if (settled) return;
         settled = true;
@@ -47,14 +49,21 @@ async function waitForServerReady(proc: ReturnType<typeof spawn>): Promise<void>
       if (settled) return;
       settled = true;
       clearTimeout(timeout);
-      reject(new Error(`Server exited before ready (code=${code ?? 'unknown'})`));
+      reject(new Error(`Server exited before ready (code=${code ?? 'unknown'}): ${startupOutput}`));
     });
   });
 }
 
 async function main() {
-  const originalDb = fs.existsSync(dbPath) ? fs.readFileSync(dbPath, 'utf-8') : null;
+  const testDirectory = fs.mkdtempSync(path.join(repoRoot, '.auth-test-'));
+  const dbPath = path.join(testDirectory, 'database.json');
   const testPort = await getAvailablePort();
+
+  const resetCompatibilityPassword = 'ResetCompatiblePass!42';
+  const resetCompatibilitySalt = crypto.randomBytes(16).toString('hex');
+  const resetCompatibilityHash = crypto
+    .pbkdf2Sync(resetCompatibilityPassword, resetCompatibilitySalt, 310000, 64, 'sha512')
+    .toString('hex');
 
   const seededDb = {
     users: [
@@ -62,8 +71,8 @@ async function main() {
         id: 'user_demo',
         name: 'Demo User',
         email: 'demo@example.com',
-        passwordHash: 'demo-hash',
-        salt: 'demo-salt',
+        passwordHash: resetCompatibilityHash,
+        salt: resetCompatibilitySalt,
         twoFactorSecret: '',
         twoFactorEnabled: false,
         kycLevel: 1,
@@ -84,7 +93,6 @@ async function main() {
 
   const serverProc = spawn('node', ['dist/server.cjs'], {
     cwd: repoRoot,
-    shell: true,
     stdio: ['ignore', 'pipe', 'pipe'],
     env: {
       ...process.env,
@@ -92,12 +100,7 @@ async function main() {
       PORT: String(testPort),
       JWT_SECRET: '12345678901234567890123456789012',
       SOVEREIGN_ENCRYPTION_KEY: 'abcdefghijklmnopqrstuvwxyzABCDEF',
-      BOOTSTRAP_ADMIN_EMAIL: 'admin@secure.local',
-      BOOTSTRAP_ADMIN_PASSWORD: 'CorrectHorseBatteryStaple!42',
-      BOOTSTRAP_ADMIN_TOTP_SECRET: 'JBSWY3DPEHPK3PXP',
-      BOOTSTRAP_ADMIN_NAME: 'Secure Admin',
-      BOOTSTRAP_ADMIN_CITIZENSHIP: 'US',
-      BOOTSTRAP_ADMIN_KYC_LEVEL: '2'
+      SOVEREIGN_DB_FILE_PATH: dbPath
     }
   });
 
@@ -107,22 +110,19 @@ async function main() {
     const loginRes = await fetch(`http://127.0.0.1:${testPort}/api/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: 'demo@example.com', password: 'AnyPassword123!' })
+      body: JSON.stringify({ email: 'demo@example.com', password: resetCompatibilityPassword })
     });
 
     const body = await loginRes.json();
     assert(loginRes.status === 200, `Expected login 200, got ${loginRes.status}: ${JSON.stringify(body)}`);
     assert(Boolean(body?.token), 'Expected token in successful login response.');
+    assert(body?.user?.email === 'demo@example.com', 'Expected the reset-compatible account to authenticate through the active password route.');
     console.log('local-auth-flow-test:ok');
   } finally {
     if (serverProc && !serverProc.killed) {
       serverProc.kill();
     }
-    if (originalDb === null) {
-      fs.unlinkSync(dbPath);
-    } else {
-      fs.writeFileSync(dbPath, originalDb, 'utf-8');
-    }
+    fs.rmSync(testDirectory, { recursive: true, force: true });
   }
 }
 

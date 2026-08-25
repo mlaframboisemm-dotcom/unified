@@ -9,10 +9,12 @@ function run() {
   const salt = 'ledger_test_salt';
   const hash1000 = crypto.pbkdf2Sync(password, salt, 1000, 64, 'sha512').toString('hex');
   const hash100000 = crypto.pbkdf2Sync(password, salt, 100000, 64, 'sha512').toString('hex');
+  const hash310000 = crypto.pbkdf2Sync(password, salt, 310000, 64, 'sha512').toString('hex');
 
   assert.equal(verifyPassword(password, salt, hash1000), true, 'Password verification should support legacy 1000-round hashes');
   assert.equal(verifyPassword(password, salt, hash100000), true, 'Password verification should support hardened 100000-round hashes');
-  assert.equal(verifyPassword('wrong-password', salt, hash100000), false, 'Password verification should reject invalid credentials');
+  assert.equal(verifyPassword(password, salt, hash310000), true, 'Password verification should support 310000-round password-reset hashes');
+  assert.equal(verifyPassword('wrong-password', salt, hash310000), false, 'Password verification should reject invalid credentials');
 
   const secret = '0123456789abcdef0123456789abcdef';
   const sid = generateSessionId();
