@@ -434,7 +434,23 @@ export default function App() {
       privateKey: activePrivateKey
     });
   });
-  const [web3Snapshot, setWeb3Snapshot] = useState<BlockchainWalletSnapshot | null>(null);
+  const [web3Snapshot, setWeb3Snapshot] = useState<BlockchainWalletSnapshot | null>(() => {
+    const storedAddress = normalizeWalletAddress(
+      localStorage.getItem('web3_active_address') || localStorage.getItem('web3_last_connected_address')
+    );
+    try {
+      const storedSnapshot = localStorage.getItem(`web3_snapshot_${storedAddress.toLowerCase()}`);
+      if (storedSnapshot) {
+        const parsed = JSON.parse(storedSnapshot) as BlockchainWalletSnapshot;
+        if (parsed?.address && normalizeWalletAddress(parsed.address).toLowerCase() === storedAddress.toLowerCase()) {
+          return parsed;
+        }
+      }
+    } catch {
+      // Ignore an invalid cached on-chain snapshot and rescan the wallet.
+    }
+    return null;
+  });
   const [userEmail, setUserEmail] = useState<string>(() => {
     return localStorage.getItem('cb_auth_email') || 'mlaframboisemm@gmail.com';
   });
@@ -3235,7 +3251,19 @@ export default function App() {
                   localStorage.setItem('web3_active_address', safeAddress);
                   localStorage.setItem('web3_last_connected_address', safeAddress);
                 }}
-                onBalancesChange={setWeb3Snapshot}
+                onBalancesChange={(snapshot) => {
+                  if (!snapshot?.address || !Array.isArray(snapshot.tokens) || !snapshot.native) return;
+
+                  const safeAddress = normalizeWalletAddress(snapshot.address);
+                  if (safeAddress.toLowerCase() !== snapshot.address.toLowerCase()) return;
+
+                  setWeb3Snapshot(snapshot);
+                  try {
+                    localStorage.setItem(`web3_snapshot_${safeAddress.toLowerCase()}`, JSON.stringify(snapshot));
+                  } catch {
+                    // The live snapshot still updates this session if browser storage is unavailable.
+                  }
+                }}
                 onRecordTransaction={recordNewTransaction}
                 onTransactionSuccess={(txHash) => {
                   showToast(`Transaction broadcast live to Ethereum network: ${txHash.slice(0, 10)}...`, 'success');
