@@ -3334,73 +3334,41 @@ app.post('/api/wallet/settle-broadcast', requireAuth, requireMfa, async (req: an
 });
 
 /**
- * Proxy to fetch live cryptocurrency rates from a secure public feed (Binance Public API).
- * Fallback to robust reference rates if there are external API or network interruptions.
+ * Proxy verified market prices from Binance. No reference or cached price is returned when the provider is unavailable.
  */
-app.get('/api/prices', async (req, res) => {
-  const rates: Record<string, { USD: number }> = {
-    BTC: { USD: 64200.00 },
-    ETH: { USD: 3350.00 },
-    SOL: { USD: 145.00 },
-    POL: { USD: 0.52 },
-    BNB: { USD: 575.00 },
-    LEO: { USD: 5.85 },
-    USDC: { USD: 1.00 },
-    PEPE: { USD: 0.0000125 },
-    SHIB: { USD: 0.0000185 },
-    LINK: { USD: 15.20 },
-    XAUT: { USD: 2350.00 },
-    LIF3: { USD: 0.012 },
-    MXNT: { USD: 0.055 },
-    HYPE: { USD: 4.50 },
-    USDCAD: { USD: 1.3650 }
-  };
-
-  let providerLoaded = false;
+app.get('/api/prices', async (_req, res) => {
   try {
     const response = await fetch('https://api.binance.com/api/v3/ticker/price');
-    if (response.ok) {
-      const data = await response.json();
-      if (Array.isArray(data)) {
-        providerLoaded = true;
-        const binanceMap = new Map<string, number>();
-        for (const item of data) {
-          if (item && item.symbol && item.price) {
-            binanceMap.set(item.symbol, parseFloat(item.price));
-          }
-        }
-
-        const mapping: Record<string, string[]> = {
-          BTC: ['BTCUSDT', 'BTCUSDC'],
-          ETH: ['ETHUSDT', 'ETHUSDC'],
-          SOL: ['SOLUSDT', 'SOLUSDC'],
-          POL: ['POLUSDT', 'MATICUSDT'],
-          BNB: ['BNBUSDT'],
-          USDC: ['USDCUSDT'],
-          PEPE: ['PEPEUSDT'],
-          SHIB: ['SHIBUSDT'],
-          LINK: ['LINKUSDT'],
-        };
-
-        for (const [symbol, pairs] of Object.entries(mapping)) {
-          for (const pair of pairs) {
-            if (binanceMap.has(pair)) {
-              rates[symbol] = { USD: binanceMap.get(pair)! };
-              break;
-            }
-          }
-        }
-      }
+    if (!response.ok) {
+      return res.status(503).json({ error: 'LIVE_PRICE_PROVIDER_UNAVAILABLE', message: 'The live market-price provider did not return a usable response.' });
     }
+    const data = await response.json();
+    if (!Array.isArray(data)) {
+      return res.status(503).json({ error: 'LIVE_PRICE_PROVIDER_UNAVAILABLE', message: 'The live market-price provider returned an invalid response.' });
+    }
+
+    const pairs = new Map<string, number>();
+    for (const item of data) {
+      const price = Number(item?.price);
+      if (typeof item?.symbol === 'string' && Number.isFinite(price) && price > 0) pairs.set(item.symbol, price);
+    }
+    const mapping: Record<string, string[]> = {
+      BTC: ['BTCUSDT', 'BTCUSDC'], ETH: ['ETHUSDT', 'ETHUSDC'], SOL: ['SOLUSDT', 'SOLUSDC'],
+      POL: ['POLUSDT', 'MATICUSDT'], BNB: ['BNBUSDT'], USDC: ['USDCUSDT'], PEPE: ['PEPEUSDT'],
+      SHIB: ['SHIBUSDT'], LINK: ['LINKUSDT']
+    };
+    const rates: Record<string, { USD: number }> = {};
+    for (const [symbol, candidates] of Object.entries(mapping)) {
+      const matchingPair = candidates.find((pair) => pairs.has(pair));
+      if (matchingPair) rates[symbol] = { USD: pairs.get(matchingPair)! };
+    }
+    if (Object.keys(rates).length === 0) {
+      return res.status(503).json({ error: 'LIVE_PRICE_PROVIDER_UNAVAILABLE', message: 'No verified market prices were available from the provider.' });
+    }
+    return res.json(rates);
   } catch (error: any) {
-    console.warn('[Prices API] Live price provider failed, using fallback reference rates:', error?.message || error);
+    return res.status(503).json({ error: 'LIVE_PRICE_PROVIDER_UNAVAILABLE', message: error?.message || 'Live market prices are unavailable.' });
   }
-
-  if (!providerLoaded) {
-    console.warn('[Prices API] Live price provider loaded no data, using fallback reference rates.');
-  }
-
-  res.json(rates);
 });
 
 /**
@@ -3423,26 +3391,14 @@ function generateKrakenSignature(urlPath: string, nonce: string, postData: strin
 }
 
 async function getLivePriceUSD(symbol: string): Promise<number> {
-  const cleanSymbol = String(symbol || 'ETH').toUpperCase();
-  const fallbacks: Record<string, number> = {
-    BTC: 64200.00,
-    ETH: 3350.00,
-    SOL: 145.00,
-    POL: 0.52,
-    BNB: 575.00,
-    USDC: 1.00,
-    LINK: 15.20,
-    PEPE: 0.0000125,
-    SHIB: 0.0000185
-  };
-  try {
-    const response = await fetch(`https://api.binance.com/api/v3/ticker/price?symbol=${cleanSymbol}USDT`);
-    if (response.ok) {
-      const data = await response.json();
-      if (data && data.price) return parseFloat(data.price);
-    }
-  } catch {}
-  return fallbacks[cleanSymbol] || 1.0;
+  const cleanSymbol = String(symbol || '').toUpperCase();
+  if (!/^[A-Z0-9]{2,12}$/.test(cleanSymbol)) throw new Error('A valid asset symbol is required for live price lookup.');
+  const response = await fetch(`https://api.binance.com/api/v3/ticker/price?symbol=${cleanSymbol}USDT`);
+  if (!response.ok) throw new Error(`Live price lookup failed for ${cleanSymbol}.`);
+  const data = await response.json();
+  const price = Number(data?.price);
+  if (!Number.isFinite(price) || price <= 0) throw new Error(`Live price lookup returned no verified price for ${cleanSymbol}.`);
+  return price;
 }
 
 /**
