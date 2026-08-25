@@ -4380,7 +4380,9 @@ async function sendETransferEmail(email: string, subject: string, htmlContent: s
     try {
       logProviderEvent('mailersend', 'CONNECTED', { message: 'Initiating email transmission', recipient: targetEmail });
       
-      const senderEmail = process.env.SMTP_USER && process.env.SMTP_USER.includes('@')
+      const senderEmail = process.env.ALERT_FROM_EMAIL && process.env.ALERT_FROM_EMAIL.includes('@')
+        ? process.env.ALERT_FROM_EMAIL
+        : process.env.SMTP_USER && process.env.SMTP_USER.includes('@')
         ? process.env.SMTP_USER
         : "MS_eiFCqE@test-51ndgwv9235lzqx8.mlsender.net";
 
@@ -4428,6 +4430,9 @@ async function sendETransferEmail(email: string, subject: string, htmlContent: s
   const port = process.env.SMTP_PORT ? parseInt(process.env.SMTP_PORT, 10) : 587;
   const user = process.env.SMTP_USER;
   const pass = process.env.SMTP_PASS;
+  const senderEmail = process.env.ALERT_FROM_EMAIL && process.env.ALERT_FROM_EMAIL.includes('@')
+    ? process.env.ALERT_FROM_EMAIL
+    : user;
 
   if (host && user && pass) {
     try {
@@ -4440,7 +4445,7 @@ async function sendETransferEmail(email: string, subject: string, htmlContent: s
         socketTimeout: 5000
       });
       await transporter.sendMail({
-        from: `"Sovereign Wealth Portal" <${user}>`,
+        from: `"Sovereign Wealth Portal" <${senderEmail}>`,
         to: targetEmail,
         subject,
         html: htmlContent
