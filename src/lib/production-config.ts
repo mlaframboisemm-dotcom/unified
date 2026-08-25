@@ -47,8 +47,11 @@ function validateProviderSecrets(env: NodeJS.ProcessEnv, operation: ProductionSe
   }
 
   if (operation === 'email') {
-    return !isStrongSecret(env.MAILERSEND_API_KEY, 8) && !(hasValue(env.SMTP_HOST) && hasValue(env.SMTP_USER) && hasValue(env.SMTP_PASS))
-      ? ['An email provider must be configured for production email delivery.']
+    const hasResend = isStrongSecret(env.RESEND_API_KEY, 8) && hasValue(env.RESEND_FROM_EMAIL || env.ALERT_FROM_EMAIL);
+    const hasMailerSend = isStrongSecret(env.MAILERSEND_API_KEY, 8);
+    const hasSmtp = hasValue(env.SMTP_HOST) && hasValue(env.SMTP_USER) && hasValue(env.SMTP_PASS);
+    return !hasResend && !hasMailerSend && !hasSmtp
+      ? ['A Resend, MailerSend, or SMTP provider must be configured for production email delivery.']
       : [];
   }
 

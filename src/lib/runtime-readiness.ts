@@ -19,6 +19,7 @@ function hasExchangeProviderConfigured(env: NodeJS.ProcessEnv): boolean {
 
 function hasEmailProviderConfigured(env: NodeJS.ProcessEnv): boolean {
   return Boolean(
+    (env.RESEND_API_KEY && (env.RESEND_FROM_EMAIL || env.ALERT_FROM_EMAIL)) ||
     env.MAILERSEND_API_KEY ||
     (env.SMTP_HOST && env.SMTP_USER && env.SMTP_PASS)
   );
@@ -45,7 +46,7 @@ export async function buildRuntimeReadinessReport(env: NodeJS.ProcessEnv): Promi
     missingConfig.push('JWT_SECRET(>=32 chars)');
   }
   if (!hasEmailProviderConfigured(env)) {
-    missingConfig.push('MAILERSEND_API_KEY or SMTP credentials');
+    missingConfig.push('RESEND_API_KEY with RESEND_FROM_EMAIL, MAILERSEND_API_KEY, or SMTP credentials');
   }
   if (!env.SOVEREIGN_ADMIN_EMAILS || !env.SOVEREIGN_ADMIN_EMAILS.trim()) {
     missingConfig.push('SOVEREIGN_ADMIN_EMAILS');
@@ -77,7 +78,10 @@ export async function buildRuntimeReadinessReport(env: NodeJS.ProcessEnv): Promi
     },
     {
       name: 'Email credentials',
-      status: hasEmailProviderConfigured(env) ? 'configured' : 'missing'
+      status: hasEmailProviderConfigured(env) ? 'configured' : 'missing',
+      details: hasEmailProviderConfigured(env)
+        ? 'A Resend, MailerSend, or SMTP delivery provider is configured without exposing credential values.'
+        : 'No supported transactional email provider is configured; password-reset email delivery must fail closed.'
     },
     {
       name: 'Admin emails',

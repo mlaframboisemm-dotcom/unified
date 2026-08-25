@@ -911,8 +911,8 @@ async function loadSecretsFromSecretManager() {
         ? 'GOOGLE_APPLICATION_CREDENTIALS is not set; production secret bootstrap cannot proceed.'
         : 'GOOGLE_APPLICATION_CREDENTIALS is not set in local/dev.';
       secretBootstrapStatus.completedAt = new Date().toISOString();
-      logSystemEvent('CONFIG_CHANGE', { 
-        message: 'GOOGLE_APPLICATION_CREDENTIALS not set', 
+      logSystemEvent('CONFIG_CHANGE', {
+        message: 'GOOGLE_APPLICATION_CREDENTIALS not set',
         environment: process.env.NODE_ENV || 'development',
         status: process.env.NODE_ENV === 'production' ? 'blocked' : 'skipped'
       });
@@ -1058,7 +1058,7 @@ async function syncSecretsFromSovereignTerminal() {
   }
 
   const terminalUrl = (process.env.SOV_TERMINAL_URL || "https://ais-dev-vsguby4cvne7edjk3z4bzv-522633331757.us-east1.run.app").replace(/\/$/, '');
-  
+
   logSystemEvent('CONFIG_CHANGE', { message: `Syncing secrets from Sovereign terminal at ${terminalUrl}...` });
 
   try {
@@ -1205,7 +1205,7 @@ async function sendSystemAlert(level: 'INFO' | 'WARNING' | 'CRITICAL', title: st
   const webhookUrl = process.env.DISCORD_WEBHOOK_URL;
   const timestamp = new Date().toISOString();
   logSecurityEvent('SUSPICIOUS_ACTIVITY', { level, title, message, timestamp });
-  
+
   if (webhookUrl) {
     try {
       await fetch(webhookUrl, {
@@ -1236,17 +1236,17 @@ function encryptLedgerData(data: any): string {
     logDatabaseEvent('WRITE', 'ledger', { message: 'Encryption key too short, storing unencrypted', severity: 'warn' });
     return JSON.stringify(data);
   }
-  
+
   try {
     const iv = crypto.randomBytes(16);
-    const key = Buffer.from(encryptionKey.slice(0, 32), 'hex').length === 32 
+    const key = Buffer.from(encryptionKey.slice(0, 32), 'hex').length === 32
       ? Buffer.from(encryptionKey.slice(0, 32), 'hex')
       : crypto.pbkdf2Sync(encryptionKey, 'sovereign_ledger_salt', 100000, 32, 'sha256');
-    
+
     const cipher = crypto.createCipheriv('aes-256-cbc', key, iv);
     let encrypted = cipher.update(JSON.stringify(data), 'utf-8', 'hex');
     encrypted += cipher.final('hex');
-    
+
     return iv.toString('hex') + ':' + encrypted;
   } catch (err) {
     logDatabaseEvent('WRITE', 'ledger', { message: 'Encryption failed, storing unencrypted', error: err, severity: 'error' });
@@ -1258,7 +1258,7 @@ function decryptLedgerData(encrypted: string): any {
   if (!encrypted || typeof encrypted !== 'string') {
     return { entries: [] };
   }
-  
+
   if (encrypted.startsWith('{') || !encrypted.includes(':')) {
     try {
       return JSON.parse(encrypted);
@@ -1287,7 +1287,7 @@ function decryptLedgerData(encrypted: string): any {
           const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
           let decrypted = decipher.update(cipherHex, 'hex', 'utf-8');
           decrypted += decipher.final('utf-8');
-          
+
           return JSON.parse(decrypted);
         } catch {
           // Continue trying next candidate key
@@ -1312,14 +1312,14 @@ function encryptLedgerDataWithKey(data: any, encryptionKey: string): string {
   }
   try {
     const iv = crypto.randomBytes(16);
-    const key = Buffer.from(encryptionKey.slice(0, 32), 'hex').length === 32 
+    const key = Buffer.from(encryptionKey.slice(0, 32), 'hex').length === 32
       ? Buffer.from(encryptionKey.slice(0, 32), 'hex')
       : crypto.pbkdf2Sync(encryptionKey, 'sovereign_ledger_salt', 100000, 32, 'sha256');
-    
+
     const cipher = crypto.createCipheriv('aes-256-cbc', key, iv);
     let encrypted = cipher.update(JSON.stringify(data), 'utf-8', 'hex');
     encrypted += cipher.final('hex');
-    
+
     return iv.toString('hex') + ':' + encrypted;
   } catch (err) {
     logDatabaseEvent('WRITE', 'ledger', { message: 'Custom encryption failed', error: err, severity: 'error' });
@@ -1449,7 +1449,7 @@ function addLedgerEntrySignature(entry: any): any {
 
 function verifyLedgerEntrySignature(entry: any): boolean {
   if (!entry._hmacSignature) return false;
-  
+
   const hmacSecret = SOVEREIGN_ENCRYPTION_KEY;
   const { _hmacSignature, ...entryData } = entry;
   const computed = crypto.createHmac('sha256', hmacSecret).update(JSON.stringify(entryData)).digest('hex');
@@ -1479,7 +1479,7 @@ async function checkProviderHealth(provider: string, type: string): Promise<Prov
 
   try {
     const startTime = Date.now();
-    
+
     if (type === 'blockchain' && provider === 'etherscan') {
       const etherscanApiKey = process.env.ETHERSCAN_API_KEY;
       if (etherscanApiKey && etherscanApiKey.trim() !== '') {
@@ -1532,6 +1532,7 @@ function hasExchangeProviderConfigured(): boolean {
 
 function hasEmailProviderConfigured(): boolean {
   return Boolean(
+    process.env.RESEND_API_KEY ||
     process.env.MAILERSEND_API_KEY ||
     (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS)
   );
@@ -1558,6 +1559,7 @@ function getRuntimeConfigStatus() {
         serverSigningEnabled: false
       },
       email: {
+        resendConfigured: Boolean(process.env.RESEND_API_KEY),
         mailersendConfigured: Boolean(process.env.MAILERSEND_API_KEY),
         smtpConfigured: Boolean(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS)
       },
@@ -1697,7 +1699,7 @@ function enforceTransactionMfa(req: any, res: any, next: any) {
 }
 
 app.use(compression());
-app.use(express.json({ 
+app.use(express.json({
   limit: '1mb',
   verify: (req: any, res, buf) => {
     req.rawBody = buf;
@@ -1834,22 +1836,22 @@ app.use('/api/atm', enforceTransactionAuth, enforceTransactionMfa);
 app.use('/api/trade/audit-risk', enforceTransactionAuth, enforceTransactionMfa);
 
 app.use((req, res, next) => {
-  const correlationIdRaw = req.headers['x-correlation-id'] || req.headers['x-request-id'] || 
+  const correlationIdRaw = req.headers['x-correlation-id'] || req.headers['x-request-id'] ||
                         'corr_' + crypto.randomUUID();
   const correlationId = Array.isArray(correlationIdRaw) ? correlationIdRaw[0] : correlationIdRaw;
   res.setHeader('X-Correlation-ID', correlationId);
   (req as any).correlationId = correlationId;
-  
-  activeRequests.set(correlationId, { 
-    correlationId, 
+
+  activeRequests.set(correlationId, {
+    correlationId,
     requestedAt: Date.now(),
     userId: (req as any).user?.id
   });
-  
+
   res.on('finish', () => {
     activeRequests.delete(correlationId);
   });
-  
+
   next();
 });
 
@@ -1861,7 +1863,7 @@ app.use((req, res, next) => {
 setInterval(async () => {
   const isDisabled = process.env.SOVEREIGN_DISABLE_SCHEDULERS === 'true';
   if (isDisabled) return;
-  
+
   try {
     const providers = [
       { name: 'etherscan', type: 'blockchain' },
@@ -1869,10 +1871,10 @@ setInterval(async () => {
       { name: 'mailersend', type: 'email' },
       { name: 'twilio', type: 'sms' }
     ];
-    
+
     for (const provider of providers) {
       const health = await checkProviderHealth(provider.name, provider.type);
-      
+
       if (!health.isHealthy && health.errorCount! > 3) {
         logProviderEvent(provider.name, 'ERROR', { message: `Provider may be down (${health.errorCount} failures)`, errorCount: health.errorCount });
       } else if (health.latency && health.latency > 10000) {
@@ -1934,7 +1936,7 @@ async function generateWithFallback(aiClient: GoogleGenAI, prompt: string): Prom
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
         logProviderEvent('gemini', 'CONNECTED', { message: `Attempting generateContent with model: ${model} (attempt ${attempt}/${maxRetries})` });
-        
+
         // Dynamically add Google Search Grounding to ensure the model has real-time up-to-date information
         const config: any = {};
         if (model.startsWith('gemini-3') || model.startsWith('gemini-2.5')) {
@@ -1959,29 +1961,29 @@ async function generateWithFallback(aiClient: GoogleGenAI, prompt: string): Prom
         const codeStr = codeMatch ? `status ${codeMatch[1]}` : 'status offline';
         logProviderEvent('gemini', 'ERROR', { message: `Service adjustment for ${model} (attempt ${attempt}/${maxRetries}) - ${codeStr}`, model });
         lastError = err;
-        
+
         let errDetails = '';
         try {
           errDetails = JSON.stringify(err);
         } catch (e) {}
         const errStr = `${String(err)} ${errMsg} ${errDetails} ${err && typeof err === 'object' && 'status' in err ? err.status : ''}`.toLowerCase();
-        
-        const isQuotaLimit = errStr.includes('quota') || 
-                             errStr.includes('exhausted') || 
+
+        const isQuotaLimit = errStr.includes('quota') ||
+                             errStr.includes('exhausted') ||
                              errStr.includes('limit:') ||
                              errStr.includes('429') ||
                              errStr.includes('resource_exhausted');
-        
-        const isTransient = !isQuotaLimit && 
-                            !errStr.includes('404') && 
-                            !errStr.includes('not found') && 
+
+        const isTransient = !isQuotaLimit &&
+                            !errStr.includes('404') &&
+                            !errStr.includes('not found') &&
                             !errStr.includes('not_found') && (
-                              errStr.includes('503') || 
-                              errStr.includes('unavailable') || 
+                              errStr.includes('503') ||
+                              errStr.includes('unavailable') ||
                               errStr.includes('demand') ||
                               errStr.includes('overloaded')
                             );
-        
+
         if (isQuotaLimit) {
           logProviderEvent('gemini', 'RATE_LIMITED', { message: `Quota limit reached for ${model}. Advancing to fallback...`, model });
           break; // Skip further retries on this model
@@ -2066,7 +2068,7 @@ app.post('/api/auth/verify-recaptcha', async (req, res) => {
   }
 
   const secretKey = process.env.RECAPTCHA_SECRET_KEY;
-  
+
   if (!secretKey || secretKey.trim() === '' || secretKey === '6Ld_k_YpAAAAADy9_y231hD2h8f9S0_example_key') {
     return res.status(500).json({ success: false, error: 'reCAPTCHA configuration error: RECAPTCHA_SECRET_KEY is missing or invalid.' });
   }
@@ -2258,7 +2260,7 @@ app.get('/api/verification/status', requireAuth, requireMfa, (req: any, res: any
 
   const configuredCount = Object.values(configuredProviders).filter(Boolean).length;
   const totalProviders = Object.keys(configuredProviders).length;
-  
+
   // Get actual health status from cache
   const etherscanHealth = providerHealthCache.get('etherscan') || { isHealthy: !process.env.ETHERSCAN_API_KEY, lastCheck: new Date(), latency: undefined };
   const coinbaseHealth = providerHealthCache.get('coinbase') || { isHealthy: !process.env.COINBASE_API_KEY_ID, lastCheck: new Date(), latency: undefined };
@@ -2323,59 +2325,59 @@ app.get('/api/verification/infrastructure', requireAuth, requireMfa, (req: any, 
     let ledgerSize = 0;
     let ledgerIntegrity = 'UNKNOWN';
     let ledgerEntries = 0;
-    
+
     if (fs.existsSync(ledgerPath)) {
       ledgerSize = fs.statSync(ledgerPath).size;
       const encryptedContent = fs.readFileSync(ledgerPath, 'utf-8');
       try {
         const ledger = decryptLedgerData(encryptedContent);
-        
+
         ledgerEntries = ledger.entries?.length || 0;
         let validCount = 0;
-        
+
         if (ledger.entries) {
           for (const entry of ledger.entries) {
             if (verifyLedgerEntrySignature(entry)) validCount++;
           }
         }
-        
+
         ledgerIntegrity = validCount === ledgerEntries ? 'VERIFIED' : 'COMPROMISED';
       } catch (decryptErr) {
         ledgerIntegrity = 'LOCKED';
         ledgerEntries = -1;
       }
     }
-    
+
     const providerHealthStatus = Array.from(providerHealthCache.values()).map(h => ({
       name: h.name,
       healthy: h.isHealthy,
       latency: h.latency,
       lastCheck: h.lastCheck
     }));
-    
+
     res.json({
       timestamp: new Date().toISOString(),
       correlationId: (req as any).correlationId,
       components: {
         'Correlation ID Tracking': { status: 'active', version: '1.0' },
-        'Ledger Encryption': { 
+        'Ledger Encryption': {
           status: process.env.SOVEREIGN_ENCRYPTION_KEY ? 'enabled' : 'disabled',
           algorithm: 'AES-256-CBC',
           encryptionKey: process.env.SOVEREIGN_ENCRYPTION_KEY ? 'configured' : 'missing'
         },
-        'Ledger Tamper Detection': { 
+        'Ledger Tamper Detection': {
           status: 'active',
           algorithm: 'HMAC-SHA256',
           integrity: ledgerIntegrity,
           ledgerSize: ledgerSize,
           totalEntries: ledgerEntries
         },
-        'Provider Health Monitoring': { 
+        'Provider Health Monitoring': {
           status: 'active',
           checkInterval: '60 seconds',
           providers: providerHealthStatus
         },
-        'Request Tracking': { 
+        'Request Tracking': {
           status: 'active',
           activeRequests: activeRequests.size,
           trackedSince: new Date(Date.now() - 3600000)
@@ -2386,7 +2388,7 @@ app.get('/api/verification/infrastructure', requireAuth, requireMfa, (req: any, 
       uptime: process.uptime()
     });
   } catch (error: any) {
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Infrastructure status check failed',
       message: error.message,
       timestamp: new Date().toISOString(),
@@ -2547,7 +2549,7 @@ app.get('/api/render/status', (req: any, res: any) => {
   const serviceId = process.env.RENDER_SERVICE_ID || 'srv-d99sus57vvec7386p2p0';
   const deployHookKey = process.env.RENDER_DEPLOY_HOOK_KEY || '';
   const baseDeployUrl = process.env.RENDER_DEPLOY_HOOK_URL || `https://api.render.com/deploy/${serviceId}`;
-  
+
   res.json({
     success: true,
     serviceId,
@@ -2567,7 +2569,7 @@ app.post('/api/render/deploy', requireAuth, async (req: any, res: any) => {
   const serviceId = process.env.RENDER_SERVICE_ID || 'srv-d99sus57vvec7386p2p0';
   const deployHookKey = req.body?.key || req.query?.key || process.env.RENDER_DEPLOY_HOOK_KEY || '';
   let deployUrl = process.env.RENDER_DEPLOY_HOOK_URL || `https://api.render.com/deploy/${serviceId}`;
-  
+
   if (deployHookKey && !deployUrl.includes('key=')) {
     deployUrl += `?key=${deployHookKey}`;
   }
@@ -2751,10 +2753,10 @@ setInterval(async () => {
         // =========================================================================
         const encryptedContent = fs.readFileSync(ledgerPath, 'utf-8');
         const ledger = decryptLedgerData(encryptedContent);
-        
+
         let validEntries = 0;
         let invalidEntries = 0;
-        
+
         let hasTamperedEntries = false;
         if (ledger.entries) {
           for (let i = 0; i < ledger.entries.length; i++) {
@@ -2772,16 +2774,16 @@ setInterval(async () => {
             atomicWriteLedgerFile(ledgerPath, encryptLedgerData(ledger));
           }
         }
-        
+
         const totalEntries = ledger.entries?.length || 0;
         logDatabaseEvent('QUERY', 'ledger', { message: 'Ledger integrity audit completed', totalEntries, validEntries, invalidEntries, status: invalidEntries > 0 ? 'WARNING' : 'STABLE' });
-        
+
         // Balance drift correction is disabled until an authoritative provider reconciliation source is configured.
         logDatabaseEvent('QUERY', 'wallets', { message: 'Skipped hardcoded balance correction; awaiting live provider reconciliation', status: 'NOT_CONFIGURED' });
 
         // Add signatures to any entries missing them
         if (ledger.entries && invalidEntries > 0) {
-          ledger.entries = ledger.entries.map((entry: any) => 
+          ledger.entries = ledger.entries.map((entry: any) =>
             entry._hmacSignature ? entry : addLedgerEntrySignature(entry)
           );
           await LedgerMutex.runLocked(async () => {
@@ -2794,9 +2796,9 @@ setInterval(async () => {
     }
   } catch (err: any) {
     if (IS_PRODUCTION) {
-      logSystemEvent('WARNING', { 
-        message: 'Background auditor sync check skipped (configuration-dependent)', 
-        error: err?.message || String(err) 
+      logSystemEvent('WARNING', {
+        message: 'Background auditor sync check skipped (configuration-dependent)',
+        error: err?.message || String(err)
       });
     }
   }
@@ -3142,10 +3144,10 @@ function generateKrakenSignature(urlPath: string, nonce: string, postData: strin
     const secretBuffer = Buffer.from(apiSecret, 'base64');
     const sha256Hash = crypto.createHash('sha256').update(nonce + postData).digest();
     const hmac = crypto.createHmac('sha512', secretBuffer);
-    
+
     hmac.update(urlPath);
     hmac.update(sha256Hash);
-    
+
     return hmac.digest('base64');
   } catch (err) {
     return 'hmac_signature_calculation_error';
@@ -3241,7 +3243,7 @@ async function executeHardenedOrder(side: 'BUY' | 'SELL', symbol: string, amount
 app.post('/api/exchanges/sync', requireAuth, requireMfa, async (req: any, res: any) => {
   try {
     const { address, balances } = req.body || {};
-    
+
     const syncId = 'sync_' + Math.random().toString(36).substring(2, 11);
     const timestamp = new Date().toISOString();
 
@@ -3321,7 +3323,7 @@ app.post('/api/exchanges/sync', requireAuth, requireMfa, async (req: any, res: a
     const hasCoinbase = cbCreds.isValid;
     const hasKraken = !!(krKey && krSecret && !krKey.includes('placeholder') && !krSecret.includes('placeholder'));
     const hasRealKeys = hasCoinbase || hasKraken;
-    
+
     let status = 'FAILED';
     let message = '';
     const cbSuccess = hasCoinbase && cbStatus === 'connected_live_api';
@@ -3515,7 +3517,7 @@ app.post('/api/exchanges/trade', requireAuth, tradeRateLimiter, requireMfa, requ
       try {
         const seed = String(req.headers['x-idempotency-key'] || `${req.user.id}:${isBuy ? 'BUY' : 'SELL'}:${activeSymbol}:${amount}:${fiat}`).trim();
         const orderResult = await executeHardenedOrder(isBuy ? 'BUY' : 'SELL', activeSymbol, amount, fiat, req.user.id, seed);
-        
+
         results.routing = { success: true, live: true, data: orderResult };
         executedReal = true;
         orderIdForVerification = orderResult.txid || orderResult.id || orderResult.order_id;
@@ -3558,7 +3560,7 @@ app.post('/api/exchanges/trade', requireAuth, tradeRateLimiter, requireMfa, requ
         const txnId = `txn_${crypto.randomUUID()}`;
         const fiatAmount = (isBuy ? amount * 1.0 : amount * 50000); // Rough conversion for demo
         const tradeType = isBuy ? 'BUY' : 'SELL';
-        
+
         // Insert transaction record
         try {
           db.execute(
@@ -3590,7 +3592,7 @@ app.post('/api/exchanges/trade', requireAuth, tradeRateLimiter, requireMfa, requ
               'SELECT * FROM wallets WHERE user_id = ? AND asset_symbol = ?',
               [req.user.id, 'USD']
             ) as any[];
-            
+
             if (userWallets.length > 0) {
               const currentBalance = parseFloat(userWallets[0].balance || 0);
               const newBalance = currentBalance + fiatAmount;
@@ -3713,7 +3715,7 @@ app.post('/api/exchanges/swap', requireAuth, tradeRateLimiter, requireMfa, requi
         const priceFrom = await getLivePriceUSD(fromAsset);
         const usdProceeds = Number(amount) * priceFrom;
         const buySeed = String(req.headers['x-idempotency-key'] || `${req.user.id}:SWAP_BUY:${toAsset}:${usdProceeds}:USD`).trim();
-        
+
         // Sell fromAsset for USD
         const sellResult = await executeCoinbaseOrder('SELL', fromAsset, amount, 'USD', req.user.id, sellSeed);
         // Buy toAsset with USD proceeds
@@ -3774,11 +3776,11 @@ app.post('/api/exchanges/swap', requireAuth, tradeRateLimiter, requireMfa, requi
   // Apply external verification
   if (executedReal) {
     const enforcer = createEnforcer('exchange');
-    
+
     // Extract real exchange order IDs if available
     let realExchange = targetExchange === 'all' ? 'coinbase' : targetExchange;
     let realOrderId = '';
-    
+
     if (results.coinbase?.success && results.coinbase.data) {
       realExchange = 'coinbase';
       const cbData = results.coinbase.data;
@@ -3788,7 +3790,7 @@ app.post('/api/exchanges/swap', requireAuth, tradeRateLimiter, requireMfa, requi
       const krData = results.kraken.data;
       realOrderId = krData.result?.txid?.[0] || krData.txid?.[0] || krData.result?.order_id || '';
     }
-    
+
     if (!realOrderId) {
       realOrderId = 'swap_' + Date.now();
     }
@@ -4012,6 +4014,12 @@ function createPasswordReset(userId: string, email: string): { token: string; ex
   return { token, expiresAt };
 }
 
+function revokePasswordReset(email: string): void {
+  const records = readPasswordResets();
+  delete records[email.toLowerCase()];
+  writePasswordResets(records);
+}
+
 function consumePasswordReset(email: string, token: string): { ok: boolean; userId?: string; reason?: string } {
   const validation = validatePasswordReset(email, token);
   if (!validation.ok || !validation.userId) return validation;
@@ -4051,7 +4059,7 @@ function revokeUserSessions(userId: string) {
 }
 
 function shouldBypassEmailVerification(): boolean {
-  const hasMailProvider = Boolean(process.env.MAILERSEND_API_KEY || process.env.SMTP_HOST);
+  const hasMailProvider = Boolean(process.env.RESEND_API_KEY || process.env.MAILERSEND_API_KEY || process.env.SMTP_HOST);
   return process.env.NODE_ENV !== 'production' || process.env.BYPASS_EMAIL_VERIFICATION === 'true' || !hasMailProvider;
 }
 
@@ -4124,22 +4132,55 @@ async function sendETransferEmail(email: string, subject: string, htmlContent: s
     return false;
   }
 
-  // In production, fail fast if no provider is configured when emails are enabled
+  // In production, fail fast if no provider is configured when emails are enabled.
   if (IS_PRODUCTION && gateway.routeEmailsEnabled) {
+    const resendConfigured = Boolean(process.env.RESEND_API_KEY && (process.env.RESEND_FROM_EMAIL || process.env.ALERT_FROM_EMAIL));
     const smtpConfigured = Boolean(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
     const mailerConfigured = Boolean(mailersendApiKey && mailerSend);
-    if (!smtpConfigured && !mailerConfigured) {
-      const errMsg = 'Email delivery is enabled but no MailerSend or SMTP provider is configured for production. Skipping email transmission.';
+    if (!resendConfigured && !smtpConfigured && !mailerConfigured) {
+      const errMsg = 'Email delivery is enabled but no Resend, MailerSend, or SMTP provider is configured for production. Skipping email transmission.';
       logSystemEvent('WARNING', { message: errMsg, environment: 'production' });
       return false;
     }
   }
 
-  // 1. Attempt sending via MailerSend Node SDK with external verification
+  // 1. Attempt delivery with Resend. The API key remains server-side and is never serialized.
+  const resendApiKey = process.env.RESEND_API_KEY?.trim();
+  const resendFrom = (process.env.RESEND_FROM_EMAIL || process.env.ALERT_FROM_EMAIL || '').trim();
+  if (resendApiKey && resendFrom.includes('@')) {
+    try {
+      const response = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${resendApiKey}`,
+          'Content-Type': 'application/json',
+          'Idempotency-Key': `unified-email-${crypto.randomUUID()}`
+        },
+        body: JSON.stringify({
+          from: resendFrom,
+          to: [targetEmail],
+          subject,
+          html: htmlContent,
+          text: subject
+        })
+      });
+      const payload = await response.json().catch(() => ({})) as { id?: string };
+      if (!response.ok || !payload.id) {
+        logProviderEvent('resend', 'ERROR', { message: 'Resend did not accept email delivery.', status: response.status });
+      } else {
+        logProviderEvent('resend', 'CONNECTED', { message: 'Email accepted by Resend.', messageId: payload.id });
+        return true;
+      }
+    } catch (err: any) {
+      logProviderEvent('resend', 'ERROR', { message: 'Resend email delivery request failed.', error: err?.message || 'network_error' });
+    }
+  }
+
+  // 2. Attempt sending via MailerSend Node SDK with external verification
   if (mailersendApiKey && mailerSend) {
     try {
       logProviderEvent('mailersend', 'CONNECTED', { message: 'Initiating email transmission', recipient: targetEmail });
-      
+
       const senderEmail = process.env.ALERT_FROM_EMAIL && process.env.ALERT_FROM_EMAIL.includes('@')
         ? process.env.ALERT_FROM_EMAIL
         : process.env.SMTP_USER && process.env.SMTP_USER.includes('@')
@@ -4162,7 +4203,7 @@ async function sendETransferEmail(email: string, subject: string, htmlContent: s
       const resultAny = result as any;
       const messageId = resultAny?.data?.id || resultAny?.id || resultAny?.response?.id;
       logProviderEvent('mailersend', 'CONNECTED', { message: 'Email successfully sent via MailerSend', recipient: targetEmail, messageId });
-      
+
       // Apply external verification if messageId is available
       if (messageId) {
         try {
@@ -4185,7 +4226,7 @@ async function sendETransferEmail(email: string, subject: string, htmlContent: s
     }
   }
 
-  // 2. SMTP fallback
+  // 3. SMTP fallback
   const host = process.env.SMTP_HOST;
   const port = process.env.SMTP_PORT ? parseInt(process.env.SMTP_PORT, 10) : 587;
   const user = process.env.SMTP_USER;
@@ -4255,7 +4296,7 @@ async function sendSMSAlert(toPhone: string, message: string) {
         const result = await response.json() as any;
         const messageId = result.sid;
         logProviderEvent('twilio', 'CONNECTED', { message: 'SMS sent successfully via Twilio', recipient: toPhone, messageId });
-        
+
         // Apply external verification
         if (messageId) {
           try {
@@ -4300,7 +4341,7 @@ async function sendSMSAlert(toPhone: string, message: string) {
         const result = await response.json() as any;
         const messageId = result?.data?.id || result?.id;
         logProviderEvent('mailersend', 'CONNECTED', { message: 'SMS sent successfully via MailerSend', recipient: toPhone, messageId });
-        
+
         // Apply external verification
         if (messageId) {
           try {
@@ -4495,11 +4536,11 @@ app.post('/api/exchanges/etransfer/deposit-direct', requireAuth, requireMfa, asy
 app.post('/api/exchanges/etransfer/autodeposit/check', requireAuth, requireMfa, (req: any, res: any) => {
   const { email } = req.body;
   if (!email) return res.status(400).json({ error: 'Email is required' });
-  
+
   const cleanedInput = String(email).toLowerCase().replace(/[^a-z0-9@\.]/g, '');
-  const isAuto = cleanedInput.includes('auto') || 
-                 cleanedInput === 'mlaframboisemm@gmail.com' || 
-                 cleanedInput === 'marcel-auto@sovereign.com' || 
+  const isAuto = cleanedInput.includes('auto') ||
+                 cleanedInput === 'mlaframboisemm@gmail.com' ||
+                 cleanedInput === 'marcel-auto@sovereign.com' ||
                  cleanedInput.replace(/[^0-9]/g, '') === '9057184275';
   res.json({ success: true, email, autodeposit: isAuto });
 });
@@ -4965,7 +5006,7 @@ app.post('/api/trade/audit-risk', requireAuth, requireMfa, async (req: any, res:
       You are the Marshall Sovereign risk auditor. Analyze the following swap request:
       Swap Amount: ${amount} ${fromAsset}
       To Asset: ${toAsset}
-      
+
       Verify exchange liquidity impact, potential slippage, and general transaction risk.
       Return a response in JSON format containing:
       {
@@ -5030,7 +5071,7 @@ app.post('/api/atm/connect', strictLimiter, requireAuth, requireMfa, requireKyc(
     if ('userId' in req.body) {
       return res.status(400).json({ error: 'INVALID_REQUEST_PAYLOAD', message: 'Client-supplied userId is not permitted. Use authenticated identity.' });
     }
-    
+
     if (!walletAddress) {
       return res.status(400).json({ error: 'Missing walletAddress' });
     }
@@ -5334,8 +5375,8 @@ app.post('/api/atm/locator', strictLimiter, requireAuth, requireMfa, requireKyc(
  * In production, this would call real ATM network APIs
  */
 function generateAtmLocations(
-  userLat: number, 
-  userLng: number, 
+  userLat: number,
+  userLng: number,
   radiusKm: number
 ): Array<{
   id: string;
@@ -5401,21 +5442,21 @@ function generateAtmLocations(
   // Generate 10-15 total ATMs within radius (mix of cash and Bitcoin)
   const count = 10 + Math.floor(Math.random() * 6);
   const bitcoinCount = Math.floor(count * 0.4); // ~40% Bitcoin ATMs, ~60% cash ATMs
-  
+
   for (let i = 0; i < count; i++) {
     // Random coordinates within radius
     const angle = Math.random() * 2 * Math.PI;
     const distance = Math.random() * radiusKm;
-    
+
     // Convert km to lat/lng (rough approximation)
     const latDelta = (distance / 111) * Math.cos(angle);
     const lngDelta = (distance / (111 * Math.cos((userLat * Math.PI) / 180))) * Math.sin(angle);
-    
+
     const atmLat = userLat + latDelta;
     const atmLng = userLng + lngDelta;
-    
+
     const distanceKm = Math.sqrt(latDelta * latDelta + lngDelta * lngDelta) * 111;
-    
+
     // Determine if Bitcoin or Cash ATM
     const isBitcoinAtm = i < bitcoinCount;
 
@@ -6076,7 +6117,7 @@ app.post('/api/auth/register', validateRequest(ValidationSchemas.AuthRegisterSch
       citizenship: normalizedCitizenship,
       kycLevel: 1
     }).catch(e => console.error('Klaviyo registration hooks failed:', e));
-    
+
     trackKlaviyoEvent(normalizedEmail, "User Signed Up", {
       userId,
       citizenship: normalizedCitizenship,
@@ -6239,17 +6280,17 @@ app.post('/api/auth/google', async (req, res) => {
     if (issuer !== 'accounts.google.com' && issuer !== 'https://accounts.google.com') {
       return res.status(401).json({ error: 'INVALID_ISSUER', message: 'Token issuer is not Google.' });
     }
-    
+
     const email = String(payload.email || '').trim().toLowerCase();
     if (!email || !email.includes('@')) {
       return res.status(401).json({ error: 'INVALID_EMAIL', message: 'Google token does not include a valid email address.' });
     }
     const name = payload.name || email.split('@')[0] || 'Google User';
-    
+
     // Find or create user in SQLite database
     const users = db.execute('SELECT * FROM users WHERE email = ?', [email]) as any[];
     let user = users && users[0];
-    
+
     if (!user) {
       const userId = `user_${crypto.randomUUID()}`;
       const salt = crypto.randomBytes(16).toString('hex');
@@ -6260,7 +6301,7 @@ app.post('/api/auth/google', async (req, res) => {
         'INSERT INTO users (id, name, email, passwordHash, salt, twoFactorSecret, twoFactorEnabled, kycLevel, citizenship, identityLocked, productionMode, blockchainLinked, lockedToEmail) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
         [userId, name, email, passwordHash, salt, twoFactorSecret, false, 3, 'CA', true, 'live', true, email]
       );
-      
+
       // Auto lock account to identity for security
       const createdUser = (db.execute('SELECT * FROM users WHERE email = ?', [email]) as any[])[0];
       await lockAccountToIdentity(createdUser, 'register');
@@ -6436,11 +6477,20 @@ app.post('/api/auth/request-password-reset', async (req, res) => {
       '</div>';
     const delivered = await sendETransferEmail(email, subject, html);
     if (!delivered) {
-      logSystemEvent('WARNING', { message: 'Password reset requested but no email provider delivered the reset link.' });
+      revokePasswordReset(email);
+      logSystemEvent('WARNING', { message: 'Password reset requested but the configured email provider did not accept delivery; reset token revoked.' });
     }
     db.execute(
       'INSERT INTO audit_logs (id, user_id, action, timestamp, ip_address, status, details) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      [`audit_${crypto.randomUUID()}`, user.id, 'PASSWORD_RESET_REQUESTED', Date.now(), String(req.ip || 'unknown'), 'success', 'Password reset link issued']
+      [
+        `audit_${crypto.randomUUID()}`,
+        user.id,
+        'PASSWORD_RESET_REQUESTED',
+        Date.now(),
+        String(req.ip || 'unknown'),
+        delivered ? 'success' : 'failed',
+        delivered ? 'Password reset link accepted by the configured email provider.' : 'Password reset link was not delivered; token revoked.'
+      ]
     );
   } catch (error) {
     console.error('Password-reset request failed:', error);
@@ -6554,14 +6604,14 @@ app.post('/api/auth/kyc/save', requireAuth, (req: any, res) => {
 
     // Update user with KYC information
     db.execute(
-      `UPDATE users SET 
-        kycFullName = ?, 
-        kycAddress = ?, 
-        kycCity = ?, 
-        kycState = ?, 
-        kycProvince = ?, 
-        kycPostalCode = ?, 
-        kycTaxId = ?, 
+      `UPDATE users SET
+        kycFullName = ?,
+        kycAddress = ?,
+        kycCity = ?,
+        kycState = ?,
+        kycProvince = ?,
+        kycPostalCode = ?,
+        kycTaxId = ?,
         kycPhone = ?,
         kycVerifiedAt = ?,
         kycLevel = ?
@@ -6602,9 +6652,9 @@ app.post('/api/auth/kyc/save', requireAuth, (req: any, res) => {
     });
   } catch (error: any) {
     console.error('Failed to save KYC information:', error);
-    res.status(500).json({ 
-      error: 'KYC_SAVE_FAILED', 
-      message: error?.message || 'Failed to save KYC information' 
+    res.status(500).json({
+      error: 'KYC_SAVE_FAILED',
+      message: error?.message || 'Failed to save KYC information'
     });
   }
 });
@@ -6638,9 +6688,9 @@ app.get('/api/auth/kyc/info', requireAuth, (req: any, res) => {
     });
   } catch (error: any) {
     console.error('Failed to retrieve KYC information:', error);
-    res.status(500).json({ 
-      error: 'KYC_FETCH_FAILED', 
-      message: 'Failed to retrieve KYC information' 
+    res.status(500).json({
+      error: 'KYC_FETCH_FAILED',
+      message: 'Failed to retrieve KYC information'
     });
   }
 });
@@ -6659,7 +6709,7 @@ if (ENABLE_DEV_TEST_TOKEN) {
 async function getSovereignPortfolioState(userId?: string) {
   const ledgerPath = process.env.SOVEREIGN_LEDGER_PATH || './ledger_db.json';
   let cashBalance = 0;
-  
+
   if (userId) {
     try {
       const walletRows = db.execute('SELECT * FROM wallets WHERE user_id = ?', [userId]) as any[];
@@ -6675,17 +6725,17 @@ async function getSovereignPortfolioState(userId?: string) {
   }
 
   const holdingsMap = new Map<string, number>();
-  
+
   // Server portfolio state is not derived from a private key. User-owned EVM balances are
   // read only through the connected browser wallet and its selected public address.
   const ethBalance = 0;
-  
+
   if (ethBalance > 0) {
     holdingsMap.set('ETH', ethBalance);
   } else {
     // holdingsMap.set('ETH', 0);
   }
-  
+
 
   if (fs.existsSync(ledgerPath)) {
     try {
@@ -6696,11 +6746,11 @@ async function getSovereignPortfolioState(userId?: string) {
           const type = entry.type;
           const status = entry.status;
           if (status !== 'executed' && status !== 'completed' && status !== 'success') continue;
-          
+
           const payload = entry.payload || {};
           const amount = payload.amount || 0;
           const currency = payload.currency || payload.symbol || 'USD';
-          
+
           if (type === 'transfer') {
             if (payload.action === 'settlement.withdrawal') {
               cashBalance -= amount;
@@ -6734,12 +6784,12 @@ async function getSovereignPortfolioState(userId?: string) {
       console.error('Failed to calculate portfolio from ledger:', e);
     }
   }
-  
+
   const holdings = Array.from(holdingsMap.entries()).map(([symbol, amount]) => {
     const avg = 0;
     return { symbol, amount, avgBuyPrice: avg };
   });
-  
+
   return {
     usdBalance: cashBalance,
     holdings
@@ -6758,10 +6808,10 @@ async function getSovereignsGatewayBalanceAdjustment() {
           const type = entry.type;
           const status = entry.status;
           if (status !== 'executed' && status !== 'completed' && status !== 'success') continue;
-          
+
           const payload = entry.payload || {};
           const amount = payload.amount || 0;
-          
+
           if (type === 'transfer' && (payload.method === 'bank' || payload.method === 'wallet_send')) {
             if (payload.action === 'settlement.withdrawal') {
               adjustment -= amount;
@@ -6781,7 +6831,7 @@ async function getSovereignsGatewayBalanceAdjustment() {
 async function getTransactionsFromLedger() {
   const ledgerPath = process.env.SOVEREIGN_LEDGER_PATH || './ledger_db.json';
   const list: any[] = [];
-  
+
   list.push({
     id: 'tx-initial-deposit',
     type: 'RECEIVE',
@@ -6792,7 +6842,7 @@ async function getTransactionsFromLedger() {
     details: 'Initial ACH Bank Deposit Confirmed',
     status: 'completed'
   });
-  
+
   if (fs.existsSync(ledgerPath)) {
     try {
       const content = fs.readFileSync(ledgerPath, 'utf-8');
@@ -6805,11 +6855,11 @@ async function getTransactionsFromLedger() {
           const result = entry.result || {};
           const amount = payload.amount || 0;
           const currency = payload.currency || payload.symbol || 'USD';
-          
+
           if (type === 'transfer') {
             const action = payload.action || '';
             const method = payload.method || '';
-            
+
             if (action === 'settlement.withdrawal' || method === 'bank_withdraw' || method === 'atm_cashout' || method === 'etransfer_withdraw') {
               list.push({
                 id: entry.id,
@@ -6818,7 +6868,7 @@ async function getTransactionsFromLedger() {
                 amount: amount,
                 fiatAmount: amount,
                 timestamp: new Date(entry.createdAt).getTime(),
-                details: method === 'atm_cashout' 
+                details: method === 'atm_cashout'
                   ? `ATM Cashout Withdrawal (Voucher Ref: ${payload.voucherRef})`
                   : method === 'etransfer_withdraw'
                   ? `Interac e-Transfer Withdrawal to Scotiabank (${payload.email})`
@@ -6857,7 +6907,7 @@ async function getTransactionsFromLedger() {
             const fromSym = payload.fromSymbol || currency;
             const toSym = payload.toSymbol || payload.targetSymbol || '';
             const isConvert = action === 'CONVERT' || type === 'convert' || (fromSym && toSym && fromSym !== toSym);
-            
+
             list.push({
               id: entry.id,
               type: isConvert ? 'CONVERT' : action === 'BUY' ? 'BUY' : 'SELL',
@@ -6882,7 +6932,7 @@ async function getTransactionsFromLedger() {
               amount: amount,
               fiatAmount: amount * (currency === 'ETH' ? 3450.00 : 1.00),
               timestamp: new Date(entry.createdAt).getTime(),
-              details: action === 'yield.reward' 
+              details: action === 'yield.reward'
                 ? `Staking Yield Sweep Reward from ${payload.source || 'Validator Nodes'}`
                 : `Internal Treasury Event: ${action}`,
               status: status
@@ -6918,14 +6968,14 @@ async function getTransactionsFromLedger() {
   } catch (dbTxErr) {
     console.warn('[TRANSACTIONS] DB transactions fetch note:', dbTxErr);
   }
-  
+
   return list.sort((a, b) => b.timestamp - a.timestamp);
 }
 
 async function recordLedgerEntry(entryPayload: { type: string; status: string; payload: any; result: any }) {
   const ledgerPath = process.env.SOVEREIGN_LEDGER_PATH || './ledger_db.json';
   let ledger: { entries: any[] } = { entries: [] };
-  
+
   if (fs.existsSync(ledgerPath)) {
     try {
       const content = fs.readFileSync(ledgerPath, 'utf-8');
@@ -6934,7 +6984,7 @@ async function recordLedgerEntry(entryPayload: { type: string; status: string; p
       console.warn('Failed to parse ledger on record, resetting.');
     }
   }
-  
+
   const actorId = String(entryPayload.payload?.userId || entryPayload.payload?.createdBy || '').trim();
   const requiresIdentity = ['transfer', 'exchange_trade', 'other'].includes(entryPayload.type);
   if (requiresIdentity && !actorId) {
@@ -6954,10 +7004,10 @@ async function recordLedgerEntry(entryPayload: { type: string; status: string; p
     payload: normalizedPayload,
     result: entryPayload.result
   };
-  
+
   newEntry = addLedgerEntrySignature(newEntry);
   ledger.entries.push(newEntry);
-  
+
   await LedgerMutex.runLocked(async () => {
       atomicWriteLedgerFile(ledgerPath, encryptLedgerData(ledger));
     });
@@ -7170,7 +7220,7 @@ app.post('/api/coinbase/config', requireAuth, requireMfa, async (req, res) => {
     if (fs.existsSync(envPath)) {
       envContent = fs.readFileSync(envPath, 'utf8');
     }
-    
+
     if (parsed.apiKeyId) {
       if (envContent.includes('COINBASE_API_KEY_ID=')) {
         envContent = envContent.replace(/COINBASE_API_KEY_ID=.*/g, `COINBASE_API_KEY_ID=${parsed.apiKeyId}`);
@@ -7187,7 +7237,7 @@ app.post('/api/coinbase/config', requireAuth, requireMfa, async (req, res) => {
         envContent += `\nCOINBASE_API_SECRET_RAW=${escapedKey}`;
       }
     }
-    
+
     fs.writeFileSync(envPath, envContent.trim() + '\n', 'utf8');
   } catch (err) {
     console.error('Failed to write credentials to .env file:', err);
@@ -9653,7 +9703,7 @@ app.post('/api/dev/run-tests', async (req, res) => {
   }
 
   console.log('[CYPRESS RUNNER] Executing E2E Integration Suite verification...');
-  
+
   const logs = [
     '⏳ Initializing E2E sandboxed database verification...',
     '✅ Step 1: User Account Creation & Password Salting verification passed.',
@@ -9773,13 +9823,13 @@ app.post('/webhook', express.raw({ type: 'application/json' }), async (req: any,
     try {
       const txHash = payload.transactionHash || payload.transaction_hash || payload.txHash || payload.tx_hash || payload.hash;
       const refId = payload.referenceId || payload.reference_id || payload.requestId || payload.request_id || payload.id || eventId;
-      
+
       const ledgerPath = process.env.SOVEREIGN_LEDGER_PATH || './ledger_db.json';
       if (fs.existsSync(ledgerPath)) {
         const content = fs.readFileSync(ledgerPath, 'utf-8');
         const ledger = decryptLedgerData(content);
         let ledgerUpdated = false;
-        
+
         if (ledger && ledger.entries) {
           for (const entry of ledger.entries) {
             if (entry.status === 'pending' || entry.status === 'awaiting_external_settlement') {
@@ -9789,7 +9839,7 @@ app.post('/webhook', express.raw({ type: 'application/json' }), async (req: any,
                 (entry.payload?.interacRef && String(entry.payload.interacRef).toLowerCase() === String(refId).toLowerCase()) ||
                 (entry.id && String(entry.id).toLowerCase() === String(refId).toLowerCase())
               );
-              
+
               if (matchesHash || matchesRef) {
                 entry.status = 'executed';
                 entry.result = {
@@ -9803,12 +9853,12 @@ app.post('/webhook', express.raw({ type: 'application/json' }), async (req: any,
             }
           }
         }
-        
+
         if (ledgerUpdated) {
           atomicWriteLedgerFile(ledgerPath, encryptLedgerData(ledger));
         }
       }
-      
+
       // Also update the relational database (database.json) if there is a matching transaction
       const dbState = (db as any).state;
       if (dbState && dbState.transactions) {
@@ -9820,7 +9870,7 @@ app.post('/webhook', express.raw({ type: 'application/json' }), async (req: any,
               (tx.id && String(tx.id).toLowerCase() === String(refId).toLowerCase()) ||
               (tx.details && String(tx.details).toLowerCase().includes(String(refId).toLowerCase()))
             );
-            
+
             if (matchesHash || matchesRef) {
               dbUpdated = true;
               return { ...tx, status: 'completed' };
@@ -9828,7 +9878,7 @@ app.post('/webhook', express.raw({ type: 'application/json' }), async (req: any,
           }
           return tx;
         });
-        
+
         if (dbUpdated) {
           (db as any).save();
           console.log(`[WEBHOOK][RECONCILE] Updated pending relational database transaction matching hash/ref: ${txHash || refId}`);
@@ -10244,7 +10294,7 @@ app.post('/api/coinbase/deposit', requireAuth, requireMfa, async (req: any, res)
   }
 
   const selectedProvider = String(provider || (process.env.COINBASE_API_KEY_ID ? 'coinbase' : process.env.KRAKEN_API_KEY ? 'kraken' : '')).toLowerCase();
-  
+
   const hasCoinbase = !!(process.env.COINBASE_API_KEY_ID && process.env.COINBASE_API_SECRET_RAW);
   const hasKraken = !!(process.env.KRAKEN_API_KEY && process.env.KRAKEN_API_SECRET);
   const hasSelectedCredentials = (selectedProvider === 'coinbase' && hasCoinbase) || (selectedProvider === 'kraken' && hasKraken);
@@ -10341,7 +10391,7 @@ app.post('/api/coinbase/withdraw', requireAuth, withdrawalRateLimiter, requireMf
   }
 
   const selectedProvider = String(provider || (process.env.COINBASE_API_KEY_ID ? 'coinbase' : process.env.KRAKEN_API_KEY ? 'kraken' : '')).toLowerCase();
-  
+
   const hasCoinbase = !!(process.env.COINBASE_API_KEY_ID && process.env.COINBASE_API_SECRET_RAW);
   const hasKraken = !!(process.env.KRAKEN_API_KEY && process.env.KRAKEN_API_SECRET);
   const hasSelectedCredentials = (selectedProvider === 'coinbase' && hasCoinbase) || (selectedProvider === 'kraken' && hasKraken);
@@ -10433,7 +10483,7 @@ app.post('/api/coinbase/withdraw', requireAuth, withdrawalRateLimiter, requireMf
 app.post('/api/coinbase/quiz', requireAuth, requireMfa, async (req: any, res) => {
   const { quizId, rewardSymbol, rewardAmount } = req.body;
   const userId = req.user.id;
-  
+
   try {
     await recordLedgerEntry({
       type: 'transfer',
@@ -10452,7 +10502,7 @@ app.post('/api/coinbase/quiz', requireAuth, requireMfa, async (req: any, res) =>
         clearedAt: new Date().toISOString()
       }
     });
-    
+
     res.json({ success: true });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -10475,11 +10525,11 @@ app.get('/api/messaging/emails', requireAuth, (req: any, res: any) => {
         const filePath = path.join(emailsDir, f);
         const stats = fs.statSync(filePath);
         const content = fs.readFileSync(filePath, 'utf-8');
-        
+
         let subject = 'Coinbase Notification';
         const subjMatch = content.match(/<div[^>]*background: ?#[a-f0-9]+[^>]*>([^<]+)<\/div>/i);
         if (subjMatch) subject = subjMatch[1].trim();
-        
+
         return {
           id: f,
           sender: 'Sovereign Wealth Gateway',
@@ -10490,7 +10540,7 @@ app.get('/api/messaging/emails', requireAuth, (req: any, res: any) => {
         };
       })
       .sort((a, b) => b.timestamp - a.timestamp);
-    
+
     res.json({ success: true, emails });
   } catch (e: any) {
     res.status(500).json({ error: 'EMAILS_READ_ERROR', message: e.message });
@@ -10972,7 +11022,7 @@ app.post("/api/v1/interac/initiate", requireAuth, async (req: any, res: any) => 
   } catch (e) {
     console.warn('Rate limiter failed:', getErrorMessage(e));
   }
-  
+
   if (!operation_type || !["DEPOSIT", "WITHDRAWAL"].includes(operation_type)) {
     return res.status(400).json({ error: "operation_type must be DEPOSIT or WITHDRAWAL" });
   }
@@ -10981,7 +11031,7 @@ app.post("/api/v1/interac/initiate", requireAuth, async (req: any, res: any) => 
   }
 
   const transfer_id = "TXR-" + crypto.randomBytes(4).toString("hex").toUpperCase();
-  
+
   ESCROW_LEDGER.set(transfer_id, {
     operation: operation_type,
     recipient: recipient_email,
@@ -11035,7 +11085,7 @@ app.get("/api/v1/interac/oauth-url/:bank_key", (req: any, res: any) => {
   const protocol = req.secure || req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
   const host = req.get('host') || `localhost:${PORT}`;
   const requestOrigin = `${protocol}://${host}`;
-  
+
   const isProductionDomain = host.toLowerCase().includes('pay.sovereigns.ca');
   const callbackBase = (isProductionDomain && process.env.FAPI_CALLBACK_URI) || `${requestOrigin}/api/v1/interac/callback`;
   const transfer = ESCROW_LEDGER.get(String(transfer_id));
@@ -11054,7 +11104,7 @@ app.get("/api/v1/interac/oauth-url/:bank_key", (req: any, res: any) => {
   }).toString();
   const separator = basePortalUrl.includes('?') ? '&' : '?';
   const secure_transport_url = `${basePortalUrl}${separator}${qs}`;
-  
+
   res.json({ target_redirect_url: secure_transport_url });
 });
 
@@ -11383,7 +11433,7 @@ app.post("/api/v1/interac/finalize", requireAuth, async (req: any, res: any) => 
     appendKilnChangelogEntry(`${transfer.operation}_FINALIZED transferId=${transfer_id} referenceId=${clearinghouse_reference_hash} amountUsd=${amountUsd}`);
 
     console.log(`[SETTLED] Headless ${transfer.operation} operation completed successfully. Reference ID: ${clearinghouse_reference_hash}`);
-    
+
     res.json({
       status: transfer.operation === "DEPOSIT" ? "DEPOSITED" : "DISPATCHED_SETTLED",
       tracking_reference_id: clearinghouse_reference_hash,
@@ -11425,20 +11475,20 @@ bankAccountStream.on('transaction', async (event: { cardId: string; amount: numb
   const node = mapTransactionToNode(event.cardId);
   const userId = event.userId || 'guest_gateway';
   const amountUsd = Number(event.amount);
-  
+
   console.log(`[STREAM] Transaction received on Node ${node}: $${amountUsd} USD`);
-  
+
   try {
     // Retrieve current USD balance
     const walletRows = db.execute('SELECT * FROM wallets WHERE user_id = ? AND asset_symbol = ?', [userId, 'USD']) as any[];
     if (walletRows && walletRows.length > 0) {
       const currentBalance = Number(walletRows[0].balance || 0);
       const newBalance = Number(Math.max(0, currentBalance - amountUsd).toFixed(2));
-      
+
       // Update wallet balance
       console.log(`[STREAM] Updated wallets balance for user ${userId} to $${newBalance} USD via stream debit`);
     }
-    
+
     // Write entry to ledger
     await recordLedgerEntry({
       type: "transfer",
@@ -11461,7 +11511,7 @@ bankAccountStream.on('transaction', async (event: { cardId: string; amount: numb
         amountDelta: `-$${amountUsd.toFixed(2)} USD`
       }
     });
-    
+
   } catch (err: any) {
     console.error(`[STREAM] Failed to process transaction event for Node ${node}:`, err.message);
   }
@@ -11470,7 +11520,7 @@ bankAccountStream.on('transaction', async (event: { cardId: string; amount: numb
 export async function secureRegisterCard(cardToken: string, nodeID: string, userId?: string) {
   const masterKey = process.env.SOVEREIGN_ENCRYPTION_KEY || 'default-sovereign-master-key-32chars';
   const resolvedUser = userId || 'guest_gateway';
-  
+
   // 1. Encryption: Secure the raw identifier using AES-256
   const encryptedToken = encryptLedgerDataWithKey({ cardToken }, masterKey);
 
@@ -11550,10 +11600,10 @@ async function createPlaidStripeProcessorToken(accessToken: string, accountId: s
 
   if (plaidClientId && plaidSecret && accessToken && accountId) {
     try {
-      const plaidHost = plaidEnv === 'production' 
-        ? 'https://production.plaid.com' 
-        : plaidEnv === 'development' 
-        ? 'https://development.plaid.com' 
+      const plaidHost = plaidEnv === 'production'
+        ? 'https://production.plaid.com'
+        : plaidEnv === 'development'
+        ? 'https://development.plaid.com'
         : 'https://sandbox.plaid.com';
 
       const res = await fetch(`${plaidHost}/processor/stripe/bank_account_token/create`, {
@@ -12106,7 +12156,7 @@ app.post('/api/stripe/payout', requireAuth, async (req: any, res) => {
         }
       });
     }
-    
+
     // Fetch fresh available balance from Stripe API
     let stripeAvailable = 0;
     try {
@@ -12705,7 +12755,7 @@ async function handleStripeWebhookRequest(req: any, res: any) {
       const userId = String(pi?.metadata?.userId || pi?.metadata?.ledger_user_id || 'system_stripe_client').trim();
 
       console.log(`[STRIPE WEBHOOK] PaymentIntent succeeded: ${piId} ($${amountUsd} ${currency}) for user ${userId}`);
-      
+
       // Update transaction status if exists
       if (piId) {
         const txRows = db.execute('SELECT * FROM transactions WHERE hash = ? OR id = ?', [piId, piId]) as any[];
@@ -14059,7 +14109,7 @@ async function startServer() {
       // 1. COINBASE BALANCES & CRYPTO HOLDINGS
       const PRICES: Record<string, number> = { BTC: 66000, ETH: 1919, SOL: 77.29, BNB: 310, USDC: 1, USDT: 1, USDF: 1, LINK: 8.63, PEPE: 0.0000247, SHIB: 0.0000085, POL: 0.37, HYPE: 12.5, LEO: 5.5, MXNT: 0.052, LIF3: 0.0015, XAUT: 2400 };
       const userWallets = db.execute('SELECT * FROM wallets WHERE user_id = ?', [userId]) as any[];
-      
+
       let coinbaseCryptoUsd = 0;
       let coinbaseUsdWallet = 0;
       const cryptoHoldings: any[] = [];
@@ -14178,7 +14228,7 @@ async function startServer() {
 
       // Generate structured cross-referenced ledger records
       const crossReferencedTransactions: any[] = [];
-      
+
       // Known baseline cross-reference institutional records
       const defaultBankFeeds = [
         {
@@ -14286,7 +14336,7 @@ async function startServer() {
         const providerName = tx.type?.includes('WISE') ? 'Wise' : tx.type?.includes('STRIPE') ? 'Stripe' : tx.type?.includes('PLAID') ? 'Plaid' : 'Coinbase';
         const isCompleted = tx.status === 'completed' || tx.status === 'RECONCILED' || tx.status === 'success';
         const isPending = tx.status === 'pending' || tx.status === 'processing';
-        
+
         crossReferencedTransactions.push({
           id: `xref_db_${tx.id || idx}`,
           date: new Date(tx.timestamp || Date.now()).toISOString(),
@@ -14817,7 +14867,7 @@ async function startServer() {
           ? path.join(process.cwd(), 'sovereigns-banking-hub', 'backend', 'venv', 'Scripts', 'python.exe')
           : path.join(process.cwd(), 'sovereigns-banking-hub', 'backend', 'venv', 'bin', 'python');
         const scriptPath = path.join(process.cwd(), 'sovereigns-banking-hub', 'backend', 'app.py');
-        
+
         if (fs.existsSync(venvPython) && fs.existsSync(scriptPath)) {
           console.log(`[Interbank] Launching Python FastAPI sidecar from venv: ${venvPython}`);
           const child = spawn(venvPython, [scriptPath], { stdio: 'inherit' });

@@ -16,7 +16,7 @@ export interface AlertNotificationOptions {
 
 export async function sendSovereignAlert(options: AlertNotificationOptions): Promise<{ success: boolean; channel: string; error?: string }> {
   const recipient = options.recipientEmail || process.env.ALERT_RECIPIENT_EMAIL || process.env.OWNER_EMAIL || 'mlaframboisemm@gmail.com';
-  const senderEmail = process.env.SMTP_FROM || 'alerts@paydirect.sovereign';
+  const senderEmail = (process.env.RESEND_FROM_EMAIL || process.env.ALERT_FROM_EMAIL || process.env.SMTP_FROM || '').trim();
   const severityTag = `[${options.severity || 'INFO'}]`;
   const fullSubject = `${severityTag} PayDirect Sovereign Gateway Alert: ${options.subject}`;
   const htmlContent = `
@@ -29,7 +29,36 @@ export async function sendSovereignAlert(options: AlertNotificationOptions): Pro
     </div>
   `;
 
-  // 1. Try MailerSend API if configured
+  // 1. Try Resend if configured. The API key remains server-side and is never returned to callers.
+  const resendApiKey = process.env.RESEND_API_KEY?.trim();
+  if (resendApiKey && senderEmail.includes('@')) {
+    try {
+      const response = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${resendApiKey}`,
+          'Content-Type': 'application/json',
+          'Idempotency-Key': `unified-alert-${crypto.randomUUID()}`,
+        },
+        body: JSON.stringify({
+          from: senderEmail,
+          to: [recipient],
+          subject: fullSubject,
+          text: options.message,
+          html: htmlContent,
+        }),
+      });
+      const payload = await response.json().catch(() => ({})) as { id?: string };
+      if (response.ok && payload.id) {
+        return { success: true, channel: 'resend' };
+      }
+      console.warn('[EmailAlerts] Resend declined alert delivery:', response.status);
+    } catch (err: any) {
+      console.warn('[EmailAlerts] Resend alert delivery failed, falling back to configured alternatives:', err?.message || err);
+    }
+  }
+
+  // 2. Try MailerSend API if configured
   const mailerSendKey = process.env.MAILERSEND_API_KEY;
   if (mailerSendKey) {
     try {
@@ -50,7 +79,7 @@ export async function sendSovereignAlert(options: AlertNotificationOptions): Pro
     }
   }
 
-  // 2. Try Nodemailer SMTP if configured
+  // 3. Try Nodemailer SMTP if configured
   const smtpHost = process.env.SMTP_HOST;
   const smtpPort = parseInt(process.env.SMTP_PORT || '587', 10);
   const smtpUser = process.env.SMTP_USER;
@@ -80,6 +109,6 @@ export async function sendSovereignAlert(options: AlertNotificationOptions): Pro
     }
   }
 
-  // 3. Strict live-only error reporting when no external provider credentials are configured
-  return { success: false, channel: 'unconfigured', error: 'EMAIL_PROVIDER_NOT_CONFIGURED: Set MAILERSEND_API_KEY or SMTP credentials to dispatch live alerts.' };
+  // 4. Strict live-only error reporting when no external provider credentials are configured
+  return { success: false, channel: 'unconfigured', error: 'EMAIL_PROVIDER_NOT_CONFIGURED: Configure RESEND_API_KEY with RESEND_FROM_EMAIL, MAILERSEND_API_KEY, or SMTP credentials to dispatch live alerts.' };
 }

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  ShieldCheck, Lock, Mail, User, Landmark, Sparkles, RefreshCw, 
-  ArrowRight, ShieldAlert, Check, HelpCircle, Eye, EyeOff 
+import {
+  ShieldCheck, Lock, Mail, User, Landmark, Sparkles, RefreshCw,
+  ArrowRight, ShieldAlert, Check, HelpCircle, Eye, EyeOff
 } from 'lucide-react';
 
 interface AuthScreenProps {
@@ -55,7 +55,7 @@ export default function AuthScreen({
   const [showPassword, setShowPassword] = useState(false);
   const [region, setRegion] = useState<'US' | 'CA'>('US');
   const [agreedToTerms, setAgreedToTerms] = useState(false);
-  
+
   // Loading state
   const [isLoading, setIsLoading] = useState(false);
   const [loadingStep, setLoadingStep] = useState('');
@@ -75,7 +75,7 @@ export default function AuthScreen({
         showToast(result.message || result.error || 'Google Sign-In verification failed.', 'error');
         return;
       }
-      
+
       // Save session credentials
       if (result.token) {
         sessionStorage.setItem('cb_auth_jwt_token', result.token);
@@ -83,7 +83,7 @@ export default function AuthScreen({
         localStorage.setItem('cb_auth_authenticated', 'true');
         localStorage.removeItem('cb_explicit_logout');
       }
-      
+
       onLoginSuccess({
         name: result.user.name,
         email: result.user.email,
@@ -172,7 +172,8 @@ export default function AuthScreen({
             return;
           }
           setResetRequested(true);
-          showToast('If that account exists, a reset link was sent. Enter the token from the link below.', 'info');
+                    showToast('If that account exists, check that inbox for a one-time password-reset link. The link opens the reset form automatically.', 'info');
+
         } catch (err: any) {
           showToast(err?.message || 'Password reset request failed.', 'error');
         } finally {
@@ -311,14 +312,14 @@ export default function AuthScreen({
 
   return (
     <div className="min-h-screen bg-[#F5F8FF] flex flex-col justify-center items-center px-4 py-12 relative overflow-hidden font-sans">
-      
+
       {/* Visual background details */}
       <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-blue-400/10 rounded-full blur-3xl pointer-events-none" />
       <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-indigo-400/10 rounded-full blur-3xl pointer-events-none" />
 
       {/* Auth Box Container */}
       <div className="w-full max-w-md bg-white rounded-3xl border border-gray-100 shadow-2xl p-8 z-10 relative">
-        
+
         {/* Coinbase Brand Mark */}
         <div className="flex flex-col items-center text-center space-y-2.5 mb-8">
           <div className="w-12 h-12 bg-[#0052FF] rounded-full flex items-center justify-center text-white shadow-lg shadow-blue-500/20">
@@ -335,8 +336,8 @@ export default function AuthScreen({
           <p className="text-xs text-gray-500 font-medium max-w-xs">
             {isResetPassword
               ? 'Reset your secure password and clear any active login lockout restrictions'
-              : isSignUp 
-                ? 'Create your ultra-secure Coinbase financial vault and isolate your portfolio assets' 
+              : isSignUp
+                ? 'Create your ultra-secure Coinbase financial vault and isolate your portfolio assets'
                 : 'Sign in to access your on-chain assets, developer connect credentials, and bank pipelines'}
           </p>
         </div>
@@ -474,8 +475,8 @@ export default function AuthScreen({
                     type="button"
                     onClick={() => setRegion('US')}
                     className={`py-2 px-3.5 border rounded-xl text-xs font-bold transition-all flex items-center justify-center space-x-2 cursor-pointer ${
-                      region === 'US' 
-                        ? 'bg-blue-50/50 border-[#0052FF] text-[#0052FF] ring-1 ring-[#0052FF]/20' 
+                      region === 'US'
+                        ? 'bg-blue-50/50 border-[#0052FF] text-[#0052FF] ring-1 ring-[#0052FF]/20'
                         : 'bg-transparent border-gray-200 hover:bg-gray-50 text-gray-600'
                     }`}
                   >
@@ -486,8 +487,8 @@ export default function AuthScreen({
                     type="button"
                     onClick={() => setRegion('CA')}
                     className={`py-2 px-3.5 border rounded-xl text-xs font-bold transition-all flex items-center justify-center space-x-2 cursor-pointer ${
-                      region === 'CA' 
-                        ? 'bg-blue-50/50 border-[#0052FF] text-[#0052FF] ring-1 ring-[#0052FF]/20' 
+                      region === 'CA'
+                        ? 'bg-blue-50/50 border-[#0052FF] text-[#0052FF] ring-1 ring-[#0052FF]/20'
                         : 'bg-transparent border-gray-200 hover:bg-gray-50 text-gray-600'
                     }`}
                   >
