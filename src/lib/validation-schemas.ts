@@ -27,13 +27,13 @@ export const AuthRegisterSchema: ValidationSchema = {
   },
   firstName: {
     type: 'string',
-    required: true,
+    required: false,
     min: 2,
     max: 100
   },
   lastName: {
     type: 'string',
-    required: true,
+    required: false,
     min: 2,
     max: 100
   },

@@ -4007,9 +4007,15 @@ function revokeUserSessions(userId: string) {
   }
 }
 
+function hasConfiguredMailProvider(): boolean {
+  const resendConfigured = Boolean(process.env.RESEND_API_KEY && (process.env.RESEND_FROM_EMAIL || process.env.ALERT_FROM_EMAIL));
+  const smtpConfigured = Boolean(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
+  const mailerConfigured = Boolean(mailersendApiKey && mailerSend);
+  return resendConfigured || smtpConfigured || mailerConfigured;
+}
+
 function shouldBypassEmailVerification(): boolean {
-  const hasMailProvider = Boolean(process.env.RESEND_API_KEY || process.env.MAILERSEND_API_KEY || process.env.SMTP_HOST);
-  return process.env.NODE_ENV !== 'production' || process.env.BYPASS_EMAIL_VERIFICATION === 'true' || !hasMailProvider;
+  return process.env.NODE_ENV !== 'production' || process.env.BYPASS_EMAIL_VERIFICATION === 'true' || !hasConfiguredMailProvider();
 }
 
 async function lockAccountToIdentity(user: any, source: 'register' | 'login') {
@@ -6128,7 +6134,7 @@ app.post('/api/auth/register', validateRequest(ValidationSchemas.AuthRegisterSch
       success: true,
       requiresEmailVerification: !bypassVerification,
       message: bypassVerification
-        ? 'Account created. Your email is verified locally and you can sign in immediately.'
+        ? 'Account created. You can now sign in with your email and the password you chose.'
         : 'Account created. Check your email to verify before signing in.'
     });
   } catch (error: any) {

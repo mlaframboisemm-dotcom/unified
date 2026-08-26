@@ -217,10 +217,6 @@ export default function AuthScreen({
     }
 
     if (isSignUp) {
-      if (!firstName.trim() || !lastName.trim()) {
-        showToast('Please enter your legal first and last name.', 'error');
-        return;
-      }
       if (!agreedToTerms) {
         showToast('Please accept the agreement to continue.', 'error');
         return;
@@ -279,7 +275,7 @@ export default function AuthScreen({
       }
 
       if (isSignUp) {
-        showToast('Account created. Your identity is now protected in live production mode and your email was notified.', 'success');
+        showToast(result?.message || 'Account created. You can now sign in with your email and password.', 'success');
         setIsSignUp(false);
         setPassword('');
         setMfaCode('');
@@ -337,7 +333,7 @@ export default function AuthScreen({
             {isResetPassword
               ? 'Reset your secure password and clear any active login lockout restrictions'
               : isSignUp
-                ? 'Create your ultra-secure Coinbase financial vault and isolate your portfolio assets'
+                ? 'Create an account with your email and a password you choose, then return to normal sign-in'
                 : 'Sign in to access your on-chain assets, developer connect credentials, and bank pipelines'}
           </p>
         </div>
@@ -361,8 +357,7 @@ export default function AuthScreen({
                     <User className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
                     <input
                       type="text"
-                      required
-                      placeholder="Jane"
+                      placeholder="First name (optional)"
                       value={firstName}
                       onChange={(e) => setFirstName(e.target.value)}
                       className="w-full bg-gray-50 hover:bg-gray-100/50 focus:bg-white border border-gray-200 focus:border-[#0052FF] text-xs sm:text-sm pl-9 pr-3 py-2 rounded-xl focus:outline-none focus:ring-1 focus:ring-[#0052FF] transition-all"
@@ -370,11 +365,10 @@ export default function AuthScreen({
                   </div>
                 </div>
                 <div>
-                  <label className="text-[10px] font-bold text-gray-400 uppercase block mb-1">Last Legal Name</label>
+                  <label className="text-[10px] font-bold text-gray-400 uppercase block mb-1">Last Name (Optional)</label>
                   <input
                     type="text"
-                    required
-                    placeholder="Doe"
+                    placeholder="Last name (optional)"
                     value={lastName}
                     onChange={(e) => setLastName(e.target.value)}
                     className="w-full bg-gray-50 hover:bg-gray-100/50 focus:bg-white border border-gray-200 focus:border-[#0052FF] text-xs sm:text-sm px-3 py-2 rounded-xl focus:outline-none focus:ring-1 focus:ring-[#0052FF] transition-all"
@@ -393,6 +387,7 @@ export default function AuthScreen({
                   placeholder="name@domain.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
+                  autoComplete="email"
                   className="w-full bg-gray-50 hover:bg-gray-100/50 focus:bg-white border border-gray-200 focus:border-[#0052FF] text-xs sm:text-sm pl-9 pr-3 py-2 rounded-xl focus:outline-none focus:ring-1 focus:ring-[#0052FF] transition-all font-semibold"
                 />
               </div>
@@ -424,6 +419,7 @@ export default function AuthScreen({
                   placeholder="••••••••••••"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
+                  autoComplete={isSignUp || isResetPassword ? 'new-password' : 'current-password'}
                   className="w-full bg-gray-50 hover:bg-gray-100/50 focus:bg-white border border-gray-200 focus:border-[#0052FF] text-xs sm:text-sm pl-9 pr-10 py-2 rounded-xl focus:outline-none focus:ring-1 focus:ring-[#0052FF] transition-all font-mono"
                 />
                 <button
@@ -521,7 +517,7 @@ export default function AuthScreen({
               disabled={isSignUp && !agreedToTerms}
               className="w-full py-3.5 bg-[#0052FF] hover:bg-blue-700 disabled:bg-gray-300 text-white font-bold text-xs sm:text-sm rounded-xl transition-all shadow-md shadow-blue-500/10 cursor-pointer flex items-center justify-center space-x-1"
             >
-              <span>{isResetPassword ? (resetRequested ? 'Reset Password & Unlock Account' : 'Email Reset Link') : isSignUp ? 'Verify & Create Coinbase Vault' : 'Secure Account Sign In'}</span>
+              <span>{isResetPassword ? (resetRequested ? 'Reset Password & Unlock Account' : 'Email Reset Link') : isSignUp ? 'Create Account & Save Password' : 'Secure Account Sign In'}</span>
               <ArrowRight className="h-4 w-4" />
             </button>
 
@@ -559,7 +555,7 @@ export default function AuthScreen({
                 }}
                 className="text-xs font-bold text-[#0052FF] hover:underline cursor-pointer"
               >
-                {isSignUp ? 'Already have a secure vault? Sign In' : 'Need an isolated financial account? Sign Up'}
+                {isSignUp ? 'Account created already? Return to Sign In' : 'New here or recovering access? Create Account'}
               </button>
 
               {!isSignUp && (
