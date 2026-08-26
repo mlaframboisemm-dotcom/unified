@@ -113,8 +113,8 @@ interface WiseCardDashboardProps {
 }
 
 export default function WiseCardDashboard({
-  userName = 'Marcel laframboise',
-  userEmail = 'mlaframboisemm@gmail.com',
+  userName = '',
+  userEmail = '',
   onRefreshGlobalState,
   showToast
 }: WiseCardDashboardProps) {
@@ -165,22 +165,22 @@ export default function WiseCardDashboard({
 
   // --- POS Real-Time Authorization Form State ---
   const [posForm, setPosForm] = useState({
-    merchant: 'Tim Hortons #3019',
-    amount: '18.50',
+    merchant: '',
+    amount: '',
     currency: 'CAD',
-    category: 'Food & Drink',
-    location: 'Toronto, ON',
+    category: '',
+    location: '',
     isTap: true
   });
 
   // --- Interac e-Transfer Payment Request Form State ---
   const [interacForm, setInteracForm] = useState({
-    clientName: 'Acme Corporation Canada',
-    clientEmail: 'billing@acmecorp.ca',
-    amountCad: '1250.00',
-    invoiceRef: 'INV-2026-089',
-    note: 'Professional consulting & technical settlement services',
-    depositEmail: 'marcel@sovereign.local'
+    clientName: '',
+    clientEmail: '',
+    amountCad: '',
+    invoiceRef: '',
+    note: '',
+    depositEmail: userEmail
   });
   const [showInteracPreview, setShowInteracPreview] = useState(false);
   const [copiedInteracTemplate, setCopiedInteracTemplate] = useState(false);
@@ -203,15 +203,10 @@ Payment Instructions via Interac e-Transfer:
    (Wise CAD Primary Deposit Account / Auto-Deposit Enabled)
 4. Enter invoice reference "${interacForm.invoiceRef || 'N/A'}" in the transfer message box.
 
-Alternative Direct Bank Deposit Details:
-• Institution / Transit: 00011
-• Account Number: 1504627763 (Wise CAD Clearing)
-
 Thank you for your prompt payment!
 
 Best regards,
-Marcel Laframboise
-Sovereigns Banking Hub / Wise Business`;
+${userName || 'Account holder'}`;
 
     return { subject, body };
   };
