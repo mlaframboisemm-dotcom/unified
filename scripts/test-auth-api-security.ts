@@ -7,6 +7,7 @@ import { generateTotpCode } from '../src/lib/auth-security.ts';
 const repoRoot = process.cwd();
 const dbPath = path.join(repoRoot, 'src', 'db', 'database.json');
 const lockPath = path.join(repoRoot, 'src', 'db', 'bootstrap.lock');
+const serverPath = path.join(repoRoot, 'server.ts');
 async function getAvailablePort(): Promise<number> {
   return await new Promise<number>((resolve, reject) => {
     const server = net.createServer();
@@ -75,6 +76,17 @@ async function waitForServerReady(proc: ReturnType<typeof spawn>): Promise<void>
 
 async function main() {
   console.log('Running auth API security integration tests...');
+
+  const serverSource = fs.readFileSync(serverPath, 'utf-8');
+  assert(serverSource.includes("x-forwarded-host"), 'Expected proxy-aware host handling for session origin checks.');
+  assert(
+    /app\.get\('\/api\/coinbase\/config',\s*requireAuth,\s*async/.test(serverSource),
+    'Expected the read-only Coinbase configuration endpoint to require a session but not MFA.'
+  );
+  assert(
+    !/app\.get\('\/api\/coinbase\/config',\s*requireAuth,\s*requireMfa/.test(serverSource),
+    'Read-only Coinbase configuration must not be MFA-blocked during session initialization.'
+  );
 
   const originalDb = readFileIfExists(dbPath);
   const originalLock = readFileIfExists(lockPath);

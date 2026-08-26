@@ -5479,14 +5479,32 @@ function getAppUrlOrigin(): string {
   }
 }
 
+function getRequestOrigin(req: any): string {
+  const forwardedProto = String(req.headers?.['x-forwarded-proto'] || '').split(',')[0].trim();
+  const forwardedHost = String(req.headers?.['x-forwarded-host'] || req.headers?.host || '').split(',')[0].trim();
+  const protocol = forwardedProto || (req.secure ? 'https' : 'http');
+  if (!forwardedHost) return '';
+  try {
+    return new URL(`${protocol}://${forwardedHost}`).origin;
+  } catch {
+    return '';
+  }
+}
+
 function isSameOriginRequest(req: any): boolean {
+  const allowedOrigins = new Set([getAppUrlOrigin(), getRequestOrigin(req)].filter(Boolean));
+  if (allowedOrigins.size === 0) return false;
   const originHeader = String(req.headers?.origin || '').trim();
   if (originHeader) {
-    return originHeader === getAppUrlOrigin();
+    return allowedOrigins.has(originHeader);
   }
   const refererHeader = String(req.headers?.referer || req.headers?.referrer || '').trim();
   if (refererHeader) {
-    return refererHeader.startsWith(getAppUrlOrigin());
+    try {
+      return allowedOrigins.has(new URL(refererHeader).origin);
+    } catch {
+      return false;
+    }
   }
   return false;
 }
@@ -6967,7 +6985,7 @@ async function recordLedgerEntry(entryPayload: { type: string; status: string; p
   }
 }
 
-app.get('/api/coinbase/config', requireAuth, requireMfa, async (_req: any, res) => {
+app.get('/api/coinbase/config', requireAuth, async (_req: any, res) => {
   const readiness = await buildRuntimeReadinessReport(process.env);
   const creds = parseCoinbaseCredentials();
   res.json({
