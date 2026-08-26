@@ -5510,7 +5510,9 @@ function isSameOriginRequest(req: any): boolean {
       return false;
     }
   }
-  return false;
+  // Browser-controlled Fetch Metadata remains available for same-origin requests
+  // that omit Origin and Referer headers. Never accept same-site or cross-site here.
+  return String(req.headers?.['sec-fetch-site'] || '').trim().toLowerCase() === 'same-origin';
 }
 
 function getRequestToken(req: any): string | null {

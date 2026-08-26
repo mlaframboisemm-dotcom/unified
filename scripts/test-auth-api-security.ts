@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import crypto from 'crypto';
 import { spawn } from 'child_process';
 import net from 'net';
 import { generateTotpCode } from '../src/lib/auth-security.ts';
@@ -94,6 +95,11 @@ async function main() {
 
   const originalDb = readFileIfExists(dbPath);
   const originalLock = readFileIfExists(lockPath);
+  const testDbDirectory = fs.mkdtempSync(path.join(repoRoot, '.auth-api-security-'));
+  const isolatedDbPath = path.join(testDbDirectory, 'database.json');
+  const testPassword = 'CorrectHorseBatteryStaple!42';
+  const testSalt = crypto.randomBytes(16).toString('hex');
+  const testPasswordHash = crypto.pbkdf2Sync(testPassword, testSalt, 100000, 64, 'sha512').toString('hex');
 
   let serverProc: ReturnType<typeof spawn> | null = null;
 
@@ -108,6 +114,31 @@ async function main() {
     if (fs.existsSync(lockPath)) {
       fs.unlinkSync(lockPath);
     }
+    fs.writeFileSync(
+      isolatedDbPath,
+      JSON.stringify({
+        users: [{
+          id: 'user_auth_api_test',
+          name: 'Auth API Test User',
+          email: 'admin@secure.local',
+          passwordHash: testPasswordHash,
+          salt: testSalt,
+          twoFactorSecret: '',
+          twoFactorEnabled: false,
+          kycLevel: 2,
+          citizenship: 'US',
+          identityLocked: true,
+          productionMode: 'live',
+          blockchainLinked: true,
+          lockedToEmail: 'admin@secure.local',
+          lockedAt: new Date().toISOString()
+        }],
+        wallets: [],
+        transactions: [],
+        auditLogs: []
+      }, null, 2),
+      'utf-8'
+    );
 
     serverProc = spawn('node', ['dist/server.cjs'], {
       cwd: repoRoot,
@@ -115,16 +146,15 @@ async function main() {
       stdio: ['ignore', 'pipe', 'pipe'],
       env: {
         ...process.env,
-        NODE_ENV: 'test',
+        NODE_ENV: 'production',
         PORT: String(testPort),
+        APP_URL: `https://unified-wz8i.onrender.com`,
+        SOVEREIGN_DB_FILE_PATH: isolatedDbPath,
         JWT_SECRET: '12345678901234567890123456789012',
         SOVEREIGN_ENCRYPTION_KEY: 'abcdefghijklmnopqrstuvwxyzABCDEF',
-        BOOTSTRAP_ADMIN_EMAIL: 'admin@secure.local',
-        BOOTSTRAP_ADMIN_PASSWORD: 'CorrectHorseBatteryStaple!42',
-        BOOTSTRAP_ADMIN_TOTP_SECRET: 'JBSWY3DPEHPK3PXP',
-        BOOTSTRAP_ADMIN_NAME: 'Secure Admin',
-        BOOTSTRAP_ADMIN_CITIZENSHIP: 'US',
-        BOOTSTRAP_ADMIN_KYC_LEVEL: '2',
+        BOOTSTRAP_ADMIN_EMAIL: '',
+        BOOTSTRAP_ADMIN_PASSWORD: '',
+        BOOTSTRAP_ADMIN_TOTP_SECRET: '',
         COINBASE_API_KEY_ID: 'unit-test-key',
         COINBASE_API_SECRET_RAW: 'not-a-valid-pem'
       }
@@ -133,12 +163,15 @@ async function main() {
     await waitForServerReady(serverProc);
 
     const base = `http://localhost:${testPort}`;
-    const mfa = generateTotpCode('JBSWY3DPEHPK3PXP');
-
+    const sameOriginRequestHeaders = {
+      'x-forwarded-proto': 'https',
+      'x-forwarded-host': 'unified-wz8i.onrender.com',
+      'sec-fetch-site': 'same-origin'
+    };
     const loginRes = await fetch(`${base}/api/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: 'admin@secure.local', password: 'CorrectHorseBatteryStaple!42', mfaCode: mfa })
+      body: JSON.stringify({ email: 'admin@secure.local', password: testPassword })
     });
     const loginBody = await loginRes.json();
     const cookie = parseCookie(loginRes.headers.get('set-cookie'));
@@ -152,13 +185,13 @@ async function main() {
 
     const logoutRes = await fetch(`${base}/api/auth/logout`, {
       method: 'POST',
-      headers: { cookie }
+      headers: { cookie, ...sameOriginRequestHeaders }
     });
     const logoutBody = await logoutRes.json();
     assert(logoutRes.status === 200 && logoutBody?.success === true, 'Expected successful logout.');
 
-    const protectedAfterLogoutRes = await fetch(`${base}/api/messaging/emails`, {
-      headers: { cookie }
+    const protectedAfterLogoutRes = await fetch(`${base}/api/coinbase/config`, {
+      headers: { cookie, ...sameOriginRequestHeaders }
     });
     const protectedAfterLogoutBody = await protectedAfterLogoutRes.json();
     assert(protectedAfterLogoutRes.status === 401, `Expected 401 after logout, got ${protectedAfterLogoutRes.status}`);
@@ -170,7 +203,7 @@ async function main() {
     const loginAgainRes = await fetch(`${base}/api/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: 'admin@secure.local', password: 'CorrectHorseBatteryStaple!42', mfaCode: generateTotpCode('JBSWY3DPEHPK3PXP') })
+      body: JSON.stringify({ email: 'admin@secure.local', password: testPassword })
     });
     const loginAgainBody = await loginAgainRes.json();
     const cookie2 = parseCookie(loginAgainRes.headers.get('set-cookie'));
@@ -179,10 +212,22 @@ async function main() {
     const bearerPriorityRes = await fetch(`${base}/api/coinbase/config`, {
       headers: {
         cookie: 'cb_session=stale-session-token',
-        Authorization: `Bearer ${loginAgainBody.token}`
+        Authorization: `Bearer ${loginAgainBody.token}`,
+        ...sameOriginRequestHeaders
       }
     });
     assert(bearerPriorityRes.status === 200, `Expected valid Bearer token to take precedence over stale cookie, got ${bearerPriorityRes.status}`);
+
+    const crossSiteBearerRes = await fetch(`${base}/api/coinbase/config`, {
+      headers: {
+        Authorization: `Bearer ${loginAgainBody.token}`,
+        origin: 'https://attacker.example',
+        'x-forwarded-proto': 'https',
+        'x-forwarded-host': 'unified-wz8i.onrender.com',
+        'sec-fetch-site': 'cross-site'
+      }
+    });
+    assert(crossSiteBearerRes.status === 401, `Expected cross-site Bearer request to remain rejected, got ${crossSiteBearerRes.status}`);
 
     const idempotencyKey = `idem-${Date.now()}-security-test`;
     const tradePayload = {
@@ -197,7 +242,8 @@ async function main() {
       headers: {
         'Content-Type': 'application/json',
         cookie: cookie2,
-        'x-idempotency-key': idempotencyKey
+        'x-idempotency-key': idempotencyKey,
+        ...sameOriginRequestHeaders
       },
       body: JSON.stringify(tradePayload)
     });
@@ -208,7 +254,8 @@ async function main() {
       headers: {
         'Content-Type': 'application/json',
         cookie: cookie2,
-        'x-idempotency-key': idempotencyKey
+        'x-idempotency-key': idempotencyKey,
+        ...sameOriginRequestHeaders
       },
       body: JSON.stringify(tradePayload)
     });
@@ -226,6 +273,7 @@ async function main() {
 
     writeFileOrDelete(dbPath, originalDb);
     writeFileOrDelete(lockPath, originalLock);
+    fs.rmSync(testDbDirectory, { recursive: true, force: true });
   }
 }
 
