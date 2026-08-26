@@ -20,14 +20,8 @@ export async function getFirebaseAuthHeaders(): Promise<Record<string, string>> 
       const token = await auth.currentUser.getIdToken();
       headers['Authorization'] = `Bearer ${token}`;
       headers['x-firebase-uid'] = auth.currentUser.uid;
-    } else if (!sessionToken) {
-      headers['Authorization'] = 'Bearer sovereign-firebase-auth-session';
     }
-  } catch {
-    if (!sessionToken) {
-      headers['Authorization'] = 'Bearer sovereign-firebase-auth-session';
-    }
-  }
+  } catch {}
   return headers;
 }
 
@@ -42,36 +36,8 @@ export interface WiseWalletAccount {
 }
 
 export function useWiseWallets() {
-  const [wiseWallets, setWiseWallets] = useState<WiseWalletAccount[]>([
-    {
-      id: '176576596814061',
-      name: 'Wise Multi-Currency USD Wallet',
-      currency: 'USD',
-      balance: 2478350.00,
-      accountNumber: '176576596814061',
-      type: 'Wise Multi-Currency',
-      status: 'synced'
-    },
-    {
-      id: '176576596814062',
-      name: 'Wise CAD Primary Account',
-      currency: 'CAD',
-      balance: 185000.00,
-      accountNumber: '176576596814062',
-      type: 'Wise Checking',
-      status: 'synced'
-    },
-    {
-      id: 'SOV_CASH_VAULT_01',
-      name: 'Sovereign Cash Reserve',
-      currency: 'USD',
-      balance: 500000.00,
-      accountNumber: 'SOV_CASH_01',
-      type: 'Sovereign Hub Vault',
-      status: 'active'
-    }
-  ]);
-  const [activeWiseWalletId, setActiveWiseWalletId] = useState<string>('176576596814061');
+  const [wiseWallets, setWiseWallets] = useState<WiseWalletAccount[]>([]);
+  const [activeWiseWalletId, setActiveWiseWalletId] = useState<string>('');
   const [isLoadingWallets, setIsLoadingWallets] = useState<boolean>(true);
 
   const fetchWallets = async () => {
@@ -82,44 +48,30 @@ export function useWiseWallets() {
       if (res.ok) {
         const data = await res.json();
         if (data.success) {
-          const liveUsd = data.usdBalance ?? data.totalUSD ?? 2478350.00;
-          const liveCad = data.cadBalance ?? 185000.00;
-
-          const isLiveApi = data.source === 'wise_live_api' || data.source === 'wise_live';
+          const liveUsd = Number(data.usdBalance ?? data.totalUSD ?? 0);
+          const liveCad = Number(data.cadBalance ?? 0);
           if (Array.isArray(data.balances) && data.balances.length > 0) {
             const fetched: WiseWalletAccount[] = data.balances.map((b: any, idx: number) => {
               const cur = (b.currency || 'USD').toUpperCase();
-              let bal = Number(b.amount ?? b.balance ?? 0);
-              if (!isLiveApi) {
-                if (cur === 'USD' && bal === 0) bal = liveUsd;
-                if (cur === 'CAD' && bal === 0) bal = liveCad;
-              }
+              const rawBalance = b.amount ?? b.balance;
+              const bal = Number(rawBalance ?? (cur === 'USD' ? liveUsd : cur === 'CAD' ? liveCad : 0));
               return {
                 id: String(b.balanceId || b.id || b.accountNumber || `wise_acc_${idx}`),
                 name: `Wise ${cur} Wallet`,
                 currency: cur,
-                balance: bal,
-                accountNumber: String(b.accountNumber || b.profileId || '176576596814061'),
+                balance: Number.isFinite(bal) ? bal : 0,
+                accountNumber: String(b.accountNumber || b.profileId || ''),
                 type: 'Wise Direct Sync',
                 status: 'synced'
               };
             });
-            // Ensure 176576596814061 is explicitly listed if not present
-            if (!fetched.some(w => w.accountNumber === '176576596814061' || w.id === '176576596814061')) {
-              fetched.unshift({
-                id: '176576596814061',
-                name: 'Wise USD Primary Wallet (Acc 176576596814061)',
-                currency: 'USD',
-                balance: liveUsd,
-                accountNumber: '176576596814061',
-                type: 'Wise Multi-Currency',
-                status: 'synced'
-              });
-            }
             setWiseWallets(fetched);
             if (fetched.length > 0) {
               setActiveWiseWalletId(fetched[0].id);
             }
+          } else {
+            setWiseWallets([]);
+            setActiveWiseWalletId('');
           }
         }
       }
@@ -155,10 +107,10 @@ export interface WiseLedgerCheckResult {
 
 export function useWiseLedgerEnforcer() {
   const [ledgerStatus, setLedgerStatus] = useState<WiseLedgerCheckResult>({
-    isVerified: true,
-    reconciledUsdBalance: 2478350.00,
-    lastReconciledAt: new Date().toISOString(),
-    sourceAccount: '176576596814061'
+    isVerified: false,
+    reconciledUsdBalance: 0,
+    lastReconciledAt: '',
+    sourceAccount: ''
   });
   const [isReconciling, setIsReconciling] = useState<boolean>(false);
 
@@ -170,13 +122,29 @@ export function useWiseLedgerEnforcer() {
     try {
       const authHeaders = await getFirebaseAuthHeaders();
       const res = await fetch('/api/wise/balances', { headers: authHeaders, credentials: 'include' });
-      let liveUsd = ledgerStatus.reconciledUsdBalance;
+      let liveUsd = 0;
+      let hasAuthoritativeBalance = false;
 
       if (res.ok) {
         const data = await res.json();
         if (data.success && typeof data.totalUSD === 'number') {
           liveUsd = data.totalUSD;
+          hasAuthoritativeBalance = true;
         }
+      }
+
+      if (!hasAuthoritativeBalance) {
+        setLedgerStatus({
+          isVerified: false,
+          reconciledUsdBalance: 0,
+          lastReconciledAt: new Date().toISOString(),
+          sourceAccount: ''
+        });
+        return {
+          allowed: false,
+          liveBalance: 0,
+          resultMessage: 'WISE LEDGER UNAVAILABLE: a verified balance could not be retrieved.'
+        };
       }
 
       const isSufficient = liveUsd >= requiredAmount;
@@ -184,7 +152,7 @@ export function useWiseLedgerEnforcer() {
         isVerified: isSufficient,
         reconciledUsdBalance: liveUsd,
         lastReconciledAt: new Date().toISOString(),
-        sourceAccount: '176576596814061'
+        sourceAccount: ''
       });
 
       if (isSufficient) {
@@ -203,9 +171,9 @@ export function useWiseLedgerEnforcer() {
     } catch (err: any) {
       console.warn('[Wise Ledger Enforcer] Pre-flight check warning:', err);
       return {
-        allowed: true,
-        liveBalance: ledgerStatus.reconciledUsdBalance,
-        resultMessage: `WISE LEDGER VERIFIED: Pre-flight check passed ($${ledgerStatus.reconciledUsdBalance.toFixed(2)} USD).`
+        allowed: false,
+        liveBalance: 0,
+        resultMessage: 'WISE LEDGER UNAVAILABLE: the balance check could not be completed.'
       };
     } finally {
       setIsReconciling(false);
@@ -1907,5 +1875,4 @@ export default function GooglePayAndPassHub({
     </div>
   );
 }
-
 
