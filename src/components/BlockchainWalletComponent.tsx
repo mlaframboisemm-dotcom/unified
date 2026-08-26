@@ -5,6 +5,7 @@ import {
   Check,
   Copy,
   ExternalLink,
+  FileUp,
   Link,
   PlusCircle,
   RefreshCw,
@@ -19,6 +20,7 @@ import {
   SUPPORTED_EVM_NETWORKS,
   type SupportedEvmNetwork
 } from '../lib/web3-wallet';
+import { isInventorySignerMatch, parseEvmInventoryJson, type EvmInventoryToken } from '../lib/evm-inventory';
 
 export interface TokenBalance {
   symbol: string;
@@ -141,6 +143,11 @@ export default function BlockchainWalletComponent({
   const [rpcError, setRpcError] = useState<string | null>(null);
   const [discoverySources, setDiscoverySources] = useState<string[]>([]);
   const [importedTokensByNetwork, setImportedTokensByNetwork] = useState<Record<string, ImportedToken[]>>({});
+  const [inventoryTokensByNetwork, setInventoryTokensByNetwork] = useState<Record<string, EvmInventoryToken[]>>({});
+  const [inventoryOwnerByNetwork, setInventoryOwnerByNetwork] = useState<Record<string, string>>({});
+  const [isImportingInventory, setIsImportingInventory] = useState(false);
+  const [inventoryImportMessage, setInventoryImportMessage] = useState<string | null>(null);
+  const [inventoryImportError, setInventoryImportError] = useState<string | null>(null);
   const [showImportForm, setShowImportForm] = useState(false);
   const [customContractInput, setCustomContractInput] = useState('');
   const [isImportingToken, setIsImportingToken] = useState(false);
@@ -163,6 +170,12 @@ export default function BlockchainWalletComponent({
     () => importedTokensByNetwork[selectedNetwork.id] ?? [],
     [importedTokensByNetwork, selectedNetwork.id]
   );
+  const inventoryTokens = useMemo(
+    () => inventoryTokensByNetwork[selectedNetwork.id] ?? [],
+    [inventoryTokensByNetwork, selectedNetwork.id]
+  );
+  const inventoryOwnerAddress = inventoryOwnerByNetwork[selectedNetwork.id] ?? '';
+  const inventoryMatchesConnectedWallet = isInventorySignerMatch(inventoryOwnerAddress, walletAddress);
   const displayedTokens = useMemo(
     () => (hideZeroBalances ? tokenBalances.filter((token) => BigInt(token.balance) > 0n) : tokenBalances)
       .slice()
@@ -244,9 +257,11 @@ export default function BlockchainWalletComponent({
 
       const activeTokenList = [
         ...(selectedNetwork.chainId === 1 ? KNOWN_ERC20_TOKENS : []),
-        ...importedTokens
+        ...importedTokens,
+        ...(inventoryMatchesConnectedWallet ? inventoryTokens : [])
       ];
-      const directRpcResults = await Promise.allSettled(activeTokenList.map(async (token) => {
+      const deduplicatedTokenList = [...new Map(activeTokenList.map((token) => [token.address.toLowerCase(), token])).values()];
+      const directRpcResults = await Promise.allSettled(deduplicatedTokenList.map(async (token) => {
         const contract = new ethers.Contract(token.address, ERC20_ABI, provider);
         const rawBalance = await contract.balanceOf(normalizedAddress);
         if (rawBalance <= 0n) return null;
@@ -372,7 +387,7 @@ export default function BlockchainWalletComponent({
     } finally {
       setIsRefreshing(false);
     }
-  }, [clearDisplayedState, fetchAuthoritativeUsdPrice, importedTokens, isBrowserWalletConnected, onBalancesChange, selectedNetwork, walletAddress, walletChainId]);
+  }, [clearDisplayedState, fetchAuthoritativeUsdPrice, importedTokens, inventoryMatchesConnectedWallet, inventoryTokens, isBrowserWalletConnected, onBalancesChange, selectedNetwork, walletAddress, walletChainId]);
 
   const handleAccountsChanged = useCallback((accounts: unknown) => {
     const nextAccount = Array.isArray(accounts) && typeof accounts[0] === 'string' && ethers.isAddress(accounts[0])
@@ -717,6 +732,42 @@ export default function BlockchainWalletComponent({
     }
   };
 
+  const handleImportInventoryFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+
+    setInventoryImportError(null);
+    setInventoryImportMessage(null);
+    if (!isBrowserWalletConnected || !ethers.isAddress(walletAddress)) {
+      setInventoryImportError('Connect the matching browser wallet before importing inventory metadata.');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setInventoryImportError('Choose an inventory JSON file smaller than 5 MB.');
+      return;
+    }
+
+    setIsImportingInventory(true);
+    try {
+      const inventory = parseEvmInventoryJson(await file.text());
+      if (inventory.networkId !== selectedNetwork.id || selectedNetwork.chainId !== 1) {
+        throw new Error('Switch the connected wallet to Ethereum Mainnet before importing this inventory.');
+      }
+      if (!isInventorySignerMatch(inventory.ownerAddress, walletAddress)) {
+        throw new Error('This inventory belongs to a different public address. It remains watch-only and cannot be added as the connected sender.');
+      }
+
+      setInventoryTokensByNetwork((current) => ({ ...current, [inventory.networkId]: inventory.tokens }));
+      setInventoryOwnerByNetwork((current) => ({ ...current, [inventory.networkId]: inventory.ownerAddress }));
+      setInventoryImportMessage(`Imported ${inventory.tokens.length} token contracts for the connected wallet. Claimed balances were discarded and will be read from chain.`);
+    } catch (error: unknown) {
+      setInventoryImportError(error instanceof Error ? error.message : 'The inventory could not be imported.');
+    } finally {
+      setIsImportingInventory(false);
+    }
+  };
+
   const handleCopyAddress = async () => {
     if (!walletAddress) return;
     try {
@@ -827,7 +878,7 @@ export default function BlockchainWalletComponent({
             <Search className="h-4 w-4 shrink-0 text-blue-400" />
             <div>
               <div className="text-xs font-bold text-slate-200">Browser-wallet ownership boundary</div>
-              <div className="text-[10px] text-slate-400">This application reads the connected public address from your browser wallet. It does not import private keys, balances, transaction records, or account state from another repository.</div>
+              <div className="text-[10px] text-slate-400">This application reads the connected public address from your browser wallet. Local inventory imports retain only address and token-contract metadata; they never import signing material or claimed balances.</div>
             </div>
           </div>
           <button type="button" onClick={handleConnectBrowserWallet} disabled={isConnectingBrowser || isBrowserWalletConnected} className="cursor-pointer rounded-lg bg-blue-600 px-3 py-1.5 text-[11px] font-semibold text-white transition hover:bg-blue-500 disabled:cursor-default disabled:bg-slate-700 disabled:text-slate-400">
@@ -843,6 +894,15 @@ export default function BlockchainWalletComponent({
         )}
         {rpcError && (
           <div className="mt-3 flex items-center gap-2 rounded-xl border border-amber-800/50 bg-amber-950/40 p-2.5 text-xs text-amber-300"><AlertCircle className="h-4 w-4 shrink-0" /><span>{rpcError}</span></div>
+        )}
+        {inventoryImportMessage && (
+          <div className="mt-3 flex items-center gap-2 rounded-xl border border-emerald-800/60 bg-emerald-950/50 p-2.5 text-xs text-emerald-200"><Check className="h-4 w-4 shrink-0" /><span>{inventoryImportMessage}</span></div>
+        )}
+        {inventoryImportError && (
+          <div className="mt-3 flex items-center gap-2 rounded-xl border border-rose-800/60 bg-rose-950/50 p-2.5 text-xs text-rose-200"><AlertCircle className="h-4 w-4 shrink-0" /><span>{inventoryImportError}</span></div>
+        )}
+        {inventoryOwnerAddress && (
+          <div className="mt-3 flex items-center gap-2 rounded-xl border border-blue-800/60 bg-blue-950/50 p-2.5 text-xs text-blue-200"><FileUp className="h-4 w-4 shrink-0" /><span>Local inventory metadata is bound to {inventoryOwnerAddress.slice(0, 10)}…{inventoryOwnerAddress.slice(-8)}. {inventoryMatchesConnectedWallet ? `${inventoryTokens.length} contracts will be reconciled against the connected wallet.` : 'Reconnect that exact wallet address before these contracts can be read or sent.'}</span></div>
         )}
         {nativeTransactionStatus && (
           <div className={`mt-3 rounded-xl border p-3 text-xs ${nativeTransactionStatus.state === 'confirmed' ? 'border-emerald-800/60 bg-emerald-950/50 text-emerald-200' : nativeTransactionStatus.state === 'failed' ? 'border-rose-800/60 bg-rose-950/50 text-rose-200' : 'border-blue-800/60 bg-blue-950/50 text-blue-200'}`}>
@@ -873,6 +933,7 @@ export default function BlockchainWalletComponent({
           <div className="flex items-center gap-2">
             <button type="button" onClick={() => setHideZeroBalances((current) => !current)} className="cursor-pointer rounded-lg border border-slate-700 bg-slate-800 px-2.5 py-1 text-[11px] font-medium text-slate-300 transition hover:bg-slate-700">{hideZeroBalances ? 'Showing Active Only' : 'Hide Zero Balances'}</button>
             <button type="button" onClick={() => setShowImportForm((current) => !current)} className="flex cursor-pointer items-center gap-1 rounded-lg border border-slate-700 bg-slate-800 px-2.5 py-1 text-[11px] font-medium text-blue-400 transition hover:bg-slate-700"><PlusCircle className="h-3 w-3" /> Import Contract</button>
+            <label className="flex cursor-pointer items-center gap-1 rounded-lg border border-blue-800 bg-blue-950 px-2.5 py-1 text-[11px] font-medium text-blue-200 transition hover:bg-blue-900"><FileUp className="h-3 w-3" /> {isImportingInventory ? 'Importing…' : 'Import Inventory'}<input type="file" accept="application/json,.json" className="hidden" disabled={isImportingInventory} onChange={(event) => void handleImportInventoryFile(event)} /></label>
           </div>
         </div>
 
