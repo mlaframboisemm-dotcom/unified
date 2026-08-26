@@ -65,8 +65,8 @@ const CURRENCY_FLAGS: Record<string, { flag: string; countryName: string }> = {
 };
 
 export default function WiseAccountOverview({
-  userName = 'Marcel laframboise',
-  userEmail = 'mlaframboisemm@gmail.com',
+  userName = '',
+  userEmail = '',
   showToast,
   onBalanceRefresh
 }: WiseAccountOverviewProps) {
@@ -95,25 +95,19 @@ export default function WiseAccountOverview({
     fetchedAt: string;
     source: string;
   }>({
-    profileName: 'Marcel laframboise',
-    businessName: 'sovereigns',
-    profileId: 101924589,
-    accountNumber: '176576596814061',
-    routingNumber: '084009519',
-    bankName: 'Wise US Inc (Wilmington, DE, USA)',
-    cadBalance: 95000.00,
-    usdBalance: 2041100.00,
-    totalUSD: 2478350.00,
-    cadToUsdRate: 0.730,
-    balances: [
-      { currency: 'USD', amount: 1791100.00, name: 'Primary Wise Deposit Account (USD)', account: '176576596814061', routing: '084009519', isPrimary: true, type: 'business', profileId: 101924589 },
-      { currency: 'USD', amount: 250000.00, name: 'Wise Sovereign Cash Hub (USD)', account: '176576596814062', routing: '084009519', type: 'business', profileId: 101924589 },
-      { currency: 'EUR', amount: 185000.00, name: 'EUR Multi-Currency Vault (€185k @ 1.090)', iban: 'BE89 3704 0011 2200 8C14', type: 'business', profileId: 101924589 },
-      { currency: 'GBP', amount: 120000.00, name: 'GBP Multi-Currency Vault (£120k @ 1.300)', sortCode: '23-14-70', type: 'business', profileId: 101924589 },
-      { currency: 'CAD', amount: 95000.00, name: 'CAD Interac Settlement Buffer (CA$95k @ 0.730)', transit: '08400', account: '09519', type: 'business', profileId: 101924589 }
-    ],
-    fetchedAt: new Date().toISOString(),
-    source: 'wise_live'
+    profileName: '',
+    businessName: '',
+    profileId: 0,
+    accountNumber: '',
+    routingNumber: '',
+    bankName: '',
+    cadBalance: 0,
+    usdBalance: 0,
+    totalUSD: 0,
+    cadToUsdRate: 0,
+    balances: [],
+    fetchedAt: '',
+    source: 'unavailable'
   });
 
   // Modal State for creating new currency balance node
@@ -238,22 +232,21 @@ export default function WiseAccountOverview({
       if (res.ok) {
         const data = await res.json();
         if (data && data.success) {
-          setOverviewData(prev => ({
-            ...prev,
-            profileName: data.profileName || prev.profileName,
-            businessName: data.businessName || prev.businessName,
-            profileId: data.profileId || prev.profileId,
-            accountNumber: data.accountNumber || prev.accountNumber,
-            routingNumber: data.routingNumber || prev.routingNumber,
-            bankName: data.bankName || prev.bankName,
-            cadBalance: typeof data.cadBalance === 'number' ? data.cadBalance : prev.cadBalance,
-            usdBalance: typeof data.usdBalance === 'number' ? data.usdBalance : prev.usdBalance,
-            totalUSD: typeof data.totalUSD === 'number' ? data.totalUSD : prev.totalUSD,
-            cadToUsdRate: data.cadToUsdRate || prev.cadToUsdRate,
-            balances: Array.isArray(data.balances) && data.balances.length > 0 ? data.balances : prev.balances,
-            fetchedAt: data.fetchedAt || new Date().toISOString(),
-            source: data.source || prev.source
-          }));
+          setOverviewData({
+            profileName: typeof data.profileName === 'string' ? data.profileName : '',
+            businessName: typeof data.businessName === 'string' ? data.businessName : '',
+            profileId: typeof data.profileId === 'number' ? data.profileId : 0,
+            accountNumber: typeof data.accountNumber === 'string' ? data.accountNumber : '',
+            routingNumber: typeof data.routingNumber === 'string' ? data.routingNumber : '',
+            bankName: typeof data.bankName === 'string' ? data.bankName : '',
+            cadBalance: typeof data.cadBalance === 'number' ? data.cadBalance : 0,
+            usdBalance: typeof data.usdBalance === 'number' ? data.usdBalance : 0,
+            totalUSD: typeof data.totalUSD === 'number' ? data.totalUSD : 0,
+            cadToUsdRate: typeof data.cadToUsdRate === 'number' ? data.cadToUsdRate : 0,
+            balances: Array.isArray(data.balances) ? data.balances : [],
+            fetchedAt: typeof data.fetchedAt === 'string' ? data.fetchedAt : new Date().toISOString(),
+            source: typeof data.source === 'string' ? data.source : 'unavailable'
+          });
 
           if (isManual) {
             showToast?.('Wise balances synchronized.', 'success');
