@@ -229,20 +229,7 @@ export default function App() {
     accountNumber?: string;
     routingNumber?: string;
     bankName?: string;
-  } | null>(() => {
-    const saved = localStorage.getItem('cb_wise_live_balance');
-    if (saved) {
-      try { return JSON.parse(saved); } catch {}
-    }
-    return {
-      cadBalance: 14850.00,
-      usdBalance: 28400.00,
-      totalUSD: 39350.00,
-      accountNumber: '176576596814061',
-      routingNumber: '084009519',
-      bankName: 'Wise US Inc (Wilmington, DE, USA)'
-    };
-  });
+  } | null>(null);
 
   // Local-First transaction persistence handler (IndexedDB + Firestore fallback)
   const recordNewTransaction = (tx: Transaction) => {
@@ -744,16 +731,18 @@ export default function App() {
         const data = await res.json();
         if (data && typeof data.totalUSD === 'number') {
           const wiseObj = {
-            cadBalance: data.cadBalance || 0,
-            usdBalance: data.usdBalance || 0,
-            totalUSD: data.totalUSD || 0,
-            profileName: data.profileName || '',
-            accountNumber: data.accountNumber || '176576596814061',
-            routingNumber: data.routingNumber || '084009519',
-            bankName: data.bankName || 'Wise US Inc (Wilmington, DE, USA)'
+            cadBalance: typeof data.cadBalance === 'number' ? data.cadBalance : 0,
+            usdBalance: typeof data.usdBalance === 'number' ? data.usdBalance : 0,
+            totalUSD: data.totalUSD,
+            profileName: typeof data.profileName === 'string' ? data.profileName : '',
+            accountNumber: typeof data.accountNumber === 'string' ? data.accountNumber : '',
+            routingNumber: typeof data.routingNumber === 'string' ? data.routingNumber : '',
+            bankName: typeof data.bankName === 'string' ? data.bankName : ''
           };
           setWiseLiveBalance(wiseObj);
-          localStorage.setItem('cb_wise_live_balance', JSON.stringify(wiseObj));
+          if (userEmail) {
+            localStorage.setItem(getUserScopedStorageKey(userEmail, 'cb_wise_live_balance'), JSON.stringify(wiseObj));
+          }
         }
       }
     } catch (e) {
