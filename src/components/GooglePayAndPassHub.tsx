@@ -343,16 +343,16 @@ export default function GooglePayAndPassHub({
         const cadEquivalentBalance = usdBalance * FX_USD_TO_CAD;
         const qrPayload = JSON.stringify({
           type: 'sovereign_pay',
-          userId: passData?.passData?.userId || passData?.userId || 'user_mlaframboisemm',
+          userId: passData?.passData?.userId || passData?.userId || '',
           email: userEmail,
           usdBalance: usdBalance,
           cadBalanceEquivalent: parseFloat(cadEquivalentBalance.toFixed(2)),
           portfolioValue: portfolioValue,
-          walletAddress: passData?.passData?.walletAddress || '0x740aF45d81835B368E9Df03e8D37B8ee89bA2Da4',
-          wiseAccount: activeWallet?.accountNumber || '176576596814061',
+          walletAddress: passData?.passData?.walletAddress || '',
+          wiseAccount: activeWallet?.accountNumber || '',
           merchantId: 'BCR2DN5T43O5JIZE',
           issuer: 'aegis_sovereign',
-          liveWiseReconciled: true,
+          liveWiseReconciled: false,
           samsungPayCompatible: true,
           samsungWalletAid: 'A0000000041010',
           autoFxCadToUsdRate: FX_CAD_TO_USD,
@@ -605,13 +605,13 @@ export default function GooglePayAndPassHub({
       const ndef = new (window as any).NDEFReader();
       const payload = JSON.stringify({
         type: 'sovereign_paydirect_pass',
-        userId: passData?.passData?.userId || passData?.userId || 'user_mlaframboisemm',
+        userId: passData?.passData?.userId || passData?.userId || '',
         email: userEmail,
         merchant: terminalMerchant,
         amount: terminalAmount,
         currency: 'USD',
-        wiseAccount: '176576596814061',
-        liveWiseSynced: true,
+        wiseAccount: activeWallet?.accountNumber || '',
+        liveWiseSynced: false,
         issuer: 'Aegis Sovereign Protocol',
         timestamp: new Date().toISOString()
       });
@@ -1875,4 +1875,3 @@ export default function GooglePayAndPassHub({
     </div>
   );
 }
-
