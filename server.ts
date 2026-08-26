@@ -6108,34 +6108,10 @@ app.post('/api/auth/register', validateRequest(ValidationSchemas.AuthRegisterSch
       [`audit_${crypto.randomUUID()}`, userId, 'REGISTER', Date.now(), String(req.ip || req.socket.remoteAddress || ''), 'success', `Self-service registration completed for ${normalizedEmail}`]
     );
 
-    const { token } = createEmailVerification(userId, normalizedEmail);
-    const verificationUrl = buildEmailVerificationUrl(token);
-    const subject = 'Verify your Coinbase registration';
-    const bypassVerification = shouldBypassEmailVerification();
-    if (bypassVerification) {
-      markEmailVerifiedByToken(token);
-    }
-    const html = `
-      <div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;color:#0f172a;line-height:1.6;">
-        <h2 style="color:#0052FF;">Confirm your email</h2>
-        <p>Your Coinbase account has been created for <strong>${normalizedEmail}</strong>.</p>
-        <p>${bypassVerification ? 'Your email is verified locally so you can sign in immediately.' : 'Please verify your email to activate sign-in.'}</p>
-        <p style="margin:24px 0;">
-          <a href="${verificationUrl}" style="background:#0052FF;color:#fff;text-decoration:none;padding:12px 18px;border-radius:8px;display:inline-block;font-weight:700;">Verify Email</a>
-        </p>
-        <p>If the button does not work, copy this URL:</p>
-        <p style="word-break:break-all;color:#334155;">${verificationUrl}</p>
-        <p style="font-size:12px;color:#64748b;">This link expires in 24 hours.</p>
-      </div>
-    `;
-    await sendETransferEmail(normalizedEmail, subject, html);
-
     return res.status(201).json({
       success: true,
-      requiresEmailVerification: !bypassVerification,
-      message: bypassVerification
-        ? 'Account created. You can now sign in with your email and the password you chose.'
-        : 'Account created. Check your email to verify before signing in.'
+      requiresEmailVerification: false,
+      message: 'Account created. You can now sign in with your email and the password you chose.'
     });
   } catch (error: any) {
     return res.status(500).json({ error: 'REGISTRATION_ERROR', message: error?.message || 'Failed to create account.' });
