@@ -866,24 +866,21 @@ export default function App() {
 
   // Sync to LocalStorage on modifications using debounced sync utility
   useEffect(() => {
+    if (!isAuthenticated || !userEmail) return;
     debouncedStorageSetItem('cb_coins', JSON.stringify(coins), 300);
-    if (isAuthenticated && userEmail) {
-      debouncedStorageSetItem(getUserScopedStorageKey(userEmail, 'cb_coins'), JSON.stringify(coins), 300);
-    }
+    debouncedStorageSetItem(getUserScopedStorageKey(userEmail, 'cb_coins'), JSON.stringify(coins), 300);
   }, [coins, isAuthenticated, userEmail]);
 
   useEffect(() => {
+    if (!isAuthenticated || !userEmail) return;
     debouncedStorageSetItem('cb_holdings', JSON.stringify(holdings), 300);
-    if (isAuthenticated && userEmail) {
-      debouncedStorageSetItem(getUserScopedStorageKey(userEmail, 'cb_holdings'), JSON.stringify(holdings), 300);
-    }
+    debouncedStorageSetItem(getUserScopedStorageKey(userEmail, 'cb_holdings'), JSON.stringify(holdings), 300);
   }, [holdings, isAuthenticated, userEmail]);
 
   useEffect(() => {
+    if (!isAuthenticated || !userEmail) return;
     debouncedStorageSetItem('cb_usd_balance', usdBalance.toString(), 300);
-    if (isAuthenticated && userEmail) {
-      debouncedStorageSetItem(getUserScopedStorageKey(userEmail, 'cb_usd_balance'), usdBalance.toString(), 300);
-    }
+    debouncedStorageSetItem(getUserScopedStorageKey(userEmail, 'cb_usd_balance'), usdBalance.toString(), 300);
   }, [usdBalance, isAuthenticated, userEmail]);
 
   useEffect(() => {
