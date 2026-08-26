@@ -445,7 +445,7 @@ export default function GooglePayAndPassHub({
           qrPayload: JSON.stringify({
             type: 'sovereign_nfc_tap',
             serialNumber: serialNumber || `NFC_TAP_${Date.now()}`,
-            userId: passData?.passData?.userId || passData?.userId || 'user_mlaframboisemm',
+            userId: passData?.passData?.userId || passData?.userId || '',
             email: userEmail,
             issuer: 'aegis_sovereign_nfc',
             samsungPayCompatible: true,
@@ -676,10 +676,16 @@ export default function GooglePayAndPassHub({
   };
 
   const fetchWalletPass = async () => {
+    if (!userEmail) {
+      setPassData(null);
+      setQrCodeUrl(null);
+      setIsLoadingPass(false);
+      return;
+    }
     setIsLoadingPass(true);
     try {
       const authHeaders = await getFirebaseAuthHeaders();
-      const emailQuery = encodeURIComponent(userEmail || 'mlaframboisemm@gmail.com');
+      const emailQuery = encodeURIComponent(userEmail);
       const res = await fetch(`/api/sovereign/wallet-pass?email=${emailQuery}`, {
         headers: authHeaders,
         credentials: 'include'
@@ -693,11 +699,11 @@ export default function GooglePayAndPassHub({
           setQrCodeUrl(`/api/sovereign/wallet-pass/qr?email=${emailQuery}`);
         }
       } else {
-        setQrCodeUrl(`/api/sovereign/wallet-pass/qr?email=${emailQuery}`);
+        setQrCodeUrl(null);
       }
     } catch (e) {
       console.warn('Failed to load Google Wallet Pass:', e);
-      setQrCodeUrl(`/api/sovereign/wallet-pass/qr?email=${encodeURIComponent(userEmail || 'mlaframboisemm@gmail.com')}`);
+      setQrCodeUrl(null);
     } finally {
       setIsLoadingPass(false);
     }
