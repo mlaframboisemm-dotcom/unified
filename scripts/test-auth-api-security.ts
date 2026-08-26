@@ -87,6 +87,10 @@ async function main() {
     !/app\.get\('\/api\/coinbase\/config',\s*requireAuth,\s*requireMfa/.test(serverSource),
     'Read-only Coinbase configuration must not be MFA-blocked during session initialization.'
   );
+  assert(
+    serverSource.indexOf('const authHeader = req.headers.authorization;') < serverSource.indexOf("const cookieToken = getCookieValue(req, 'cb_session');"),
+    'Expected explicit Authorization Bearer tokens to be evaluated before cookies.'
+  );
 
   const originalDb = readFileIfExists(dbPath);
   const originalLock = readFileIfExists(lockPath);
@@ -168,8 +172,17 @@ async function main() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email: 'admin@secure.local', password: 'CorrectHorseBatteryStaple!42', mfaCode: generateTotpCode('JBSWY3DPEHPK3PXP') })
     });
+    const loginAgainBody = await loginAgainRes.json();
     const cookie2 = parseCookie(loginAgainRes.headers.get('set-cookie'));
-    assert(loginAgainRes.status === 200 && Boolean(cookie2), 'Expected second login success with cookie.');
+    assert(loginAgainRes.status === 200 && Boolean(cookie2) && Boolean(loginAgainBody?.token), 'Expected second login success with cookie and token.');
+
+    const bearerPriorityRes = await fetch(`${base}/api/coinbase/config`, {
+      headers: {
+        cookie: 'cb_session=stale-session-token',
+        Authorization: `Bearer ${loginAgainBody.token}`
+      }
+    });
+    assert(bearerPriorityRes.status === 200, `Expected valid Bearer token to take precedence over stale cookie, got ${bearerPriorityRes.status}`);
 
     const idempotencyKey = `idem-${Date.now()}-security-test`;
     const tradePayload = {

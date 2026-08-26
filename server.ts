@@ -1592,14 +1592,12 @@ async function enforceProductionReadiness() {
 
 function getTokenFromRequest(req: any): string | null {
   const authHeader = req.headers?.authorization;
-  if (authHeader && typeof authHeader === 'string') {
-    if (IS_PRODUCTION) {
-      logSecurityEvent('UNAUTHORIZED_ACCESS', { message: 'Authorization header rejected in production, cookie-based session required' });
+  if (authHeader && typeof authHeader === 'string' && authHeader.startsWith('Bearer ')) {
+    if (IS_PRODUCTION && !isSameOriginRequest(req)) {
+      logSecurityEvent('UNAUTHORIZED_ACCESS', { message: 'Cross-site Authorization header rejected.' });
       return null;
     }
-    if (authHeader.startsWith('Bearer ')) {
-      return authHeader.substring('Bearer '.length).trim();
-    }
+    return authHeader.substring('Bearer '.length).trim();
   }
 
   const cookieHeader = req.headers?.cookie;
@@ -5516,6 +5514,16 @@ function isSameOriginRequest(req: any): boolean {
 }
 
 function getRequestToken(req: any): string | null {
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    const token = authHeader.split(' ')[1];
+    if (IS_PRODUCTION && !isSameOriginRequest(req)) {
+      console.warn('[AUTH] Rejecting Authorization header in production for cross-origin requests.');
+      return null;
+    }
+    return token;
+  }
+
   const cookieToken = getCookieValue(req, 'cb_session');
   if (cookieToken) {
     if (IS_PRODUCTION && !isSameOriginRequest(req)) {
@@ -5525,18 +5533,6 @@ function getRequestToken(req: any): string | null {
     return cookieToken;
   }
 
-  const authHeader = req.headers.authorization;
-  if (authHeader && authHeader.startsWith('Bearer ')) {
-    const token = authHeader.split(' ')[1];
-    if (IS_PRODUCTION) {
-      if (isSameOriginRequest(req)) {
-        return token;
-      }
-      console.warn('[AUTH] Rejecting Authorization header in production for cross-origin requests.');
-      return null;
-    }
-    return token;
-  }
   return null;
 }
 

@@ -59,6 +59,7 @@ import {
   syncOfflineQueueToFirestore
 } from './lib/indexeddb-offline-sync';
 import { normalizeWalletAddress } from './lib/web3-wallet';
+import { isSessionTokenExpired } from './lib/session-token';
 
 const configuredApiBase = String(
   (import.meta as any).env?.VITE_API_BASE ||
@@ -90,25 +91,10 @@ function buildAuthHeaders(extraHeaders?: Record<string, string>): Record<string,
   };
 }
 
-function isTokenExpired(token: string): boolean {
-  try {
-    const parts = token.split('.');
-    if (parts.length !== 3) return true;
-    const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
-    if (typeof payload.exp === 'number') {
-      // Return true if expired (or within 5 seconds of expiring to be safe)
-      return (Date.now() / 1000) >= (payload.exp - 5);
-    }
-  } catch (e) {
-    return true;
-  }
-  return false;
-}
-
 function hasSessionToken(): boolean {
   const token = sessionStorage.getItem('cb_auth_jwt_token') || localStorage.getItem('cb_auth_jwt_token');
   if (!token) return false;
-  return !isTokenExpired(token);
+  return !isSessionTokenExpired(token);
 }
 
 const USER_SCOPED_STATE_KEYS = [
