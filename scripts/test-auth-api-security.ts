@@ -92,6 +92,10 @@ async function main() {
     serverSource.indexOf('const authHeader = req.headers.authorization;') < serverSource.indexOf("const cookieToken = getCookieValue(req, 'cb_session');"),
     'Expected explicit Authorization Bearer tokens to be evaluated before cookies.'
   );
+  assert(
+    serverSource.includes("error: 'PROVIDER_NOT_CONFIGURED'"),
+    'Expected unconfigured integrations to fail closed rather than returning simulated connection records.'
+  );
 
   const originalDb = readFileIfExists(dbPath);
   const originalLock = readFileIfExists(lockPath);
@@ -217,6 +221,19 @@ async function main() {
       }
     });
     assert(bearerPriorityRes.status === 200, `Expected valid Bearer token to take precedence over stale cookie, got ${bearerPriorityRes.status}`);
+
+    const unconfiguredProviderRes = await fetch(`${base}/api/integrations/initiate-auth`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${loginAgainBody.token}`,
+        ...sameOriginRequestHeaders
+      },
+      body: JSON.stringify({ appId: 'app-moonpay-ramps' })
+    });
+    const unconfiguredProviderBody = await unconfiguredProviderRes.json();
+    assert(unconfiguredProviderRes.status === 503, `Expected unconfigured provider connection to return 503, got ${unconfiguredProviderRes.status}`);
+    assert(unconfiguredProviderBody?.error === 'PROVIDER_NOT_CONFIGURED', 'Expected unconfigured provider error code.');
 
     const crossSiteBearerRes = await fetch(`${base}/api/coinbase/config`, {
       headers: {
