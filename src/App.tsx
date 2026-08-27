@@ -60,6 +60,7 @@ import {
 } from './lib/indexeddb-offline-sync';
 import { normalizeWalletAddress } from './lib/web3-wallet';
 import { isSessionTokenExpired } from './lib/session-token';
+import { mergeNonEmptySynchronizedHoldings } from './lib/holdings-recovery';
 
 const configuredApiBase = String(
   (import.meta as any).env?.VITE_API_BASE ||
@@ -811,12 +812,9 @@ export default function App() {
       if (balRes.ok && balContentType.includes('application/json')) {
         const balData = await balRes.json();
         const activeEmail = userEmail || localStorage.getItem('cb_auth_email') || '';
-        if (balData.holdings) {
-          const syncedHoldings = balData.mode === 'database_reconciled'
-            ? []
-            : Array.isArray(balData.holdings) ? balData.holdings : [];
-          setHoldings(syncedHoldings);
-        }
+        setHoldings((existingHoldings) =>
+          mergeNonEmptySynchronizedHoldings(existingHoldings, balData.holdings)
+        );
         if (!config.stripeConfigured && typeof balData.usdBalance === 'number') {
           setUsdBalance(balData.usdBalance);
         }
