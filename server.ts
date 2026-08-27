@@ -8123,34 +8123,18 @@ app.post('/api/integrations/sync-exchange-assets', async (req: any, res) => {
   });
 });
 
-// 1-Click Authentication & Handshake Dispatcher API
-app.post('/api/integrations/initiate-auth', async (req: any, res) => {
-  const { appId, environment = 'production', credentials = {} } = req.body || {};
+// Provider authentication must be completed through a real provider onboarding flow.
+app.post('/api/integrations/initiate-auth', requireAuth, async (req: any, res) => {
+  const { appId } = req.body || {};
 
   if (!appId) {
     return res.status(400).json({ success: false, message: 'Missing appId for integration authentication.' });
   }
 
-  const generatedToken = `token_${environment}_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
-  const authSessionId = `auth_sess_${Math.random().toString(36).substring(2, 10)}`;
-
-  const resultRecord = {
-    id: `rec-${appId.replace('app-', '')}-${Date.now()}`,
-    appId,
-    status: 'connected',
-    environment,
-    apiKeyMasked: credentials.apiKey ? `${credentials.apiKey.slice(0, 4)}••••${credentials.apiKey.slice(-4)}` : `${appId.slice(4, 8)}_live_••••${Math.floor(1000 + Math.random() * 9000)}`,
-    connectedAt: new Date().toISOString(),
-    lastSyncAt: 'Just now',
-    authSessionId,
-    token: generatedToken
-  };
-
-  return res.json({
-    success: true,
-    message: `1-Click authentication handshake verified for ${appId} in ${environment} mode.`,
-    record: resultRecord,
-    simulatedAuthUrl: `https://auth.integrations.internal/oauth/callback?session=${authSessionId}&app=${appId}`
+  return res.status(503).json({
+    success: false,
+    error: 'PROVIDER_NOT_CONFIGURED',
+    message: `${appId} requires provider onboarding and secure deployment configuration before it can be connected.`
   });
 });
 

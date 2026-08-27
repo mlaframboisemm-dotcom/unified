@@ -1503,7 +1503,7 @@ export default function IntegrationsHub({
     return connectedRecords.some((r) => r.appId === appId && r.status === 'connected');
   };
 
-  // 1-CLICK AUTHENTICATION HANDSHAKE (Invokes POST /api/integrations/initiate-auth)
+  // Provider onboarding must be completed with a real provider and secure deployment configuration.
   const handleSingleClickConnect = async (app: AppMarketplaceItem) => {
     setConnectingAppId(app.id);
     try {
@@ -1511,66 +1511,14 @@ export default function IntegrationsHub({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          appId: app.id,
-          environment: 'production',
-          credentials: {
-            appName: app.name,
-            provider: app.provider
-          }
+          appId: app.id
         })
       });
 
       const data = await res.json();
-      const newRec: ConnectedIntegrationRecord = {
-        id: data.record?.id || `rec-${app.id.replace('app-', '')}-${Date.now()}`,
-        appId: app.id,
-        name: app.name,
-        provider: app.provider,
-        category: app.category,
-        status: 'connected',
-        environment: 'production',
-        apiKeyMasked: data.record?.apiKeyMasked || `${app.id.slice(4, 8)}_live_••••${Math.floor(1000 + Math.random() * 9000)}`,
-        endpointUrl: app.defaultEndpoint,
-        connectedAt: 'Just now (1-Click Auth)',
-        lastSyncAt: 'Active now',
-        eventsEnabled: app.eventsSupported,
-        autoSyncEnabled: true,
-        metadata: {
-          authSessionId: data.record?.authSessionId,
-          token: data.record?.token
-        }
-      };
-
-      setConnectedRecords((prev) => {
-        const filtered = prev.filter((r) => r.appId !== app.id);
-        return [newRec, ...filtered];
-      });
-
-      showToast(`1-Click Integration: Successfully connected and authenticated ${app.name}!`, 'success');
-    } catch (err) {
-      // Fallback local connection if offline
-      const fallbackRec: ConnectedIntegrationRecord = {
-        id: `rec-${app.id.replace('app-', '')}-${Date.now()}`,
-        appId: app.id,
-        name: app.name,
-        provider: app.provider,
-        category: app.category,
-        status: 'connected',
-        environment: 'production',
-        apiKeyMasked: `${app.id.slice(4, 8)}_live_••••${Math.floor(1000 + Math.random() * 9000)}`,
-        endpointUrl: app.defaultEndpoint,
-        connectedAt: 'Just now',
-        lastSyncAt: 'Active now',
-        eventsEnabled: app.eventsSupported,
-        autoSyncEnabled: true
-      };
-
-      setConnectedRecords((prev) => {
-        const filtered = prev.filter((r) => r.appId !== app.id);
-        return [fallbackRec, ...filtered];
-      });
-
-      showToast(`Connected ${app.name} to application hub.`, 'success');
+      showToast(data.message || `${app.name} requires secure provider onboarding before connection.`, 'info');
+    } catch {
+      showToast(`${app.name} is not configured. No connection record was created.`, 'info');
     } finally {
       setConnectingAppId(null);
     }
@@ -1586,7 +1534,7 @@ export default function IntegrationsHub({
       setModalEndpoint(existing.endpointUrl);
     } else {
       setModalEnv('production');
-      setModalApiKey(`api_live_${Math.random().toString(36).substring(2, 10)}`);
+      setModalApiKey('');
       setModalEndpoint(app.defaultEndpoint);
     }
     setTestResultLog(null);
@@ -1599,35 +1547,7 @@ export default function IntegrationsHub({
     setIsModalSaving(true);
     setTimeout(() => {
       setIsModalSaving(false);
-
-      const existingIndex = connectedRecords.findIndex((r) => r.appId === app.id);
-      const newRecord: ConnectedIntegrationRecord = {
-        id: existingIndex >= 0 ? connectedRecords[existingIndex].id : `rec-${app.id.replace('app-', '')}-${Date.now()}`,
-        appId: app.id,
-        name: app.name,
-        provider: app.provider,
-        category: app.category,
-        status: 'connected',
-        environment: modalEnv,
-        apiKeyMasked: modalApiKey || `key_${modalEnv}_••••${Math.floor(1000 + Math.random() * 9000)}`,
-        endpointUrl: modalEndpoint || app.defaultEndpoint,
-        connectedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        lastSyncAt: 'Just now',
-        eventsEnabled: app.eventsSupported,
-        autoSyncEnabled: true
-      };
-
-      if (existingIndex >= 0) {
-        setConnectedRecords((prev) => {
-          const updated = [...prev];
-          updated[existingIndex] = newRecord;
-          return updated;
-        });
-      } else {
-        setConnectedRecords((prev) => [newRecord, ...prev]);
-      }
-
-      showToast(`Saved configuration & synced ${app.name}!`, 'success');
+      showToast(`${app.name} must be configured through secure deployment settings before it can be connected.`, 'info');
       setSelectedAppForModal(null);
     }, 600);
   };
