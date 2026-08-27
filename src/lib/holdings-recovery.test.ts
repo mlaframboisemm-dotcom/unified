@@ -19,7 +19,7 @@ describe('mergeNonEmptySynchronizedHoldings', () => {
       ])
     ).toEqual([
       { symbol: 'USDC', amount: 100, avgBuyPrice: 1 },
-      { symbol: 'eth', amount: 3, avgBuyPrice: 2000 },
+      { symbol: 'ETH', amount: 3, avgBuyPrice: 2000 },
       { symbol: 'BTC', amount: 0.5, avgBuyPrice: 60000 }
     ]);
   });

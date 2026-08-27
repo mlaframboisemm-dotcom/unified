@@ -27,7 +27,7 @@ export function mergeNonEmptySynchronizedHoldings(
     const previous = existingBySymbol.get(normalizedSymbol);
     const incomingAverage = Number(candidate?.avgBuyPrice);
     synchronized.set(normalizedSymbol, {
-      symbol,
+      symbol: previous?.symbol ?? symbol,
       amount,
       avgBuyPrice: Number.isFinite(incomingAverage) ? incomingAverage : previous?.avgBuyPrice ?? 0
     });
