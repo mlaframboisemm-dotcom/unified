@@ -18,10 +18,19 @@ describe('mergeNonEmptySynchronizedHoldings', () => {
         { symbol: 'BTC', amount: 0.5, avgBuyPrice: 60000 }
       ])
     ).toEqual([
-      { symbol: 'USDC', amount: 100, avgBuyPrice: 1 },
       { symbol: 'ETH', amount: 3, avgBuyPrice: 2000 },
+      { symbol: 'USDC', amount: 100, avgBuyPrice: 1 },
       { symbol: 'BTC', amount: 0.5, avgBuyPrice: 60000 }
     ]);
+  });
+
+  it('retains the existing list reference when matching values are unchanged', () => {
+    const result = mergeNonEmptySynchronizedHoldings(existing, [
+      { symbol: 'ETH', amount: 2, avgBuyPrice: 2000 },
+      { symbol: 'USDC', amount: 100, avgBuyPrice: 1 }
+    ]);
+
+    expect(result).toBe(existing);
   });
 
   it('ignores malformed, zero, and negative incoming holdings', () => {

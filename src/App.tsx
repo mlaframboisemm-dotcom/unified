@@ -61,6 +61,7 @@ import {
 import { normalizeWalletAddress } from './lib/web3-wallet';
 import { isSessionTokenExpired } from './lib/session-token';
 import { mergeNonEmptySynchronizedHoldings } from './lib/holdings-recovery';
+import { createSingleFlightGate } from './lib/single-flight';
 
 const configuredApiBase = String(
   (import.meta as any).env?.VITE_API_BASE ||
@@ -140,6 +141,7 @@ export default function App() {
   const hasLoggedBalanceSyncError = useRef(false);
   const hasLoggedEmailSyncError = useRef(false);
   const firestoreDisabledRef = useRef(false);
+  const balanceSyncGateRef = useRef(createSingleFlightGate());
   // Financial state starts empty and is populated only by authenticated provider responses.
   const [coins, setCoins] = useState<Coin[]>([]);
   const [holdings, setHoldings] = useState<Holding[]>([]);
@@ -764,7 +766,7 @@ export default function App() {
   };
 
   const syncCoinbaseBalances = async () => {
-    if (!hasSessionToken()) {
+    if (!hasSessionToken() || !balanceSyncGateRef.current.tryAcquire()) {
       return;
     }
 
@@ -860,6 +862,7 @@ export default function App() {
       }
     } finally {
       setIsRefreshingReal(false);
+      balanceSyncGateRef.current.release();
     }
   };
 

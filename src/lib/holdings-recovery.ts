@@ -26,17 +26,32 @@ export function mergeNonEmptySynchronizedHoldings(
     const normalizedSymbol = symbol.toUpperCase();
     const previous = existingBySymbol.get(normalizedSymbol);
     const incomingAverage = Number(candidate?.avgBuyPrice);
-    synchronized.set(normalizedSymbol, {
+    const nextHolding: Holding = {
       symbol: previous?.symbol ?? symbol,
       amount,
       avgBuyPrice: Number.isFinite(incomingAverage) ? incomingAverage : previous?.avgBuyPrice ?? 0
-    });
+    };
+    synchronized.set(
+      normalizedSymbol,
+      previous &&
+        previous.symbol === nextHolding.symbol &&
+        previous.amount === nextHolding.amount &&
+        previous.avgBuyPrice === nextHolding.avgBuyPrice
+        ? previous
+        : nextHolding
+    );
   }
 
   if (synchronized.size === 0) return existingHoldings;
 
-  const retained = existingHoldings.filter(
-    (holding) => !synchronized.has(holding.symbol.trim().toUpperCase())
+  const merged = existingHoldings.map(
+    (holding) => synchronized.get(holding.symbol.trim().toUpperCase()) ?? holding
   );
-  return [...retained, ...synchronized.values()];
+  const appended = Array.from(synchronized.entries())
+    .filter(([symbol]) => !existingBySymbol.has(symbol))
+    .map(([, holding]) => holding);
+  const result = [...merged, ...appended];
+  return result.every((holding, index) => holding === existingHoldings[index]) && result.length === existingHoldings.length
+    ? existingHoldings
+    : result;
 }
