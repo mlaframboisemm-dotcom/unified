@@ -493,11 +493,23 @@ export default function App() {
 
     USER_SCOPED_STATE_KEYS.forEach((key) => {
       const scopedKey = getUserScopedStorageKey(normalizedEmail, key);
-      if (localStorage.getItem(scopedKey) === null) {
-        const globalValue = localStorage.getItem(key);
-        if (globalValue !== null) {
-          localStorage.setItem(scopedKey, globalValue);
+      const scopedValue = localStorage.getItem(scopedKey);
+      const globalValue = localStorage.getItem(key);
+      const isEmptyCollection = (value: string | null) => {
+        if (!value) return true;
+        try {
+          return Array.isArray(JSON.parse(value)) && JSON.parse(value).length === 0;
+        } catch {
+          return false;
         }
+      };
+      const shouldRestoreLegacyInventory =
+        (key === 'cb_coins' || key === 'cb_holdings') &&
+        isEmptyCollection(scopedValue) &&
+        !isEmptyCollection(globalValue);
+
+      if ((scopedValue === null || shouldRestoreLegacyInventory) && globalValue !== null) {
+        localStorage.setItem(scopedKey, globalValue);
       }
     });
   };
