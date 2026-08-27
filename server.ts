@@ -7216,6 +7216,8 @@ app.get('/api/integrations/available', async (req: any, res) => {
   const wiseToken = process.env.WISE_API_TOKEN || process.env.WISE_ALL_ACCESS_KEY || '';
   const geminiKey = process.env.GEMINI_API_KEY || '';
   const coinbaseKey = process.env.COINBASE_API_KEY_ID || '';
+  const moonpayConfigured = Boolean(process.env.MOONPAY_API_KEY && process.env.MOONPAY_PUBLISHABLE_KEY);
+  const stripeIssuingConfigured = Boolean(stripeKey && process.env.STRIPE_ISSUING_ENABLED === 'true');
 
   const catalog = [
     // --- CRYPTO EXCHANGES & UNIFIED LIQUIDITY ---
@@ -7924,24 +7926,79 @@ app.get('/api/integrations/available', async (req: any, res) => {
       features: ['Apple Secure Enclave hardware isolation', 'FaceID & TouchID 1-tap checkout', 'PassKit .pkpass signing & auto-updates', 'Dynamic 3D-Secure 2 cryptogram generation']
     },
 
+    // --- CARD-FUNDED CRYPTO, OFF-RAMP & ISSUING RAILS ---
+    {
+      id: 'app-moonpay-ramps',
+      name: 'MoonPay On-Ramp & Off-Ramp',
+      provider: 'MoonPay',
+      category: 'fintech',
+      badge: moonpayConfigured ? 'Configured' : 'Provider Onboarding Required',
+      tagline: 'Card, Apple Pay and Google Pay crypto purchases plus supported fiat cash-out',
+      description: 'Embed provider-hosted or headless crypto buy and sell flows. This integration remains unavailable until MoonPay business onboarding and secure deployment configuration are complete.',
+      logoBg: 'bg-[#6750FF]',
+      logoTextColor: 'text-white',
+      iconType: 'moonpay',
+      status: moonpayConfigured ? 'connected' : 'available',
+      authType: 'api_key',
+      defaultEndpoint: 'https://api.moonpay.com',
+      apiDocsUrl: 'https://dev.moonpay.com/',
+      eventsSupported: ['transaction_created', 'transaction_updated', 'transaction_completed'],
+      features: ['Card-funded crypto purchase', 'Supported crypto-to-fiat cash-out', 'Hosted or headless checkout', 'Provider-managed KYC and payment processing']
+    },
+    {
+      id: 'app-visa-stablecoin-card-program',
+      name: 'Visa Stablecoin Card Program',
+      provider: 'Visa',
+      category: 'cards',
+      badge: 'Partner Approval Required',
+      tagline: 'Stablecoin-linked Visa card program through an approved issuer partner',
+      description: 'Visa card issuance and stablecoin-linked spending require direct provider and issuer approval. No card or payment action is enabled before that onboarding is complete.',
+      logoBg: 'bg-[#1434CB]',
+      logoTextColor: 'text-white',
+      iconType: 'visa',
+      status: 'available',
+      authType: 'oauth_instant',
+      defaultEndpoint: 'https://www.visa.com/en-us/solutions/stablecoins',
+      apiDocsUrl: 'https://www.visa.com/en-us/solutions/stablecoins',
+      eventsSupported: ['issuer_approval', 'card_program_activated', 'authorization_settled'],
+      features: ['Stablecoin-linked card program', 'Visa network acceptance through issuer partners', 'Provider-led compliance and settlement', 'No app-side card issuance without approval']
+    },
+    {
+      id: 'app-mastercard-crypto-card-program',
+      name: 'Mastercard Crypto Card Program',
+      provider: 'Mastercard',
+      category: 'cards',
+      badge: 'Partner Approval Required',
+      tagline: 'Crypto-to-fiat card spending through a regulated Mastercard program partner',
+      description: 'Mastercard crypto-card functionality requires program and issuer partner onboarding. The app does not activate card issuance, conversion, or spending until the provider confirms readiness.',
+      logoBg: 'bg-[#EB001B]',
+      logoTextColor: 'text-white',
+      iconType: 'mastercard',
+      status: 'available',
+      authType: 'oauth_instant',
+      defaultEndpoint: 'https://www.mastercard.com/us/en/business/payments/consumer-payments/next-gen-payments/digital-asset-solutions/crypto-card-program.html',
+      apiDocsUrl: 'https://www.mastercard.com/us/en/business/payments/consumer-payments/next-gen-payments/digital-asset-solutions/crypto-card-program.html',
+      eventsSupported: ['issuer_approval', 'card_program_activated', 'authorization_settled'],
+      features: ['Crypto-to-fiat card payments', 'Virtual or physical card program via issuer partner', 'Provider-led AML and fraud controls', 'No app-side card issuance without approval']
+    },
     // --- REAL VIRTUAL CARDS & ISSUING RAILS ---
     {
       id: 'app-stripe-issuing',
       name: 'Stripe Issuing & Virtual Cards',
       provider: 'Stripe Inc.',
       category: 'cards',
-      badge: 'Real-Time Issuing',
-      tagline: 'Instant virtual Visa/Mastercard, programmatic spend controls & Google/Apple Push',
-      description: 'Issue real, instant virtual payment cards funded by your connected balances. Set spending velocity limits, single-use burner modes, and push to Google / Apple / Samsung Wallets.',
+      badge: stripeIssuingConfigured ? 'Configured' : 'Provider Onboarding Required',
+      tagline: 'Virtual-card infrastructure through an approved Stripe Issuing program',
+      description: 'Stripe Issuing remains unavailable until program approval and secure deployment configuration are complete. No card is issued or funded by this app before that point.',
       logoBg: 'bg-[#635BFF]',
       logoTextColor: 'text-white',
       iconType: 'stripeissuing',
-      status: 'connected',
+      status: stripeIssuingConfigured ? 'connected' : 'available',
       authType: 'oauth_instant',
       defaultEndpoint: 'https://api.stripe.com/v1/issuing/cards',
       apiDocsUrl: 'https://stripe.com/docs/issuing',
       eventsSupported: ['issuing_card.created', 'issuing_authorization.request', 'issuing_transaction.created'],
-      features: ['Real Luhn-valid 16-digit PANs & CVV', 'Instant Google/Samsung/Apple Wallet Push', 'Real-time programmatic authorization webhooks', 'Per-card velocity and merchant category locks']
+      features: ['Virtual or physical card issuing after approval', 'Card controls and wallet provisioning when supported', 'Program authorization webhooks', 'Provider-managed compliance requirements']
     },
     {
       id: 'app-lithic',
