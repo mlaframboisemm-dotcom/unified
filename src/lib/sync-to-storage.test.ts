@@ -19,6 +19,7 @@ function createStorage(initialEntries: Record<string, string> = {}): StorageMock
 
 describe('StorageSyncManager', () => {
   const originalWindow = globalThis.window;
+  const originalDocument = globalThis.document;
 
   beforeEach(() => {
     vi.useFakeTimers();
@@ -27,6 +28,7 @@ describe('StorageSyncManager', () => {
   afterEach(() => {
     vi.useRealTimers();
     Object.defineProperty(globalThis, 'window', { configurable: true, value: originalWindow });
+    Object.defineProperty(globalThis, 'document', { configurable: true, value: originalDocument });
   });
 
   it('does not rewrite an unchanged stored value', () => {
@@ -69,5 +71,30 @@ describe('StorageSyncManager', () => {
 
     expect(sync.getItemLatest('cb_holdings')).toBe('[{"symbol":"ETH","amount":2}]');
     expect(storage.getItem('cb_holdings')).toBe('[{"symbol":"ETH"}]');
+  });
+
+  it('flushes pending writes when the application is backgrounded', () => {
+    const storage = createStorage();
+    let visibilityChangeHandler: (() => void) | undefined;
+    Object.defineProperty(globalThis, 'document', {
+      configurable: true,
+      value: { visibilityState: 'hidden' }
+    });
+    Object.defineProperty(globalThis, 'window', {
+      configurable: true,
+      value: {
+        addEventListener: vi.fn((eventName: string, handler: () => void) => {
+          if (eventName === 'visibilitychange') visibilityChangeHandler = handler;
+        }),
+        localStorage: storage,
+        sessionStorage: createStorage()
+      }
+    });
+    const sync = new StorageSyncManager();
+
+    sync.setItemDebounced('cb_holdings', '[{"symbol":"ETH","amount":2}]', 300);
+    visibilityChangeHandler?.();
+
+    expect(storage.setItem).toHaveBeenCalledWith('cb_holdings', '[{"symbol":"ETH","amount":2}]');
   });
 });

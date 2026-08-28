@@ -23,6 +23,11 @@ export class StorageSyncManager {
     if (typeof window !== 'undefined') {
       window.addEventListener('beforeunload', () => this.flushAll());
       window.addEventListener('pagehide', () => this.flushAll());
+      if (typeof document !== 'undefined') {
+        window.addEventListener('visibilitychange', () => {
+          if (document.visibilityState === 'hidden') this.flushAll();
+        });
+      }
     }
   }
 
