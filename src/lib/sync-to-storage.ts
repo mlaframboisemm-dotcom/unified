@@ -16,7 +16,7 @@ interface PendingWrite {
  * synchronous disk I/O when state (e.g. account balances, holdings, transactions)
  * updates rapidly in short bursts.
  */
-class StorageSyncManager {
+export class StorageSyncManager {
   private pendingWrites = new Map<string, PendingWrite>();
 
   constructor() {
@@ -72,6 +72,9 @@ class StorageSyncManager {
 
     try {
       const storage = pending.storageType === 'sessionStorage' ? window.sessionStorage : window.localStorage;
+      if (storage.getItem(pending.key) === pending.value) {
+        return;
+      }
       storage.setItem(pending.key, pending.value);
     } catch (err) {
       console.warn(`[StorageSyncManager] Failed to write key "${pending.key}":`, err);
