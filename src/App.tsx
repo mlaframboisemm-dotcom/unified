@@ -504,7 +504,7 @@ export default function App() {
     const normalizedEmail = email.trim().toLowerCase();
     if (!normalizedEmail) return;
 
-    const read = (key: string) => localStorage.getItem(getUserScopedStorageKey(normalizedEmail, key));
+    const read = (key: string) => storageSyncManager.getItemLatest(getUserScopedStorageKey(normalizedEmail, key));
 
     const scopedCoins = parseStoredArray<Coin>(read('cb_coins'));
     if (scopedCoins !== null && scopedCoins !== undefined) {
