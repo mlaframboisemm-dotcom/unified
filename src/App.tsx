@@ -31,7 +31,6 @@ import GooglePayAndPassHub from './components/GooglePayAndPassHub';
 import WiseCardDashboard from './components/WiseCardDashboard';
 import GoogleDriveFolderHub from './components/GoogleDriveFolderHub';
 import QrPayModal from './components/QrPayModal';
-import MonthlyReportModal from './components/MonthlyReportModal';
 import AppDownloadModal from './components/AppDownloadModal';
 import RealtimeProofModal from './components/RealtimeProofModal';
 import PlaidLinkModal from './components/PlaidLinkModal';
@@ -62,6 +61,8 @@ import { normalizeWalletAddress } from './lib/web3-wallet';
 import { isSessionTokenExpired } from './lib/session-token';
 import { mergeNonEmptySynchronizedHoldings, shouldRestoreLegacyInventory } from './lib/holdings-recovery';
 import { createSingleFlightGate } from './lib/single-flight';
+
+const MonthlyReportModal = React.lazy(() => import('./components/MonthlyReportModal'));
 
 const configuredApiBase = String(
   (import.meta as any).env?.VITE_API_BASE ||
@@ -4357,19 +4358,23 @@ export default function App() {
       />
 
       {/* --- MONTHLY PORTFOLIO SUMMARY PDF REPORT MODAL --- */}
-      <MonthlyReportModal
-        isOpen={isMonthlyReportOpen}
-        onClose={() => setIsMonthlyReportOpen(false)}
-        userName={userName}
-        userEmail={userEmail}
-        citizenship={citizenship}
-        netWorth={netWorth}
-        liveCashBalance={liveCashBalance}
-        holdings={holdings}
-        coins={coins}
-        transactions={transactions}
-        showToast={showToast}
-      />
+      {isMonthlyReportOpen && (
+        <React.Suspense fallback={null}>
+          <MonthlyReportModal
+            isOpen={isMonthlyReportOpen}
+            onClose={() => setIsMonthlyReportOpen(false)}
+            userName={userName}
+            userEmail={userEmail}
+            citizenship={citizenship}
+            netWorth={netWorth}
+            liveCashBalance={liveCashBalance}
+            holdings={holdings}
+            coins={coins}
+            transactions={transactions}
+            showToast={showToast}
+          />
+        </React.Suspense>
+      )}
 
       {/* --- APP DOWNLOAD & NATIVE GRADLE PWA MODAL --- */}
       <AppDownloadModal
