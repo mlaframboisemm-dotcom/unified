@@ -77,3 +77,22 @@ export function shouldRestoreLegacyInventory(
 
   return !isNonEmptyArray(scopedValue) && isNonEmptyArray(legacyValue);
 }
+
+/**
+ * Applies a cash balance only when it is valid and either positive, the current
+ * value is empty, or the response is confirmed authoritative. This prevents a
+ * fallback response with no recoverable cash record from clearing retained
+ * authenticated state while still accepting a verified zero balance.
+ */
+export function resolveSynchronizedUsdBalance(
+  existingBalance: number,
+  incomingBalance: unknown,
+  isAuthoritativeResponse: boolean
+): number {
+  const nextBalance = Number(incomingBalance);
+  if (!Number.isFinite(nextBalance) || nextBalance < 0) return existingBalance;
+  if (nextBalance === 0 && existingBalance > 0 && !isAuthoritativeResponse) {
+    return existingBalance;
+  }
+  return nextBalance;
+}

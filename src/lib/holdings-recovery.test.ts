@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { mergeNonEmptySynchronizedHoldings, shouldRestoreLegacyInventory } from './holdings-recovery';
+import {
+  mergeNonEmptySynchronizedHoldings,
+  resolveSynchronizedUsdBalance,
+  shouldRestoreLegacyInventory
+} from './holdings-recovery';
 
 describe('mergeNonEmptySynchronizedHoldings', () => {
   const existing = [
@@ -56,5 +60,17 @@ describe('mergeNonEmptySynchronizedHoldings', () => {
     expect(shouldRestoreLegacyInventory(JSON.stringify(existing), JSON.stringify([{ symbol: 'BTC' }]))).toBe(false);
     expect(shouldRestoreLegacyInventory(null, '[]')).toBe(false);
     expect(shouldRestoreLegacyInventory(null, '{not-json')).toBe(false);
+  });
+
+  it('retains cash during a non-authoritative empty or malformed synchronization response', () => {
+    expect(resolveSynchronizedUsdBalance(125, 0, false)).toBe(125);
+    expect(resolveSynchronizedUsdBalance(125, 'not-a-number', false)).toBe(125);
+    expect(resolveSynchronizedUsdBalance(125, -1, false)).toBe(125);
+  });
+
+  it('accepts positive cash values and a verified authoritative zero balance', () => {
+    expect(resolveSynchronizedUsdBalance(125, 300, false)).toBe(300);
+    expect(resolveSynchronizedUsdBalance(125, 0, true)).toBe(0);
+    expect(resolveSynchronizedUsdBalance(0, 0, false)).toBe(0);
   });
 });

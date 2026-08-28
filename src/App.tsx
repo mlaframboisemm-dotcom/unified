@@ -52,7 +52,11 @@ import {
 } from './lib/indexeddb-offline-sync';
 import { normalizeWalletAddress } from './lib/web3-wallet';
 import { isSessionTokenExpired } from './lib/session-token';
-import { mergeNonEmptySynchronizedHoldings, shouldRestoreLegacyInventory } from './lib/holdings-recovery';
+import {
+  mergeNonEmptySynchronizedHoldings,
+  resolveSynchronizedUsdBalance,
+  shouldRestoreLegacyInventory
+} from './lib/holdings-recovery';
 import { createSingleFlightGate } from './lib/single-flight';
 
 const MonthlyReportModal = React.lazy(() => import('./components/MonthlyReportModal'));
@@ -814,8 +818,11 @@ export default function App() {
         setHoldings((existingHoldings) =>
           mergeNonEmptySynchronizedHoldings(existingHoldings, balData.holdings)
         );
-        if (!config.stripeConfigured && typeof balData.usdBalance === 'number') {
-          setUsdBalance(balData.usdBalance);
+        if (!config.stripeConfigured) {
+          const isAuthoritativeResponse = isReal && balData.mode === 'real';
+          setUsdBalance((existingBalance) =>
+            resolveSynchronizedUsdBalance(existingBalance, balData.usdBalance, isAuthoritativeResponse)
+          );
         }
         if (balData.transactions) {
           setTransactions((prev) => {
