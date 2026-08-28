@@ -37,7 +37,7 @@ import { parseQrOrDeepLink, ParsedQrResult } from './lib/qrProtocolParser';
 import { SettlementConfirmationDialog, SettlementConfirmationData } from './components/SettlementConfirmationDialog';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { convertUsdToCad, DEFAULT_USD_CAD_RATE } from './lib/financial-hardening';
-import { debouncedStorageSetItem } from './lib/sync-to-storage';
+import { debouncedStorageSetItem, storageSyncManager } from './lib/sync-to-storage';
 import { db } from './lib/firebase';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { OfflineSyncStatusBar } from './components/OfflineSyncStatusBar';
@@ -506,8 +506,8 @@ export default function App() {
 
     USER_SCOPED_STATE_KEYS.forEach((key) => {
       const scopedKey = getUserScopedStorageKey(normalizedEmail, key);
-      const scopedValue = localStorage.getItem(scopedKey);
-      const globalValue = localStorage.getItem(key);
+      const scopedValue = storageSyncManager.getItemLatest(scopedKey);
+      const globalValue = storageSyncManager.getItemLatest(key);
       const shouldRestoreScopedInventory =
         (key === 'cb_coins' || key === 'cb_holdings') &&
         shouldRestoreLegacyInventory(scopedValue, globalValue);

@@ -56,4 +56,18 @@ describe('StorageSyncManager', () => {
 
     expect(storage.setItem).toHaveBeenCalledWith('cb_holdings', '[{"symbol":"ETH","amount":2}]');
   });
+
+  it('returns a pending value before the debounced write has flushed', () => {
+    const storage = createStorage({ cb_holdings: '[{"symbol":"ETH"}]' });
+    Object.defineProperty(globalThis, 'window', {
+      configurable: true,
+      value: { addEventListener: vi.fn(), localStorage: storage, sessionStorage: createStorage() }
+    });
+    const sync = new StorageSyncManager();
+
+    sync.setItemDebounced('cb_holdings', '[{"symbol":"ETH","amount":2}]', 300);
+
+    expect(sync.getItemLatest('cb_holdings')).toBe('[{"symbol":"ETH","amount":2}]');
+    expect(storage.getItem('cb_holdings')).toBe('[{"symbol":"ETH"}]');
+  });
 });
