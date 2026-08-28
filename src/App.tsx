@@ -52,7 +52,7 @@ import {
 } from './lib/indexeddb-offline-sync';
 import { normalizeWalletAddress } from './lib/web3-wallet';
 import { isSessionTokenExpired } from './lib/session-token';
-import { getUserScopedStorageKey, USER_SCOPED_STATE_KEYS } from './lib/user-scoped-storage';
+import { getUserScopedStorageKey, parseStoredArray, USER_SCOPED_STATE_KEYS } from './lib/user-scoped-storage';
 import {
   mergeNonEmptySynchronizedHoldings,
   resolveSynchronizedUsdBalance,
@@ -506,26 +506,15 @@ export default function App() {
 
     const read = (key: string) => localStorage.getItem(getUserScopedStorageKey(normalizedEmail, key));
 
-    try {
-      const scopedCoins = read('cb_coins');
-      if (scopedCoins) setCoins(JSON.parse(scopedCoins));
-    } catch {
-      // keep existing state on parse failure
+    const scopedCoins = parseStoredArray<Coin>(read('cb_coins'));
+    if (scopedCoins !== null && scopedCoins !== undefined) {
+      setCoins(scopedCoins);
     }
 
-    try {
-      const scopedHoldings = read('cb_holdings');
-      if (scopedHoldings) {
-        const parsed = JSON.parse(scopedHoldings);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setHoldings(parsed);
-        } else {
-          setHoldings([]);
-        }
-      } else {
-        setHoldings([]);
-      }
-    } catch {
+    const scopedHoldings = parseStoredArray<Holding>(read('cb_holdings'));
+    if (scopedHoldings !== null && scopedHoldings !== undefined) {
+      setHoldings(scopedHoldings);
+    } else if (scopedHoldings === undefined) {
       setHoldings([]);
     }
 
