@@ -52,6 +52,7 @@ import {
 } from './lib/indexeddb-offline-sync';
 import { normalizeWalletAddress } from './lib/web3-wallet';
 import { isSessionTokenExpired } from './lib/session-token';
+import { getUserScopedStorageKey, USER_SCOPED_STATE_KEYS } from './lib/user-scoped-storage';
 import {
   mergeNonEmptySynchronizedHoldings,
   resolveSynchronizedUsdBalance,
@@ -107,25 +108,6 @@ function hasSessionToken(): boolean {
   const token = sessionStorage.getItem('cb_auth_jwt_token') || localStorage.getItem('cb_auth_jwt_token');
   if (!token) return false;
   return !isSessionTokenExpired(token);
-}
-
-const USER_SCOPED_STATE_KEYS = [
-  'cb_coins',
-  'cb_holdings',
-  'cb_usd_balance',
-  'cb_transactions',
-  'cb_quizzes',
-  'cb_watchlist',
-  'cb_inbox_emails',
-  'cb_kyc_level',
-  'cb_citizenship',
-  'cb_sov_intel_state',
-  'cb_sovereign_tokens',
-  'cb_marshall_config'
-] as const;
-
-function getUserScopedStorageKey(email: string, key: string): string {
-  return `cb_user_${email.trim().toLowerCase()}_${key}`;
 }
 
 /**
@@ -576,7 +558,7 @@ export default function App() {
     }
 
     try {
-      const scopedEmails = read('cb_simulated_emails');
+      const scopedEmails = read('cb_inbox_emails');
       if (scopedEmails) setEmails(JSON.parse(scopedEmails));
     } catch {
       // keep existing state on parse failure
