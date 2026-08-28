@@ -14,16 +14,6 @@ export default defineConfig(() => {
     build: {
       rollupOptions: {
         external: ['@capacitor/browser', '@capacitor/core'],
-        output: {
-          manualChunks(id) {
-            if (!id.includes('/node_modules/')) return;
-            if (id.includes('/firebase/')) return 'firebase-vendor';
-            if (id.includes('/ethers/') || id.includes('/bitcoinjs-lib/')) return 'web3-vendor';
-            if (id.includes('/d3-')) return 'charts-vendor';
-            if (id.includes('/jspdf') || id.includes('/html2canvas')) return 'document-vendor';
-            return 'vendor';
-          }
-        },
       },
     },
     server: {

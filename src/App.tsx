@@ -8,7 +8,6 @@ import {
 
 import { Coin, Holding, Transaction, Quiz, TimeFrame } from './types';
 import Header from './components/Header';
-import SovereignIntelligenceView from './components/SovereignIntelligenceView';
 import { hashPin, encryptData, decryptData } from './lib/crypto';
 import TradeWidget from './components/TradeWidget';
 import SmartRebalanceWidget from './components/SmartRebalanceWidget';
@@ -16,19 +15,14 @@ import YieldOptimizationView from './components/YieldOptimizationView';
 import AssetDetailModal from './components/AssetDetailModal';
 import EarnRewards from './components/EarnRewards';
 import CoinbaseCard from './components/CoinbaseCard';
-import DeploymentDashboard from './pages/DeploymentDashboard';
 import SendReceiveModal from './components/SendReceiveModal';
 import CoinChart from './components/CoinChart';
 import CashTransferModal from './components/CashTransferModal';
 import BlockchainWalletComponent, { BlockchainWalletSnapshot } from './components/BlockchainWalletComponent';
-import DeveloperHub from './components/DeveloperHub';
 import IntegrationsHub from './components/IntegrationsHub';
-import CopilotHub from './components/CopilotHub';
 import OnboardingKyc from './components/OnboardingKyc';
 import AuthScreen from './components/AuthScreen';
 import EmailInbox, { InboxEmail } from './components/EmailInbox';
-import GooglePayAndPassHub from './components/GooglePayAndPassHub';
-import WiseCardDashboard from './components/WiseCardDashboard';
 import GoogleDriveFolderHub from './components/GoogleDriveFolderHub';
 import QrPayModal from './components/QrPayModal';
 import AppDownloadModal from './components/AppDownloadModal';
@@ -37,7 +31,6 @@ import PlaidLinkModal from './components/PlaidLinkModal';
 import { MobileBottomNav } from './components/MobileBottomNav';
 import { AndroidInstallPromptBanner } from './components/AndroidInstallPromptBanner';
 import UserProfileHub from './components/UserProfileHub';
-import BitcoinAtmHub from './components/BitcoinAtmHub';
 import CameraQrScannerModal from './components/CameraQrScannerModal';
 import AtmOrderRecoveryModal from './components/AtmOrderRecoveryModal';
 import { parseQrOrDeepLink, ParsedQrResult } from './lib/qrProtocolParser';
@@ -63,6 +56,18 @@ import { mergeNonEmptySynchronizedHoldings, shouldRestoreLegacyInventory } from 
 import { createSingleFlightGate } from './lib/single-flight';
 
 const MonthlyReportModal = React.lazy(() => import('./components/MonthlyReportModal'));
+const DeploymentDashboard = React.lazy(() => import('./pages/DeploymentDashboard'));
+const SovereignIntelligenceView = React.lazy(() => import('./components/SovereignIntelligenceView'));
+const GooglePayAndPassHub = React.lazy(() => import('./components/GooglePayAndPassHub'));
+const WiseCardDashboard = React.lazy(() => import('./components/WiseCardDashboard'));
+
+function DeferredTabBoundary({ children }: { children: React.ReactNode }) {
+  return (
+    <React.Suspense fallback={<div className="mx-auto max-w-7xl py-10 text-center text-sm text-slate-500">Loading workspace…</div>}>
+      {children}
+    </React.Suspense>
+  );
+}
 
 const configuredApiBase = String(
   (import.meta as any).env?.VITE_API_BASE ||
@@ -2129,7 +2134,9 @@ export default function App() {
           />
         )}
         {/* --- Tab 1: Dashboard (Assets overview) --- */}
-          {currentTab === 'deployment-dashboard' && <DeploymentDashboard />}
+          {currentTab === 'deployment-dashboard' && (
+            <DeferredTabBoundary><DeploymentDashboard /></DeferredTabBoundary>
+          )}
           {currentTab === 'dashboard' && (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
 
@@ -3523,6 +3530,7 @@ export default function App() {
         {/* --- Tab 8: Sovereign Intelligence & Unified Banking Hub --- */}
         {currentTab === 'sovereign' && (
           <div className="max-w-7xl mx-auto space-y-8">
+            <DeferredTabBoundary>
             <SovereignIntelligenceView
               user={{ uid: userEmail || 'cb_user_id', email: userEmail || 'user@secure.local', displayName: userName }}
               sovIntelState={sovIntelState}
@@ -3551,11 +3559,13 @@ export default function App() {
               marshallConfig={marshallConfig}
               onCreateYieldWallet={handleCreateYieldWallet}
             />
+            </DeferredTabBoundary>
           </div>
         )}
 
         {/* --- Google Pay & Pass Hub --- */}
         {currentTab === 'google-pay' && (
+          <DeferredTabBoundary>
           <GooglePayAndPassHub
             userName={userName || 'Authenticated user'}
             userEmail={userEmail || 'No verified email available'}
@@ -3564,16 +3574,19 @@ export default function App() {
             onRefreshBalance={() => fetchStripeBalance(true)}
             showToast={showToast}
           />
+          </DeferredTabBoundary>
         )}
 
         {/* --- Wise Card Dedicated Hub --- */}
         {currentTab === 'wise-card' && (
+          <DeferredTabBoundary>
           <WiseCardDashboard
             userName={userName || 'Authenticated user'}
             userEmail={userEmail || 'No verified email available'}
             onRefreshGlobalState={() => fetchStripeBalance(true)}
             showToast={showToast}
           />
+          </DeferredTabBoundary>
         )}
 
         {/* --- Google Drive Live Production Folder --- */}
