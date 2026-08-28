@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mergeNonEmptySynchronizedHoldings } from './holdings-recovery';
+import { mergeNonEmptySynchronizedHoldings, shouldRestoreLegacyInventory } from './holdings-recovery';
 
 describe('mergeNonEmptySynchronizedHoldings', () => {
   const existing = [
@@ -42,5 +42,19 @@ describe('mergeNonEmptySynchronizedHoldings', () => {
         null
       ])
     ).toEqual(existing);
+  });
+
+  it('restores valid legacy inventory when the scoped storage record is missing, empty, or malformed', () => {
+    const legacy = JSON.stringify(existing);
+
+    expect(shouldRestoreLegacyInventory(null, legacy)).toBe(true);
+    expect(shouldRestoreLegacyInventory('[]', legacy)).toBe(true);
+    expect(shouldRestoreLegacyInventory('{not-json', legacy)).toBe(true);
+  });
+
+  it('does not replace a valid scoped record or use invalid legacy inventory', () => {
+    expect(shouldRestoreLegacyInventory(JSON.stringify(existing), JSON.stringify([{ symbol: 'BTC' }]))).toBe(false);
+    expect(shouldRestoreLegacyInventory(null, '[]')).toBe(false);
+    expect(shouldRestoreLegacyInventory(null, '{not-json')).toBe(false);
   });
 });

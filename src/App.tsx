@@ -60,7 +60,7 @@ import {
 } from './lib/indexeddb-offline-sync';
 import { normalizeWalletAddress } from './lib/web3-wallet';
 import { isSessionTokenExpired } from './lib/session-token';
-import { mergeNonEmptySynchronizedHoldings } from './lib/holdings-recovery';
+import { mergeNonEmptySynchronizedHoldings, shouldRestoreLegacyInventory } from './lib/holdings-recovery';
 import { createSingleFlightGate } from './lib/single-flight';
 
 const configuredApiBase = String(
@@ -498,20 +498,11 @@ export default function App() {
       const scopedKey = getUserScopedStorageKey(normalizedEmail, key);
       const scopedValue = localStorage.getItem(scopedKey);
       const globalValue = localStorage.getItem(key);
-      const isEmptyCollection = (value: string | null) => {
-        if (!value) return true;
-        try {
-          return Array.isArray(JSON.parse(value)) && JSON.parse(value).length === 0;
-        } catch {
-          return false;
-        }
-      };
-      const shouldRestoreLegacyInventory =
+      const shouldRestoreScopedInventory =
         (key === 'cb_coins' || key === 'cb_holdings') &&
-        isEmptyCollection(scopedValue) &&
-        !isEmptyCollection(globalValue);
+        shouldRestoreLegacyInventory(scopedValue, globalValue);
 
-      if ((scopedValue === null || shouldRestoreLegacyInventory) && globalValue !== null) {
+      if ((scopedValue === null || shouldRestoreScopedInventory) && globalValue !== null) {
         localStorage.setItem(scopedKey, globalValue);
       }
     });
