@@ -47,7 +47,7 @@
     "test": "npm run test:verification && npm run test:auth-security && npm run test:bootstrap-security && npm run test:auth-api-security && npm run test:transaction-security"
   },
   "dependencies": {
-    "@capacitor/android": "^8.5.0",
+    "@capacitor/android": "^8.5.1",
     "@capacitor/browser": "^8.0.4",
     "@capacitor/cli": "8.4.2",
     "@capacitor/core": "^8.4.2",
